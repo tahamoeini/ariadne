@@ -28,7 +28,7 @@
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vscode-test",
-    "test:unit": "mocha out/test/domain.test.js out/test/storage.test.js --ui tdd",
+    "test:unit": "mocha out/test/domain.test.js out/test/storage.test.js out/test/capture.test.js --ui tdd",
     "package": "vsce package"
   },
   "devDependencies": {

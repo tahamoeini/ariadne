@@ -75,8 +75,9 @@ suite('Domain Model', () => {
       inv.snapshot.recentEvents = [
         {
           timestamp: new Date().toISOString(),
-          type: 'file.open',
+          type: 'editor.active',
           workspace: '/ws',
+          repository: '/ws',
           filePath: 'a.ts',
         },
       ];

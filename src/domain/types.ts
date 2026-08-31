@@ -7,15 +7,11 @@
 
 /** Factual event types observed from VS Code activity. */
 export type ObservedEventType =
-  | 'file.open'
-  | 'file.close'
+  | 'editor.active'
+  | 'editor.selection'
   | 'file.edit'
-  | 'file.save'
-  | 'editor.focus'
   | 'navigation.definition'
-  | 'navigation.reference'
-  | 'debug.start'
-  | 'debug.stop';
+  | 'navigation.reference';
 
 /** A single factual observation of developer activity. */
 export interface ObservedEvent {
@@ -25,8 +21,12 @@ export interface ObservedEvent {
   type: ObservedEventType;
   /** Workspace folder path. */
   workspace: string;
+  /** Repository root path, if identifiable. */
+  repository: string | null;
   /** Absolute file path, when relevant. */
   filePath?: string;
+  /** Human-meaningful location, when relevant. */
+  location?: FileLocation;
   /** Minimal source metadata (e.g. language id, symbol name). */
   source?: Record<string, string>;
 }

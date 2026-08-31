@@ -19,7 +19,10 @@ src/
 │   ├── types.ts    # Investigation, Checkpoint, Snapshot, GitSnapshot, ObservedEvent
 │   ├── investigation.ts  # Factory functions (createInvestigation, etc.)
 │   └── index.ts    # Public re-exports
-├── capture/        # VS Code event listeners → ObservedEvent production
+├── capture/        # Rolling buffer + VS Code event listeners
+│   ├── eventBuffer.ts      # Time-bounded per-workspace buffers
+│   ├── vscodeEventCapture.ts # VS Code listeners → ObservedEvent production
+│   └── index.ts            # Public re-exports
 ├── git/            # Git adapter: read-only local Git state queries
 ├── storage/        # JSON-file persistence
 │   ├── store.ts    # CRUD operations + schema envelope
@@ -77,10 +80,12 @@ Modules communicate through domain types. No module directly imports another mod
 | timestamp | string (ISO-8601) | When it happened |
 | type | ObservedEventType | Factual event kind |
 | workspace | string | Workspace path |
+| repository | string \| null | Repository root if identifiable |
 | filePath | string? | File path if relevant |
+| location | FileLocation? | Last known 1-based line/column for the event |
 | source | Record<string, string>? | Minimal metadata |
 
-ObservedEventType: `file.open`, `file.close`, `file.edit`, `file.save`, `editor.focus`, `navigation.definition`, `navigation.reference`, `debug.start`, `debug.stop`.
+ObservedEventType: `editor.active`, `editor.selection`, `file.edit`, `navigation.definition`, `navigation.reference`.
 
 ## Storage Mechanism
 
@@ -115,21 +120,23 @@ ObservedEventType: `file.open`, `file.close`, `file.edit`, `file.save`, `editor.
 
 The extension observes factual VS Code activity:
 
-- File opens, closes, edits (not content).
-- Active editor changes.
-- Definition/reference navigations.
-- Debug session starts/stops.
+- Active editor/file transitions.
+- Selection changes that provide meaningful last cursor/location context.
+- Text edit occurrence (not content).
+- Workspace and repository context for file-backed editors.
 
-Events are recorded as factual observations (`ObservedEvent`) with timestamp, type, and minimal metadata. No semantic interpretation is applied.
+Definition/reference navigation is intentionally deferred unless it becomes reliably detectable through supported VS Code APIs. Events are recorded as factual observations (`ObservedEvent`) with timestamp, workspace/repository context, optional location, and minimal metadata. No semantic interpretation is applied.
 
 ## Rolling-Buffer Concept
 
 Observed events are stored in a bounded, time-limited rolling buffer rather than an unbounded log.
 
-- Fixed maximum event count (configurable, reasonable default).
-- Events older than a configurable window are discarded.
-- Buffer is per-workspace.
+- Default retention window is 20 minutes and is internally configurable.
+- Events older than the retention window are discarded on read/write.
+- Buffer is kept in memory only and resets on extension restart.
+- Buffer is per-workspace, with a safety max-event cap to avoid unbounded growth during noisy sessions.
 - Purpose: provide recent activity context when a Snapshot is taken, not permanent telemetry.
+- A developer-only debug API exposes the current factual events for inspection during extension development.
 
 ## Git Adapter Boundary
 
@@ -155,14 +162,12 @@ Minimal command surface for 0.0.1:
 ## Testing Strategy
 
 - **Unit tests** (`npm run test:unit`): Domain model and storage tests run via Mocha without VS Code.
-- **Integration tests** (`npm test`): Extension activation tests via `@vscode/test-cli`.
+- **Integration tests** (`npm test`): Extension activation and VS Code event-capture tests via `@vscode/test-cli`.
 - Test runner TDD-style suites with `suite`/`test`.
 
 ## Unresolved Technical Questions
 
 1. **Git API choice**: VS Code built-in Git extension API vs. direct `git` CLI subprocess?
-2. **Rolling buffer persistence**: In-memory only vs. persisted across restarts?
-3. **Event granularity**: Exact set of VS Code events to observe.
-4. **Snapshot trigger**: Automatic periodic snapshots vs. manual-only?
-5. **Multi-root workspaces**: How to handle in 0.0.1.
-6. **Data migration**: Strategy for migrating stored data between schema versions.
+2. **Snapshot trigger**: Automatic periodic snapshots vs. manual-only?
+3. **Multi-root workspaces**: How to handle in 0.0.1.
+4. **Data migration**: Strategy for migrating stored data between schema versions.
