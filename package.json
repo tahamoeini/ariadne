@@ -1,0 +1,45 @@
+{
+  "name": "repotrail",
+  "displayName": "RepoTrail",
+  "description": "Capture and recover context from code investigations.",
+  "version": "0.0.1",
+  "publisher": "repotrail",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "repotrail.hello",
+        "title": "RepoTrail: Hello"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vscode-test",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.100.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.5.0",
+    "@vscode/vsce": "^3.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.7.0"
+  }
+}

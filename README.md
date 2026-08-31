@@ -2,6 +2,44 @@
 
 > **Pick up a code investigation where you left it.**
 
+## Development
+
+### Prerequisites
+
+- Node.js (LTS)
+- VS Code
+
+### Setup
+
+```bash
+npm install
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run compile` | Compile TypeScript to `out/` |
+| `npm run watch` | Compile in watch mode |
+| `npm run lint` | Run ESLint on `src/` |
+| `npm run typecheck` | Type-check without emitting |
+| `npm test` | Run extension tests (downloads VS Code) |
+| `npm run package` | Package as `.vsix` |
+
+### Run Locally
+
+1. Open this folder in VS Code.
+2. Press **F5** to launch the Extension Development Host.
+3. Run **RepoTrail: Hello** from the Command Palette.
+
+### Run Tests
+
+```bash
+npm test
+```
+
+---
+
 RepoTrail is a local-first VS Code companion that preserves the working context around a code investigation so you can return later without reconstructing what you were doing from tabs, Git state, memory, and increasingly desperate guesses.
 
 **VS Code remembers your workspace. Git remembers your changes. RepoTrail remembers the investigation.**
