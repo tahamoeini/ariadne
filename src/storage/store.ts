@@ -105,14 +105,23 @@ function migrateInvestigationV1(investigation: LegacyInvestigation): Investigati
 export function saveInvestigation(
   storageDir: string,
   investigation: Investigation,
-): void {
+): Investigation {
   const dir = investigationsDir(storageDir);
   ensureDir(dir);
+  const savedInvestigation: Investigation = {
+    ...investigation,
+    savedAt: new Date().toISOString(),
+  };
   const envelope: StorageEnvelope = {
     schemaVersion: SCHEMA_VERSION,
-    investigation: { ...investigation, savedAt: new Date().toISOString() },
+    investigation: savedInvestigation,
   };
-  fs.writeFileSync(filePath(storageDir, investigation.id), JSON.stringify(envelope, null, 2), 'utf-8');
+  fs.writeFileSync(
+    filePath(storageDir, investigation.id),
+    JSON.stringify(envelope, null, 2),
+    'utf-8',
+  );
+  return savedInvestigation;
 }
 
 /** Load a single investigation by id. Returns null if not found or unreadable. */
