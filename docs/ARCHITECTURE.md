@@ -24,6 +24,8 @@ src/
 │   ├── vscodeEventCapture.ts # VS Code listeners → ObservedEvent production
 │   └── index.ts            # Public re-exports
 ├── git/            # Git adapter: read-only local Git state queries
+│   ├── snapshot.ts # Repo root detection + safe local Git snapshot capture
+│   └── index.ts    # Public re-exports
 ├── storage/        # JSON-file persistence
 │   ├── store.ts    # CRUD operations + schema envelope
 │   └── index.ts    # Public re-exports
@@ -62,16 +64,18 @@ Modules communicate through domain types. No module directly imports another mod
 | visitedFileCounts | Record<string, number> | File path → visit count |
 | lastLocation | FileLocation \| null | Last cursor position |
 | recentEvents | ObservedEvent[] | Recent events from rolling buffer |
-| git | GitSnapshot \| null | Git state at snapshot time |
+| git | GitSnapshot \| null | Git capture result at snapshot time |
 
 ### GitSnapshot
 | Field | Type | Description |
 |-------|------|-------------|
 | timestamp | string (ISO-8601) | Capture time |
-| head | string | HEAD commit SHA |
+| availability | `available` \| `not-repository` \| `git-missing` \| `git-error` | Capture outcome |
+| repositoryRoot | string \| null | Absolute repository root path |
+| head | string \| null | HEAD commit SHA, if one exists |
 | branch | string \| null | Current branch (null if detached) |
-| modifiedFiles | string[] | Uncommitted tracked changes |
-| untrackedFiles | string[] | Untracked files |
+| modifiedFiles | string[] | Repository-relative tracked changes |
+| untrackedFiles | string[] | Repository-relative untracked files |
 | diffStats | { filesChanged, insertions, deletions } | Summary diff stats |
 
 ### ObservedEvent
@@ -102,12 +106,12 @@ ObservedEventType: `editor.active`, `editor.selection`, `file.edit`, `navigation
 **Format:** Each file is a JSON envelope:
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "investigation": { ... }
 }
 ```
 
-**Schema versioning:** The `schemaVersion` field is checked on load. Unknown or future versions are rejected (returns null). Future versions will implement migration functions keyed by version number.
+**Schema versioning:** The `schemaVersion` field is checked on load. Current saves use schema version 2. Legacy version 1 investigations are migrated on load to populate the explicit Git availability fields. Unknown future versions are rejected (returns null).
 
 **Properties:**
 - Local-only, no cloud.
@@ -142,10 +146,13 @@ Observed events are stored in a bounded, time-limited rolling buffer rather than
 
 The Git adapter is a read-only query layer over the local repository:
 
-- Uses VS Code's built-in Git extension API or direct Git CLI calls.
+- Uses the local `git` executable directly via fixed argv lists (`git -C <repoRoot> ...`), never through a shell.
+- Detects the repository root first by walking upward for a `.git` directory/file so missing Git can still return an explicit repository-aware state.
 - Never modifies the repository (no commits, no pushes).
 - Provides GitSnapshot data on demand.
-- Handles missing/invalid Git repositories gracefully.
+- Handles missing/invalid Git repositories, detached HEAD, unborn repositories, and missing Git executables without failing the rest of the workflow.
+- Produces repository-relative changed-file lists and inexpensive aggregate diff stats only.
+- A saved GitSnapshot represents THEN; resume flows should capture a fresh NOW snapshot later for comparison.
 
 Git enriches context; it does not become the product.
 
@@ -161,13 +168,12 @@ Minimal command surface for 0.0.1:
 
 ## Testing Strategy
 
-- **Unit tests** (`npm run test:unit`): Domain model and storage tests run via Mocha without VS Code.
+- **Unit tests** (`npm run test:unit`): Domain model, storage, rolling buffer, and Git snapshot parser/adapter tests run via Mocha without VS Code.
 - **Integration tests** (`npm test`): Extension activation and VS Code event-capture tests via `@vscode/test-cli`.
 - Test runner TDD-style suites with `suite`/`test`.
 
 ## Unresolved Technical Questions
 
-1. **Git API choice**: VS Code built-in Git extension API vs. direct `git` CLI subprocess?
-2. **Snapshot trigger**: Automatic periodic snapshots vs. manual-only?
-3. **Multi-root workspaces**: How to handle in 0.0.1.
-4. **Data migration**: Strategy for migrating stored data between schema versions.
+1. **Snapshot trigger**: Automatic periodic snapshots vs. manual-only?
+2. **Multi-root workspaces**: How to handle in 0.0.1.
+3. **Future data migration**: Strategy for schema changes beyond the current v1 → v2 migration.

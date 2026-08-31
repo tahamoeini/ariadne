@@ -109,6 +109,55 @@ suite('Storage', () => {
       assert.strictEqual(loaded, null);
     });
 
+    test('migrates legacy schema version 1 git snapshots', () => {
+      const dir = path.join(tmpDir, 'investigations');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'legacy.json'),
+        JSON.stringify({
+          schemaVersion: 1,
+          investigation: {
+            id: 'legacy',
+            name: 'Legacy',
+            workspace: '/ws',
+            repository: '/repo',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            savedAt: '2026-01-01T00:00:00.000Z',
+            lastResumedAt: null,
+            checkpoint: null,
+            snapshot: {
+              editedFiles: [],
+              visitedFileCounts: {},
+              lastLocation: null,
+              recentEvents: [],
+              git: {
+                timestamp: '2026-01-01T00:00:00.000Z',
+                head: 'abc123',
+                branch: 'main',
+                modifiedFiles: ['src/index.ts'],
+                untrackedFiles: ['notes with spaces.txt'],
+                diffStats: { filesChanged: 1, insertions: 2, deletions: 1 },
+              },
+            },
+          },
+        }),
+        'utf-8',
+      );
+
+      const loaded = loadInvestigation(tmpDir, 'legacy');
+      assert.ok(loaded);
+      assert.deepStrictEqual(loaded!.snapshot.git, {
+        timestamp: '2026-01-01T00:00:00.000Z',
+        availability: 'available',
+        repositoryRoot: '/repo',
+        head: 'abc123',
+        branch: 'main',
+        modifiedFiles: ['src/index.ts'],
+        untrackedFiles: ['notes with spaces.txt'],
+        diffStats: { filesChanged: 1, insertions: 2, deletions: 1 },
+      });
+    });
+
     test('returns null for envelope without investigation', () => {
       const dir = path.join(tmpDir, 'investigations');
       fs.mkdirSync(dir, { recursive: true });
