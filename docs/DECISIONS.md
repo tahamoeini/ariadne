@@ -61,3 +61,27 @@
 **Decision:** Git data (branch, HEAD, modified files, diff stats) is captured as part of Snapshots to provide context, but RepoTrail is not a Git tool.
 
 **Reason:** Many tools already manage Git workflows. RepoTrail's unique value is capturing the broader investigation context around code exploration. Git state is one input to that context, not the primary feature.
+
+---
+
+## ADR-009: TypeScript with ESLint Flat Config
+
+**Decision:** The extension uses TypeScript 5.x compiled to CommonJS (`ES2022` target). Linting uses ESLint 9 with the flat config format (`eslint.config.mjs`) and `@typescript-eslint`.
+
+**Reason:** TypeScript is required by VS Code extension conventions. ESLint flat config is the current recommended format (legacy `.eslintrc` is deprecated). Minimal rule set to avoid unnecessary noise.
+
+---
+
+## ADR-010: @vscode/test-cli for Testing
+
+**Decision:** Extension tests use `@vscode/test-cli` with `@vscode/test-electron`, configured via `.vscode-test.mjs`.
+
+**Reason:** This is the officially recommended VS Code extension testing approach as of 2025. It downloads VS Code automatically and runs Mocha-based integration tests inside an Extension Development Host.
+
+---
+
+## ADR-011: VS Code Engine ^1.100.0
+
+**Decision:** The extension targets VS Code `^1.100.0` as the minimum engine version.
+
+**Reason:** Targets a recent-enough baseline to use current APIs without requiring bleeding-edge versions. Aligns with the stable release timeline.

@@ -14,12 +14,14 @@
 
 ```
 src/
+├── extension.ts    # VS Code entry point (activate / deactivate)
 ├── domain/         # Core types: Investigation, Checkpoint, Snapshot, ObservedEvent
 ├── capture/        # VS Code event listeners → ObservedEvent production
 ├── git/            # Git adapter: read-only local Git state queries
 ├── storage/        # Local persistence (read/write investigations)
 ├── commands/       # VS Code command handlers
-└── ui/             # Webview panels, tree views, status bar
+├── ui/             # Webview panels, tree views, status bar
+└── test/           # Extension integration tests
 ```
 
 Modules communicate through domain types. No module directly imports another module's internals.
