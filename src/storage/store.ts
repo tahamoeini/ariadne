@@ -15,15 +15,47 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { Investigation } from '../domain/types';
+import { GitSnapshot, Investigation } from '../domain/types';
 
 /** Current schema version. Bump when the persisted shape changes. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+
+interface LegacyGitSnapshot {
+  timestamp: string;
+  head: string;
+  branch: string | null;
+  modifiedFiles: string[];
+  untrackedFiles: string[];
+  diffStats: {
+    filesChanged: number;
+    insertions: number;
+    deletions: number;
+  };
+}
+
+interface LegacyInvestigation {
+  id: string;
+  name: string;
+  workspace: string;
+  repository: string | null;
+  createdAt: string;
+  savedAt: string;
+  lastResumedAt: string | null;
+  checkpoint: Investigation['checkpoint'];
+  snapshot: Omit<Investigation['snapshot'], 'git'> & {
+    git: LegacyGitSnapshot | null;
+  };
+}
 
 /** On-disk envelope. */
 export interface StorageEnvelope {
   schemaVersion: number;
   investigation: Investigation;
+}
+
+interface LegacyStorageEnvelope {
+  schemaVersion: 1;
+  investigation: LegacyInvestigation;
 }
 
 /** Ensure the investigations directory exists. */
@@ -37,6 +69,36 @@ function investigationsDir(storageDir: string): string {
 
 function filePath(storageDir: string, id: string): string {
   return path.join(investigationsDir(storageDir), `${id}.json`);
+}
+
+function migrateGitSnapshot(
+  git: LegacyGitSnapshot | null,
+  repositoryRoot: string | null,
+): GitSnapshot | null {
+  if (!git) {
+    return null;
+  }
+
+  return {
+    timestamp: git.timestamp,
+    availability: 'available',
+    repositoryRoot,
+    head: git.head,
+    branch: git.branch,
+    modifiedFiles: [...git.modifiedFiles],
+    untrackedFiles: [...git.untrackedFiles],
+    diffStats: { ...git.diffStats },
+  };
+}
+
+function migrateInvestigationV1(investigation: LegacyInvestigation): Investigation {
+  return {
+    ...investigation,
+    snapshot: {
+      ...investigation.snapshot,
+      git: migrateGitSnapshot(investigation.snapshot.git, investigation.repository),
+    },
+  };
 }
 
 /** Save (create or update) an investigation to disk. */
@@ -64,12 +126,16 @@ export function loadInvestigation(
   }
   try {
     const raw = fs.readFileSync(fp, 'utf-8');
-    const envelope = JSON.parse(raw) as StorageEnvelope;
+    const envelope = JSON.parse(raw) as StorageEnvelope | LegacyStorageEnvelope;
     if (typeof envelope.schemaVersion !== 'number' || !envelope.investigation) {
       return null;
     }
+
+    if (envelope.schemaVersion === 1) {
+      return migrateInvestigationV1(envelope.investigation as LegacyInvestigation);
+    }
+
     if (envelope.schemaVersion !== SCHEMA_VERSION) {
-      // Future: run migration. For now reject unknown versions.
       return null;
     }
     return envelope.investigation;

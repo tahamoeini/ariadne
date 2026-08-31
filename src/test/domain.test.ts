@@ -83,6 +83,8 @@ suite('Domain Model', () => {
       ];
       inv.snapshot.git = {
         timestamp: new Date().toISOString(),
+        availability: 'available',
+        repositoryRoot: '/ws',
         head: 'abc123',
         branch: 'main',
         modifiedFiles: ['a.ts'],
@@ -98,6 +100,23 @@ suite('Domain Model', () => {
 
     test('empty investigation round-trips', () => {
       const inv = createInvestigation('Empty', '/ws');
+      const restored: Investigation = JSON.parse(JSON.stringify(inv));
+      assert.deepStrictEqual(restored, inv);
+    });
+
+    test('explicit no-git state round-trips', () => {
+      const inv = createInvestigation('No Git', '/ws');
+      inv.snapshot.git = {
+        timestamp: new Date().toISOString(),
+        availability: 'not-repository',
+        repositoryRoot: null,
+        head: null,
+        branch: null,
+        modifiedFiles: [],
+        untrackedFiles: [],
+        diffStats: { filesChanged: 0, insertions: 0, deletions: 0 },
+      };
+
       const restored: Investigation = JSON.parse(JSON.stringify(inv));
       assert.deepStrictEqual(restored, inv);
     });

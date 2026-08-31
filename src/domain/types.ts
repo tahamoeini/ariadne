@@ -13,6 +13,13 @@ export type ObservedEventType =
   | 'navigation.definition'
   | 'navigation.reference';
 
+/** Availability state for a Git snapshot capture attempt. */
+export type GitSnapshotAvailability =
+  | 'available'
+  | 'not-repository'
+  | 'git-missing'
+  | 'git-error';
+
 /** A single factual observation of developer activity. */
 export interface ObservedEvent {
   /** ISO-8601 timestamp. */
@@ -35,13 +42,17 @@ export interface ObservedEvent {
 export interface GitSnapshot {
   /** ISO-8601 timestamp when captured. */
   timestamp: string;
-  /** HEAD commit SHA. */
-  head: string;
+  /** Outcome of the snapshot capture attempt. */
+  availability: GitSnapshotAvailability;
+  /** Absolute repository root path, if identifiable. */
+  repositoryRoot: string | null;
+  /** HEAD commit SHA, if the repository has a current commit. */
+  head: string | null;
   /** Current branch name, or null if detached. */
   branch: string | null;
-  /** Paths with uncommitted modifications (tracked). */
+  /** Repository-relative paths with uncommitted tracked changes. */
   modifiedFiles: string[];
-  /** Paths not tracked by Git. */
+  /** Repository-relative paths not tracked by Git. */
   untrackedFiles: string[];
   /** Summary diff stats: files changed, insertions, deletions. */
   diffStats: {
@@ -68,7 +79,7 @@ export interface Snapshot {
   lastLocation: FileLocation | null;
   /** Recent observed events (from rolling buffer). */
   recentEvents: ObservedEvent[];
-  /** Git state at snapshot time, if available. */
+  /** Git capture state at snapshot time, if captured. */
   git: GitSnapshot | null;
 }
 

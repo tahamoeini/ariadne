@@ -141,3 +141,19 @@
 **Decision:** RepoTrail does not emit `navigation.definition` or `navigation.reference` events in the MVP implementation unless supported VS Code APIs can identify them reliably.
 
 **Reason:** Guessing that a cursor jump or editor switch came from a definition/reference action would invent semantics that the product is designed to avoid. Deferring these events is preferable to recording misleading data that would erode trust in the captured trail.
+
+---
+
+## ADR-019: Git Snapshots Use the Local Git CLI via Safe Argument Lists
+
+**Decision:** RepoTrail captures local Git snapshots by invoking the installed `git` executable directly with fixed argument arrays (`git -C <repoRoot> ...`) after first locating the repository root on disk.
+
+**Reason:** This is the simplest reliable path that stays read-only, works outside the VS Code Git extension host, and is easy to unit-test. Using argv lists instead of shell command strings avoids shell-command injection risks and preserves paths with spaces or special characters.
+
+---
+
+## ADR-020: Git Snapshot Availability Is Explicit and Saved State Is Immutable
+
+**Decision:** `GitSnapshot` records explicit availability states (`available`, `not-repository`, `git-missing`, `git-error`), includes `repositoryRoot`, and allows `head` to be null when a repository has no commits. Persisted snapshots represent Git state at save time only; future resume comparisons must capture a fresh current snapshot separately.
+
+**Reason:** RepoTrail must continue functioning when Git context is missing or incomplete without failing the rest of an Investigation. Making the saved Git state explicit preserves honest THEN context now while leaving room for a later NOW comparison without adding historical Git analytics.
