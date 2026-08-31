@@ -2,7 +2,7 @@
 
 ## Current Milestone
 
-**Prompt 2 — Core Domain Model and Local Persistence**
+**Prompt 3 — Rolling Event Buffer**
 
 ## Status
 
@@ -26,22 +26,30 @@
 - **Unit tests** (`src/test/domain.test.ts`, `src/test/storage.test.ts`): 23 tests covering creation, optional checkpoint, serialization round-trip, empty state, malformed/old data, deletion, update.
 - **`npm run test:unit`** script for running domain/storage tests via Mocha without VS Code host.
 
+### Prompt 3 (Rolling Event Buffer)
+- **Rolling buffer** (`src/capture/eventBuffer.ts`): per-workspace rolling buffer with 20-minute default retention, safety max-event cap, chronological reads, and in-memory restart reset.
+- **VS Code capture layer** (`src/capture/vscodeEventCapture.ts`): captures active editor changes, meaningful selection/location changes, and edit occurrence for file-backed workspace documents.
+- **Event model update** (`src/domain/types.ts`): `ObservedEvent` now includes repository context and optional 1-based file location.
+- **Extension wiring** (`src/extension.ts`): activates the capture layer and exposes a developer-only debug API through extension exports for inspecting/clearing recent events.
+- **Tests** (`src/test/capture.test.ts`, `src/test/extension.test.ts`): cover retention, ordering, workspace/file transitions, edit occurrence, empty buffer, restart behavior, and noisy rapid transitions.
+
 ## Verified
 
 - `npm run compile` — succeeds.
 - `npm run lint` — passes.
 - `npm run typecheck` — passes.
-- `npm run test:unit` — 23 tests passing.
+- `npm run test:unit` — 31 tests passing.
+- `npm test` — added coverage for event capture, but could not be executed in this sandbox because `@vscode/test-cli` could not resolve `update.code.visualstudio.com`.
 
 ## What Remains
 
-- **Prompt 3:** Implement rolling event buffer.
 - **Prompt 4+:** Git adapter, snapshot assembly, UI, commands.
 
 ## Known Risks
 
 1. **Git API choice not yet decided** — built-in Git extension API vs. CLI subprocess. Must be resolved during Prompt 4 or earlier.
-2. **Rolling buffer persistence** — in-memory only vs. persisted across restarts. Must be resolved during Prompt 3.
+2. **Definition/reference navigation is still deferred** — current VS Code APIs do not provide a reliable MVP signal for identifying those transitions without guesswork.
+3. **Integration tests depend on VS Code download availability** — a cached or network-accessible VS Code build is needed for `npm test`.
 
 ## Decisions Made This Session
 
@@ -49,9 +57,12 @@
 - ADR-013: Schema version envelope.
 - ADR-014: Plain interfaces, no classes.
 - ADR-015: Mocha unit tests alongside VS Code integration tests.
+- ADR-016: In-memory 20-minute rolling buffer.
+- ADR-017: MVP capture limited to factual editor/location/edit events.
+- ADR-018: Definition/reference navigation deferred until reliably detectable.
 
 ## Next Milestone
 
-**Prompt 3 — Rolling Event Buffer**
+**Prompt 4 — Git Context and Snapshot Assembly**
 
-Entry condition: Domain model and persistence tests pass (satisfied).
+Entry condition: Rolling buffer compiles, lints, and unit-tests cleanly (satisfied).

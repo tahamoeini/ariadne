@@ -117,3 +117,27 @@
 **Decision:** Pure domain and storage tests run via `npm run test:unit` using Mocha directly (no VS Code host). Integration tests that require VS Code APIs run via `npm test` (`@vscode/test-cli`).
 
 **Reason:** Domain and storage logic has no VS Code dependency. Running these tests without downloading VS Code is faster, works in CI without display servers, and provides quicker feedback during development.
+
+---
+
+## ADR-016: In-Memory 20-Minute Rolling Buffer
+
+**Decision:** Observed events are retained only in memory, per workspace, for a default 20-minute window. The retention window is internally configurable, and a safety max-event cap prevents unbounded growth during unusually noisy sessions.
+
+**Reason:** RepoTrail is meant to preserve only enough recent context to create or enrich an Investigation, not to keep a durable activity log. In-memory retention resets naturally on extension restart, minimizes privacy exposure, and still satisfies the need for recent factual context.
+
+---
+
+## ADR-017: MVP Capture Focuses on Factual Editor, Location, and Edit Signals
+
+**Decision:** The MVP captures only active editor/file transitions, meaningful selection/location changes, edit occurrence, timestamps, workspace path, repository root when identifiable, and minimal metadata such as language id and edit change count.
+
+**Reason:** These signals are factual, low-risk, and directly support later summarization without inferring semantic importance. The product explicitly excludes keystrokes, file contents, clipboard, terminal contents, screenshots, environment variables, and unrelated application activity, so the capture set stays intentionally narrow.
+
+---
+
+## ADR-018: Definition/Reference Navigation Is Deferred Until Reliably Detectable
+
+**Decision:** RepoTrail does not emit `navigation.definition` or `navigation.reference` events in the MVP implementation unless supported VS Code APIs can identify them reliably.
+
+**Reason:** Guessing that a cursor jump or editor switch came from a definition/reference action would invent semantics that the product is designed to avoid. Deferring these events is preferable to recording misleading data that would erode trust in the captured trail.
