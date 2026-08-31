@@ -9,10 +9,3 @@ export type {
   RollingEventBuffer,
   WorkspaceEventBuffer,
 } from './eventBuffer';
-export {
-  createVsCodeObservedEventCapture,
-} from './vscodeEventCapture';
-export type {
-  RepoTrailDebugApi,
-  VsCodeObservedEventCapture,
-} from './vscodeEventCapture';

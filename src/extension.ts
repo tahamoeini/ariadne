@@ -1,5 +1,9 @@
 import * as vscode from 'vscode';
-import { createVsCodeObservedEventCapture, RepoTrailDebugApi, VsCodeObservedEventCapture } from './capture';
+import {
+  createVsCodeObservedEventCapture,
+  RepoTrailDebugApi,
+  VsCodeObservedEventCapture,
+} from './capture/vscodeEventCapture';
 
 export interface RepoTrailExtensionApi {
   debug: RepoTrailDebugApi;
