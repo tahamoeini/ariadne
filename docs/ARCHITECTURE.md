@@ -15,16 +15,101 @@
 ```
 src/
 ├── extension.ts    # VS Code entry point (activate / deactivate)
-├── domain/         # Core types: Investigation, Checkpoint, Snapshot, ObservedEvent
+├── domain/         # Core types and factory functions
+│   ├── types.ts    # Investigation, Checkpoint, Snapshot, GitSnapshot, ObservedEvent
+│   ├── investigation.ts  # Factory functions (createInvestigation, etc.)
+│   └── index.ts    # Public re-exports
 ├── capture/        # VS Code event listeners → ObservedEvent production
 ├── git/            # Git adapter: read-only local Git state queries
-├── storage/        # Local persistence (read/write investigations)
+├── storage/        # JSON-file persistence
+│   ├── store.ts    # CRUD operations + schema envelope
+│   └── index.ts    # Public re-exports
 ├── commands/       # VS Code command handlers
 ├── ui/             # Webview panels, tree views, status bar
-└── test/           # Extension integration tests
+└── test/           # Unit and integration tests
 ```
 
 Modules communicate through domain types. No module directly imports another module's internals.
+
+## Domain Model (Implemented)
+
+### Investigation
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string (UUID v4) | Unique identifier |
+| name | string | Human-readable name |
+| workspace | string | Workspace folder path |
+| repository | string \| null | Git repo root, if available |
+| createdAt | string (ISO-8601) | Creation timestamp |
+| savedAt | string (ISO-8601) | Last persisted timestamp |
+| lastResumedAt | string \| null | Last resumed timestamp |
+| checkpoint | Checkpoint \| null | Optional developer note |
+| snapshot | Snapshot | Current state capture |
+
+### Checkpoint
+| Field | Type | Description |
+|-------|------|-------------|
+| text | string | Free-form developer note |
+| createdAt | string (ISO-8601) | Creation timestamp |
+
+### Snapshot
+| Field | Type | Description |
+|-------|------|-------------|
+| editedFiles | string[] | Files edited during investigation |
+| visitedFileCounts | Record<string, number> | File path → visit count |
+| lastLocation | FileLocation \| null | Last cursor position |
+| recentEvents | ObservedEvent[] | Recent events from rolling buffer |
+| git | GitSnapshot \| null | Git state at snapshot time |
+
+### GitSnapshot
+| Field | Type | Description |
+|-------|------|-------------|
+| timestamp | string (ISO-8601) | Capture time |
+| head | string | HEAD commit SHA |
+| branch | string \| null | Current branch (null if detached) |
+| modifiedFiles | string[] | Uncommitted tracked changes |
+| untrackedFiles | string[] | Untracked files |
+| diffStats | { filesChanged, insertions, deletions } | Summary diff stats |
+
+### ObservedEvent
+| Field | Type | Description |
+|-------|------|-------------|
+| timestamp | string (ISO-8601) | When it happened |
+| type | ObservedEventType | Factual event kind |
+| workspace | string | Workspace path |
+| filePath | string? | File path if relevant |
+| source | Record<string, string>? | Minimal metadata |
+
+ObservedEventType: `file.open`, `file.close`, `file.edit`, `file.save`, `editor.focus`, `navigation.definition`, `navigation.reference`, `debug.start`, `debug.stop`.
+
+## Storage Mechanism
+
+**Location:** `ExtensionContext.globalStorageUri.fsPath` (passed to storage module by caller).
+
+**Layout:**
+```
+<globalStorageDir>/
+  investigations/
+    <uuid>.json
+    <uuid>.json
+```
+
+**Format:** Each file is a JSON envelope:
+```json
+{
+  "schemaVersion": 1,
+  "investigation": { ... }
+}
+```
+
+**Schema versioning:** The `schemaVersion` field is checked on load. Unknown or future versions are rejected (returns null). Future versions will implement migration functions keyed by version number.
+
+**Properties:**
+- Local-only, no cloud.
+- Human-inspectable JSON files.
+- Survives extension restarts and VS Code reloads (files on disk).
+- No external database.
+- Malformed files are silently skipped during listing.
 
 ## Event Capture Concept
 
@@ -46,36 +131,6 @@ Observed events are stored in a bounded, time-limited rolling buffer rather than
 - Buffer is per-workspace.
 - Purpose: provide recent activity context when a Snapshot is taken, not permanent telemetry.
 
-## Core Domain Concepts
-
-### Investigation
-
-A named unit of work representing a code exploration session. Contains an optional Checkpoint and a Snapshot. Investigations can be saved, resumed, and listed.
-
-### Checkpoint
-
-A developer-authored text note attached to an Investigation. Captures human intent and context that observation alone cannot provide. Optional — the developer decides when and whether to write one.
-
-### Snapshot
-
-A point-in-time capture of the Investigation state:
-
-- Edited files list.
-- Visited files with counts.
-- Last cursor location.
-- Recent observed event trail (from rolling buffer).
-- Git snapshot.
-
-### GitSnapshot
-
-Read-only capture of local Git state at snapshot time:
-
-- HEAD commit.
-- Current branch.
-- Modified files.
-- Untracked files.
-- Diff statistics.
-
 ## Git Adapter Boundary
 
 The Git adapter is a read-only query layer over the local repository:
@@ -87,15 +142,6 @@ The Git adapter is a read-only query layer over the local repository:
 
 Git enriches context; it does not become the product.
 
-## Storage Boundary
-
-- Uses VS Code `ExtensionContext.globalState` or workspace-local JSON files.
-- Simple, inspectable format (JSON).
-- No external database.
-- No cloud sync.
-- Must survive extension restarts and VS Code reloads.
-- Schema versioning through a version field in stored data.
-
 ## UI / Command Boundary
 
 Minimal command surface for 0.0.1:
@@ -106,27 +152,17 @@ Minimal command surface for 0.0.1:
 - Add/edit Checkpoint text.
 - View current Snapshot.
 
-UI approach TBD — likely combination of:
-
-- Command palette entries.
-- Status bar indicator.
-- Simple webview or tree view for investigation list.
-
 ## Testing Strategy
 
-- Unit tests for domain logic (Investigation, Snapshot, serialization).
-- Unit tests for storage (persist, reload, corrupt data handling).
-- Unit tests for Git adapter (mocked Git state).
-- Integration tests for event capture (mocked VS Code API).
-- Manual smoke tests for extension activation and commands.
-- Test runner: VS Code extension test framework or Mocha.
+- **Unit tests** (`npm run test:unit`): Domain model and storage tests run via Mocha without VS Code.
+- **Integration tests** (`npm test`): Extension activation tests via `@vscode/test-cli`.
+- Test runner TDD-style suites with `suite`/`test`.
 
 ## Unresolved Technical Questions
 
-1. **Storage mechanism**: `globalState` vs. workspace-local JSON files vs. `globalStorageUri` directory? Trade-offs around workspace portability and data size limits.
-2. **Git API choice**: VS Code built-in Git extension API vs. direct `git` CLI subprocess? The built-in API is convenient but undocumented/unstable; CLI is reliable but requires parsing.
-3. **Rolling buffer persistence**: Should the buffer persist across restarts or only live in memory? Persistence adds complexity but prevents data loss.
-4. **Event granularity**: Exact set of VS Code events to observe. Too many creates noise; too few misses context.
-5. **Snapshot trigger**: Automatic periodic snapshots vs. manual-only? Automatic adds value but may surprise users.
-6. **Multi-root workspaces**: How to handle multi-root workspace configurations in 0.0.1.
-7. **Data migration**: Strategy for handling stored data when the schema changes between versions.
+1. **Git API choice**: VS Code built-in Git extension API vs. direct `git` CLI subprocess?
+2. **Rolling buffer persistence**: In-memory only vs. persisted across restarts?
+3. **Event granularity**: Exact set of VS Code events to observe.
+4. **Snapshot trigger**: Automatic periodic snapshots vs. manual-only?
+5. **Multi-root workspaces**: How to handle in 0.0.1.
+6. **Data migration**: Strategy for migrating stored data between schema versions.

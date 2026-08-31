@@ -85,3 +85,35 @@
 **Decision:** The extension targets VS Code `^1.100.0` as the minimum engine version.
 
 **Reason:** Targets a recent-enough baseline to use current APIs without requiring bleeding-edge versions. Aligns with the stable release timeline.
+
+---
+
+## ADR-012: JSON File Storage via globalStorageUri
+
+**Decision:** Investigations are persisted as individual JSON files in `ExtensionContext.globalStorageUri.fsPath/investigations/`. Each file contains a versioned envelope (`{ schemaVersion, investigation }`).
+
+**Reason:** JSON files are human-inspectable, survive extension restarts, require no external database, and avoid the 1 MB size limit of `globalState`. One file per investigation keeps reads/writes simple and avoids lock contention. The envelope's `schemaVersion` field enables future migrations without data loss.
+
+---
+
+## ADR-013: Schema Version Envelope
+
+**Decision:** Every persisted JSON file wraps the data in `{ schemaVersion: number, investigation: {...} }`. Unknown schema versions are rejected on load (return null).
+
+**Reason:** Enables forward-compatible storage. When the domain model changes, a migration function can transform old envelopes to the current schema. Rejecting unknown future versions prevents data corruption from downgraded extensions.
+
+---
+
+## ADR-014: Plain Interfaces, No Classes
+
+**Decision:** Domain types are TypeScript interfaces. Factory functions (`createInvestigation`, `createCheckpoint`, `createEmptySnapshot`) produce plain objects.
+
+**Reason:** Plain objects serialize to JSON without custom `toJSON`/`fromJSON` methods. No prototype chains, no `instanceof` checks, no class hierarchy to maintain. Keeps the domain layer simple and testable.
+
+---
+
+## ADR-015: Mocha Unit Tests Alongside VS Code Integration Tests
+
+**Decision:** Pure domain and storage tests run via `npm run test:unit` using Mocha directly (no VS Code host). Integration tests that require VS Code APIs run via `npm test` (`@vscode/test-cli`).
+
+**Reason:** Domain and storage logic has no VS Code dependency. Running these tests without downloading VS Code is faster, works in CI without display servers, and provides quicker feedback during development.

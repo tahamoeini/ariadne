@@ -2,7 +2,7 @@
 
 ## Current Milestone
 
-**Prompt 1 — Scaffold the VS Code Extension**
+**Prompt 2 — Core Domain Model and Local Persistence**
 
 ## Status
 
@@ -10,45 +10,48 @@
 
 ## What Has Been Built
 
+### Prompt 1 (Scaffold)
 - VS Code extension scaffold in TypeScript.
 - `src/extension.ts` — entry point with `activate`/`deactivate` and a `repotrail.hello` command.
-- Source directory stubs: `domain/`, `capture/`, `git/`, `storage/`, `commands/`, `ui/` (with `.gitkeep` files).
+- Source directory stubs: `capture/`, `git/`, `commands/`, `ui/` (with `.gitkeep` files).
 - `src/test/extension.test.ts` — integration tests verifying extension presence, command registration, and command execution.
 - `.vscode-test.mjs` — test runner configuration using `@vscode/test-cli`.
 - `eslint.config.mjs` — ESLint 9 flat config with `@typescript-eslint`.
 - `.vscode/launch.json` and `.vscode/tasks.json` — debug/build configs.
-- `.vscodeignore` — packaging exclusions.
-- `.gitignore` — `out/`, `node_modules/`, `.vscode-test/`, `*.vsix`.
-- Developer documentation in README (setup, commands, local run, tests).
-- `package.json` with all scripts: `compile`, `watch`, `lint`, `typecheck`, `test`, `package`.
+
+### Prompt 2 (Domain & Persistence)
+- **Domain types** (`src/domain/types.ts`): `Investigation`, `Checkpoint`, `Snapshot`, `GitSnapshot`, `ObservedEvent`, `ObservedEventType`, `FileLocation`.
+- **Factory functions** (`src/domain/investigation.ts`): `createInvestigation()`, `createCheckpoint()`, `createEmptySnapshot()`.
+- **Storage layer** (`src/storage/store.ts`): JSON-file CRUD — `saveInvestigation()`, `loadInvestigation()`, `listInvestigations()`, `deleteInvestigation()`. Schema-versioned envelope (v1).
+- **Unit tests** (`src/test/domain.test.ts`, `src/test/storage.test.ts`): 23 tests covering creation, optional checkpoint, serialization round-trip, empty state, malformed/old data, deletion, update.
+- **`npm run test:unit`** script for running domain/storage tests via Mocha without VS Code host.
 
 ## Verified
 
-- `npm run compile` — succeeds, emits to `out/`.
-- `npm run lint` — passes with no warnings/errors.
+- `npm run compile` — succeeds.
+- `npm run lint` — passes.
 - `npm run typecheck` — passes.
-- Extension activates and registers `repotrail.hello` command.
+- `npm run test:unit` — 23 tests passing.
 
 ## What Remains
 
-- **Prompt 2:** Implement core domain model and local persistence.
 - **Prompt 3:** Implement rolling event buffer.
-- **Prompt 4+:** Git adapter, snapshot assembly, UI, validation.
+- **Prompt 4+:** Git adapter, snapshot assembly, UI, commands.
 
 ## Known Risks
 
-1. **Storage mechanism not yet decided** — `globalState` vs. JSON files vs. `globalStorageUri`. Must be resolved during Prompt 2.
-2. **Git API choice not yet decided** — built-in Git extension API vs. CLI subprocess. Must be resolved during Prompt 4 or earlier.
-3. **Rolling buffer persistence** — in-memory only vs. persisted across restarts. Must be resolved during Prompt 3.
+1. **Git API choice not yet decided** — built-in Git extension API vs. CLI subprocess. Must be resolved during Prompt 4 or earlier.
+2. **Rolling buffer persistence** — in-memory only vs. persisted across restarts. Must be resolved during Prompt 3.
 
 ## Decisions Made This Session
 
-- ADR-009: TypeScript with ESLint flat config.
-- ADR-010: @vscode/test-cli for testing.
-- ADR-011: VS Code engine ^1.100.0.
+- ADR-012: JSON file storage via `globalStorageUri`.
+- ADR-013: Schema version envelope.
+- ADR-014: Plain interfaces, no classes.
+- ADR-015: Mocha unit tests alongside VS Code integration tests.
 
 ## Next Milestone
 
-**Prompt 2 — Core Domain Model and Local Persistence**
+**Prompt 3 — Rolling Event Buffer**
 
-Entry condition: Extension scaffold compiles, lints, and tests pass (satisfied).
+Entry condition: Domain model and persistence tests pass (satisfied).
