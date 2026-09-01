@@ -334,7 +334,7 @@ export function registerInvestigationCommands(
           return investigation;
         } catch (error) {
           vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
-          return undefined;
+          return null;
         }
       },
     ),

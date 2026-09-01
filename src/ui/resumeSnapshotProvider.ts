@@ -10,7 +10,7 @@ export interface ResumeSnapshotOpener {
 
 export interface ResumeSnapshotProviderOptions {
   storageDir: string;
-  captureCurrentGitSnapshot?: (targetPath: string) => GitSnapshot;
+  captureCurrentGitSnapshot?: (targetPath: string) => GitSnapshot | null;
   fileExists?: (filePath: string) => boolean;
 }
 
