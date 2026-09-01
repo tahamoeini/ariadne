@@ -114,7 +114,7 @@ export function buildResumePlan(
   let targetLocation: FileLocation | null = null;
 
   if (primaryFilePath) {
-    if (primaryExists && maxFilesToOpen > 0) {
+    if (primaryExists) {
       filesToOpen.push(primaryFilePath);
       targetLocation = lastLocation;
     } else if (!primaryExists) {
