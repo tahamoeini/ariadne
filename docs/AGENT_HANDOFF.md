@@ -75,7 +75,7 @@
 - `npm run compile` — succeeds.
 - `npm run lint` — passes.
 - `npm run typecheck` — passes.
-- `npm run test:unit` — 54 tests passing.
+- `npm run test:unit` — 55 tests passing.
 - `npm test` — attempted, but `@vscode/test-cli` could not resolve `update.code.visualstudio.com` in this sandbox.
 
 ## Decisions Made This Session
