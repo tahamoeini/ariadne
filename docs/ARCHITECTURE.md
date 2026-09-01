@@ -88,7 +88,7 @@ Modules communicate through domain types. No module directly imports another mod
 | type | ObservedEventType | Factual event kind |
 | workspace | string | Workspace path |
 | repository | string \| null | Repository root if identifiable |
-| filePath | string? | File path if relevant |
+| filePath | string? | File path when available |
 | location | FileLocation? | Last known 1-based line/column for the event |
 | source | Record<string, string>? | Minimal metadata |
 
@@ -172,7 +172,7 @@ When file paths are inside the saved workspace, RepoTrail stores them as workspa
 The extension observes factual VS Code activity:
 
 - Active editor/file transitions.
-- Selection changes that provide meaningful last cursor/location context.
+- Selection changes that update the last cursor/location context.
 - Text edit occurrence (not content).
 - Workspace and repository context for file-backed editors.
 
@@ -183,6 +183,7 @@ Definition/reference navigation is intentionally deferred unless it becomes reli
 Observed events are stored in a bounded, time-limited rolling buffer rather than an unbounded log.
 
 - Default retention window is 20 minutes and is internally configurable.
+- The extension activates on `onStartupFinished` so the rolling buffer can begin collecting activity before the first RepoTrail command.
 - Events older than the retention window are discarded on read/write.
 - Buffer is kept in memory only and resets on extension restart.
 - Buffer is per-workspace, with a safety max-event cap to avoid unbounded growth during noisy sessions.
@@ -213,7 +214,7 @@ Minimal command surface for 0.0.1:
 - Add or update Checkpoint text on the active Investigation.
 - Save and stop the active Investigation.
 - List saved Investigations.
-- Open Resume Snapshot for a saved Investigation.
+- Show Resume Snapshot for a saved Investigation.
 - Resume a saved Investigation by reopening a conservative set of files.
 - Delete an Investigation.
 - Delete all RepoTrail data.
@@ -227,6 +228,7 @@ The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confi
 - Creating an Investigation captures the current rolling-buffer evidence, current Git Snapshot, last known location, edited-file evidence, and visited-file counts.
 - While an Investigation is active, newly observed events are merged into its in-memory Snapshot so developers do not need to manually curate visit/edit evidence during longer sessions.
 - Checkpoint updates persist immediately and refresh the saved Git Snapshot without introducing additional workflow states.
+- Extension shutdown persists the latest active Investigation state so normal restarts do not discard the current snapshot progress.
 - Saving/stopping the Investigation persists the latest factual state and clears the active workspace pointer.
 
 ## Resume Snapshot (Implemented)
@@ -234,6 +236,7 @@ The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confi
 - Saved Investigations can be opened into a read-only virtual Markdown document backed by a VS Code `TextDocumentContentProvider`.
 - The Snapshot shows factual re-entry context in a fixed order: investigation name, optional checkpoint, saved timestamp, workspace/repository, branch when saved, saved Git state, current Git state, factual saved-vs-current Git differences, edited files, revisited files with explicit visit counts, last location, and a short recent observed path.
 - Missing or unavailable data is rendered explicitly instead of inferred, including absent checkpoints, missing Git state, deleted/moved saved paths, and missing/corrupted Investigation payloads.
+- Each Investigation reuses a stable virtual-document URI so reopening the Resume Snapshot refreshes the existing tab instead of creating duplicates for each save.
 
 ## Resume Actions (Implemented)
 
@@ -247,7 +250,8 @@ The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confi
 ## Testing Strategy
 
 - **Unit tests** (`npm run test:unit`): Domain model, storage, rolling buffer, Git snapshot parser/adapter, and Investigation lifecycle service tests run via Mocha without VS Code. Privacy hardening tests cover schema minimization, relative-path persistence, backup recovery, malformed restart state, delete-all behavior, and oversized checkpoint rejection.
-- **Integration tests** (`npm test`): Extension activation, command registration, lifecycle command flow, and VS Code event-capture tests via `@vscode/test-cli`.
+- **Integration tests** (`npm test`): Extension activation, command registration, lifecycle command flow, Resume Snapshot refresh behavior, and VS Code event-capture tests via `@vscode/test-cli`.
+- **Packaging verification** (`npm run package`): Builds a `.vsix` package with `vsce`.
 - Test runner TDD-style suites with `suite`/`test`.
 
 ## Unresolved Technical Questions

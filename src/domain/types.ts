@@ -30,9 +30,9 @@ export interface ObservedEvent {
   workspace: string;
   /** Repository root path, if identifiable. */
   repository: string | null;
-  /** Absolute file path, when relevant. */
+  /** Absolute file path, when available. */
   filePath?: string;
-  /** Human-meaningful location, when relevant. */
+  /** 1-based cursor location, when available. */
   location?: FileLocation;
   /** Minimal source metadata (e.g. language id, symbol name). */
   source?: Record<string, string>;

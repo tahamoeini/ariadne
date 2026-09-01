@@ -62,11 +62,11 @@ suite('Storage', () => {
 
     test('preserves checkpoint', () => {
       const inv = createInvestigation('With CP', '/ws');
-      inv.checkpoint = createCheckpoint('important note');
+      inv.checkpoint = createCheckpoint('local note');
       saveInvestigation(tmpDir, inv);
       const loaded = loadInvestigation(tmpDir, inv.id);
       assert.ok(loaded);
-      assert.strictEqual(loaded!.checkpoint!.text, 'important note');
+      assert.strictEqual(loaded!.checkpoint!.text, 'local note');
     });
 
     test('preserves null checkpoint', () => {
@@ -81,7 +81,7 @@ suite('Storage', () => {
       const inv = createInvestigation('Minimize me', '/ws', '/repo');
       inv.createdAt = '2026-01-01T00:00:00.000Z';
       inv.lastResumedAt = '2026-01-01T00:10:00.000Z';
-      inv.checkpoint = createCheckpoint('important note');
+      inv.checkpoint = createCheckpoint('local note');
       inv.snapshot.editedFiles = ['/ws/src/token.ts'];
       inv.snapshot.visitedFileCounts = {
         '/ws/src/token.ts': 3,
@@ -127,7 +127,7 @@ suite('Storage', () => {
       assert.strictEqual(savedJson.schemaVersion, SCHEMA_VERSION);
       assert.ok(!('createdAt' in investigation));
       assert.ok(!('lastResumedAt' in investigation));
-      assert.deepStrictEqual(investigation.checkpoint, { text: 'important note' });
+      assert.deepStrictEqual(investigation.checkpoint, { text: 'local note' });
       assert.deepStrictEqual(snapshot.editedFiles, ['src/token.ts']);
       assert.deepStrictEqual(snapshot.visitedFileCounts, { 'src/token.ts': 3 });
       assert.deepStrictEqual(snapshot.lastLocation, {

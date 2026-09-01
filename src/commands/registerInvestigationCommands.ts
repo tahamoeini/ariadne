@@ -77,6 +77,10 @@ function toErrorMessage(error: unknown): string {
   return 'Unexpected RepoTrail error.';
 }
 
+function showCommandError(action: string, error: unknown): void {
+  void vscode.window.showErrorMessage(`RepoTrail: Failed to ${action}: ${toErrorMessage(error)}`);
+}
+
 function trimToNull(value: string | null | undefined): string | null {
   if (value === undefined || value === null) {
     return null;
@@ -142,7 +146,7 @@ async function resolveWorkspacePath(explicitPath?: string): Promise<string | nul
 async function promptForInvestigationName(title: string): Promise<string | undefined> {
   const name = await vscode.window.showInputBox({
     title,
-    prompt: `Name the investigation. RepoTrail stores this locally in plain text (${MAX_INVESTIGATION_NAME_LENGTH} characters max).`,
+    prompt: `Name the investigation. RepoTrail saves this locally in plain text (${MAX_INVESTIGATION_NAME_LENGTH} characters max).`,
     placeHolder: 'Fix refresh-token race',
     ignoreFocusOut: true,
     validateInput(value) {
@@ -157,7 +161,7 @@ async function promptForInvestigationName(title: string): Promise<string | undef
 async function promptForCheckpoint(currentValue = ''): Promise<string | null | undefined> {
   const checkpoint = await vscode.window.showInputBox({
     title: 'RepoTrail: Checkpoint',
-    prompt: `Optional checkpoint stored locally in plain text. Avoid secrets or source dumps (${MAX_CHECKPOINT_LENGTH} characters max).`,
+    prompt: `Optional checkpoint saved locally in plain text. Avoid secrets or large source excerpts (${MAX_CHECKPOINT_LENGTH} characters max).`,
     value: currentValue,
     placeHolder: 'Current hypothesis, unresolved question, or next step',
     ignoreFocusOut: true,
@@ -317,11 +321,11 @@ export function registerInvestigationCommands(
         try {
           const investigation = await lifecycle.startInvestigation(createOptions);
           vscode.window.showInformationMessage(
-            `RepoTrail: Started investigation "${investigation.name}".`,
+            `RepoTrail: Saved and started "${investigation.name}".`,
           );
           return investigation;
         } catch (error) {
-          vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+          showCommandError('start the investigation', error);
           return undefined;
         }
       },
@@ -345,11 +349,11 @@ export function registerInvestigationCommands(
           }
 
           vscode.window.showInformationMessage(
-            `RepoTrail: Saved recent activity as "${investigation.name}".`,
+            `RepoTrail: Saved recent activity as "${investigation.name}" and continued tracking.`,
           );
           return investigation;
         } catch (error) {
-          vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+          showCommandError('save recent activity', error);
           return undefined;
         }
       },
@@ -366,7 +370,7 @@ export function registerInvestigationCommands(
         const activeInvestigation = lifecycle.getActiveInvestigation(workspace);
         if (!activeInvestigation) {
           vscode.window.showInformationMessage(
-            'RepoTrail: No active investigation is available for this workspace.',
+            'RepoTrail: No active investigation was found for this workspace.',
           );
           return null;
         }
@@ -383,7 +387,7 @@ export function registerInvestigationCommands(
           const updated = await lifecycle.updateCheckpoint(workspace, trimToNull(checkpointText));
           if (!updated) {
             vscode.window.showInformationMessage(
-              'RepoTrail: No active investigation is available for this workspace.',
+              'RepoTrail: No active investigation was found for this workspace.',
             );
             return null;
           }
@@ -395,7 +399,7 @@ export function registerInvestigationCommands(
           );
           return updated;
         } catch (error) {
-          vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+          showCommandError('update the checkpoint', error);
           return undefined;
         }
       },
@@ -413,17 +417,17 @@ export function registerInvestigationCommands(
           const investigation = await lifecycle.saveAndStopInvestigation(workspace);
           if (!investigation) {
             vscode.window.showInformationMessage(
-              'RepoTrail: No active investigation is available for this workspace.',
+              'RepoTrail: No active investigation was found for this workspace.',
             );
             return null;
           }
 
           vscode.window.showInformationMessage(
-            `RepoTrail: Saved and stopped "${investigation.name}".`,
+            `RepoTrail: Saved and stopped tracking "${investigation.name}".`,
           );
           return investigation;
         } catch (error) {
-          vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+          showCommandError('save and stop the investigation', error);
           return undefined;
         }
       },
@@ -439,7 +443,7 @@ export function registerInvestigationCommands(
 
         const investigation =
           investigations.find((candidate) => candidate.id === options.id) ??
-          (await pickInvestigation(investigations, 'RepoTrail: Open Resume Snapshot'));
+          (await pickInvestigation(investigations, 'RepoTrail: Show Resume Snapshot'));
 
         if (!investigation) {
           return null;
@@ -449,7 +453,7 @@ export function registerInvestigationCommands(
           await snapshotOpener.openInvestigation(investigation);
           return investigation;
         } catch (error) {
-          vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+          showCommandError('show the Resume Snapshot', error);
           return null;
         }
       },
@@ -490,7 +494,7 @@ export function registerInvestigationCommands(
           vscode.window.showInformationMessage(buildResumeResultMessage(result));
           return result;
         } catch (error) {
-          vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+          showCommandError('resume the investigation', error);
           return null;
         }
       },
@@ -513,7 +517,7 @@ export function registerInvestigationCommands(
             try {
               await snapshotOpener.openInvestigation(investigation);
             } catch (error) {
-              vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+              showCommandError('show the Resume Snapshot', error);
             }
           }
         }
@@ -540,7 +544,7 @@ export function registerInvestigationCommands(
 
         if (!options.skipConfirmation) {
           const confirmed = await vscode.window.showWarningMessage(
-            `Delete investigation "${investigation.name}"?`,
+            `Delete saved investigation "${investigation.name}"?`,
             { modal: true },
             'Delete',
           );
@@ -560,7 +564,7 @@ export function registerInvestigationCommands(
           }
           return deleted;
         } catch (error) {
-          vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+          showCommandError('delete the investigation', error);
           return false;
         }
       },
@@ -589,7 +593,7 @@ export function registerInvestigationCommands(
           );
           return deletedCount;
         } catch (error) {
-          vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+          showCommandError('delete all local data', error);
           return 0;
         }
       },

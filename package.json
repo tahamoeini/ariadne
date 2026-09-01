@@ -5,20 +5,22 @@
   "version": "0.0.1",
   "publisher": "repotrail",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tahamoeini/repotrail.git"
+  },
   "engines": {
     "vscode": "^1.100.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "repotrail.hello",
-        "title": "RepoTrail: Hello"
-      },
       {
         "command": "repotrail.startInvestigation",
         "title": "Start Investigation",
@@ -46,7 +48,7 @@
       },
       {
         "command": "repotrail.openResumeSnapshot",
-        "title": "Open Resume Snapshot",
+        "title": "Show Resume Snapshot",
         "category": "RepoTrail"
       },
       {

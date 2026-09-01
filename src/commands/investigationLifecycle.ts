@@ -277,6 +277,17 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
     await this.deleteAllData();
   }
 
+  async persistActiveInvestigations(): Promise<void> {
+    for (const workspace of Array.from(this.activeInvestigations.keys())) {
+      const investigation = this.activeInvestigations.get(workspace);
+      if (!investigation) {
+        continue;
+      }
+
+      await this.persistActiveInvestigation(investigation);
+    }
+  }
+
   getStorageDirectory(): string {
     return this.options.storageDir;
   }
@@ -346,8 +357,14 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
     }
 
     const saved = await this.persistActiveInvestigation(active);
+    const persistedActive = this.activeInvestigations.get(workspace) ?? cloneInvestigation(saved);
     this.activeInvestigations.delete(workspace);
-    await this.persistActiveInvestigationIds();
+    try {
+      await this.persistActiveInvestigationIds();
+    } catch (error) {
+      this.activeInvestigations.set(workspace, cloneInvestigation(persistedActive));
+      throw error;
+    }
     return saved;
   }
 

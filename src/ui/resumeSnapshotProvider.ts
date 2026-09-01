@@ -24,12 +24,11 @@ function parseInvestigationId(query: string): string | null {
   return investigationId?.trim() || null;
 }
 
-function toSnapshotPath(displayName: string, investigationId: string, savedAt: string): string {
+function toSnapshotPath(displayName: string, investigationId: string): string {
   const baseName = (displayName.trim() || investigationId)
     .replace(/[^\w.-]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  const versionSuffix = savedAt.replace(/[^\dT]/g, '').slice(0, 15);
-  return `/${baseName || 'resume-snapshot'}-${versionSuffix || 'snapshot'}.md`;
+  return `/${baseName || 'resume-snapshot'}-${investigationId}.md`;
 }
 
 class ResumeSnapshotContentProvider
@@ -42,7 +41,12 @@ class ResumeSnapshotContentProvider
   constructor(private readonly options: ResumeSnapshotProviderOptions) {}
 
   cacheContent(uri: vscode.Uri, content: string): void {
-    this.contentCache.set(uri.toString(), content);
+    const key = uri.toString();
+    const previous = this.contentCache.get(key);
+    this.contentCache.set(key, content);
+    if (previous !== undefined && previous !== content) {
+      this.onDidChangeEmitter.fire(uri);
+    }
   }
 
   forgetInvestigation(investigationId: string): void {
@@ -117,7 +121,7 @@ export function createResumeSnapshotOpener(
         const fullInvestigation = loadInvestigation(options.storageDir, investigation.id);
         const uri = vscode.Uri.from({
           scheme: RESUME_SNAPSHOT_SCHEME,
-          path: toSnapshotPath(investigation.name, investigation.id, investigation.savedAt),
+          path: toSnapshotPath(investigation.name, investigation.id),
           query: new URLSearchParams({
             id: investigation.id,
           }).toString(),

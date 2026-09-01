@@ -130,7 +130,7 @@
 
 ## ADR-017: MVP Capture Focuses on Factual Editor, Location, and Edit Signals
 
-**Decision:** The MVP captures only active editor/file transitions, meaningful selection/location changes, edit occurrence, timestamps, workspace path, repository root when identifiable, and minimal metadata such as language id and edit change count.
+**Decision:** The MVP captures only active editor/file transitions, selection/location changes, edit occurrence, timestamps, workspace path, repository root when identifiable, and minimal metadata such as language id and edit change count.
 
 **Reason:** These signals are factual, low-risk, and directly support later summarization without inferring semantic importance. The product explicitly excludes keystrokes, file contents, clipboard, terminal contents, screenshots, environment variables, and unrelated application activity, so the capture set stays intentionally narrow.
 
@@ -205,3 +205,27 @@
 **Decision:** RepoTrail keeps saved Investigations as local JSON under `globalStorageUri`, applies best-effort private filesystem permissions where supported, writes through temp-file replacement while retaining the previous saved version as a `.bak` recovery copy, and exposes user commands to reveal or delete all local data. RepoTrail does not add custom encryption or move general Investigation metadata into secret storage.
 
 **Reason:** RepoTrail's threat model is local developer metadata on the same machine, not remote secret distribution. VS Code secret storage is appropriate for credentials, but RepoTrail intentionally does not collect credentials; pretending otherwise with ad-hoc encryption would add complexity without providing a trustworthy security boundary.
+
+---
+
+## ADR-027: Activate on Startup So Retroactive Capture Works
+
+**Decision:** RepoTrail declares `onStartupFinished` so the extension activates before the first explicit RepoTrail command.
+
+**Reason:** The rolling buffer must already exist when a developer chooses `Save Recent Activity as Investigation`. Command-only activation makes retroactive capture impossible because the buffer would be created only after the user asked to save it.
+
+---
+
+## ADR-028: Persist Active Investigations on Shutdown
+
+**Decision:** RepoTrail persists the current state of every active Investigation during extension deactivation.
+
+**Reason:** Active investigations continue to accumulate edited-file, last-location, and Git-drift evidence after they are first created. Normal window close, reload, or extension restart should not throw away that in-memory progress when the product promise is to reopen the same investigation later.
+
+---
+
+## ADR-029: Reuse One Resume Snapshot Document per Investigation
+
+**Decision:** Resume Snapshot virtual documents use a stable per-investigation URI and refresh their content in place when the saved Investigation changes.
+
+**Reason:** Save/checkpoint flows can update the same Investigation multiple times. A stable URI avoids duplicate Resume Snapshot tabs and ensures repeated opens show the latest saved data and current Git comparison instead of stale cached content.

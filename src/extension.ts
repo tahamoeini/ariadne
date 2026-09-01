@@ -11,6 +11,8 @@ import {
   registerInvestigationCommands,
 } from './commands';
 
+let activeLifecycleService: InvestigationLifecycleService | null = null;
+
 export interface RepoTrailExtensionDebugApi
   extends CaptureDebugApi, InvestigationLifecycleDebugApi {}
 
@@ -26,14 +28,12 @@ export function activate(context: vscode.ExtensionContext): RepoTrailExtensionAp
     capture: eventCapture,
     stateStore: context.workspaceState,
   });
+  activeLifecycleService = lifecycle;
   const { opener: snapshotOpener, disposable: snapshotProvider } = createResumeSnapshotOpener({
     storageDir: context.globalStorageUri.fsPath,
   });
   const lifecycleEventSubscription = eventCapture.onDidObserveEvent((event) => {
     lifecycle.recordObservedEvent(event);
-  });
-  const disposable = vscode.commands.registerCommand('repotrail.hello', () => {
-    vscode.window.showInformationMessage('RepoTrail is active!');
   });
   const lifecycleCommands = registerInvestigationCommands(lifecycle, snapshotOpener, {
     clearRecentActivity: () => {
@@ -42,7 +42,6 @@ export function activate(context: vscode.ExtensionContext): RepoTrailExtensionAp
   });
 
   context.subscriptions.push(
-    disposable,
     lifecycleCommands,
     lifecycleEventSubscription,
     eventCapture,
@@ -65,6 +64,10 @@ export function activate(context: vscode.ExtensionContext): RepoTrailExtensionAp
   };
 }
 
-export function deactivate(): void {
-  // Clean-up will go here when needed.
+export async function deactivate(): Promise<void> {
+  try {
+    await activeLifecycleService?.persistActiveInvestigations();
+  } finally {
+    activeLifecycleService = null;
+  }
 }

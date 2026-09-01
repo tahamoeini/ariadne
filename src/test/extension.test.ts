@@ -50,9 +50,20 @@ suite('RepoTrail Extension', () => {
     assert.ok(ext, 'Extension not found');
   });
 
-  test('repotrail.hello command should be registered', async () => {
+  test('activates on startup so recent activity can be captured before commands run', () => {
+    const ext = vscode.extensions.getExtension('repotrail.repotrail');
+    assert.ok(ext, 'Extension not found');
+    const activationEvents = ext!.packageJSON.activationEvents as string[] | undefined;
+    assert.ok(Array.isArray(activationEvents), 'activationEvents must be declared');
+    assert.ok(
+      activationEvents.includes('onStartupFinished'),
+      'onStartupFinished activation is required for retroactive capture',
+    );
+  });
+
+  test('RepoTrail commands should be registered', async () => {
     const commands = await vscode.commands.getCommands(true);
-    assert.ok(commands.includes('repotrail.hello'), 'Command repotrail.hello not found');
+    assert.ok(!commands.includes('repotrail.hello'), 'Unexpected placeholder hello command found');
     assert.ok(commands.includes('repotrail.startInvestigation'), 'Command repotrail.startInvestigation not found');
     assert.ok(
       commands.includes('repotrail.saveRecentActivityAsInvestigation'),
@@ -80,10 +91,6 @@ suite('RepoTrail Extension', () => {
     );
   });
 
-  test('repotrail.hello command should execute without error', async () => {
-    await vscode.commands.executeCommand('repotrail.hello');
-  });
-
   test('debug api exposes an empty buffer after clearing', () => {
     assert.deepStrictEqual(api.debug.getRecentEvents(), []);
   });
@@ -103,14 +110,14 @@ suite('RepoTrail Extension', () => {
     await pause();
 
     const events = api.debug.getRecentEvents(workspaceRoot);
-    const relevant = events.filter((event) => event.filePath === uri.fsPath);
-    const eventTypes = relevant.map((event) => event.type);
+    const matchingEvents = events.filter((event) => event.filePath === uri.fsPath);
+    const eventTypes = matchingEvents.map((event) => event.type);
 
     assert.ok(eventTypes.includes('editor.active'));
     assert.ok(eventTypes.includes('editor.selection'));
     assert.ok(eventTypes.includes('file.edit'));
 
-    const selectionEvent = relevant.find((event) => event.type === 'editor.selection');
+    const selectionEvent = matchingEvents.find((event) => event.type === 'editor.selection');
     assert.ok(selectionEvent);
     assert.strictEqual(selectionEvent!.workspace, workspaceRoot);
     assert.strictEqual(selectionEvent!.repository, workspaceRoot);
@@ -120,7 +127,7 @@ suite('RepoTrail Extension', () => {
       column: 3,
     });
 
-    const editEvent = relevant.find((event) => event.type === 'file.edit');
+    const editEvent = matchingEvents.find((event) => event.type === 'file.edit');
     assert.ok(editEvent);
     assert.strictEqual(editEvent!.source?.changeCount, '1');
   });
@@ -280,6 +287,74 @@ suite('RepoTrail Extension', () => {
     assert.ok(text.includes('# Snapshot investigation'));
     assert.ok(text.includes('## Checkpoint'));
     assert.ok(text.includes('## Current Git state'));
+  });
+
+  test('reuses the same resume snapshot document after saved data changes', async () => {
+    const uri = await createTempFile('snapshot-refresh-fixture.ts', 'export const value = 1;\n');
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+    await pause();
+
+    const created = await vscode.commands.executeCommand<Investigation>(
+      'repotrail.startInvestigation',
+      {
+        workspacePath: workspaceRoot,
+        name: 'Snapshot refresh investigation',
+        checkpointText: 'First checkpoint',
+      },
+    );
+
+    assert.ok(created);
+
+    await vscode.commands.executeCommand<Investigation>('repotrail.saveAndStopInvestigation', {
+      workspacePath: workspaceRoot,
+    });
+
+    await vscode.commands.executeCommand<Investigation>('repotrail.openResumeSnapshot', {
+      id: created!.id,
+    });
+    await pause();
+
+    const firstDocument = vscode.window.activeTextEditor?.document;
+    assert.ok(firstDocument);
+    assert.ok(firstDocument!.getText().includes('First checkpoint'));
+    const firstUri = firstDocument!.uri.toString();
+
+    const storageLocation = await vscode.commands.executeCommand<string>(
+      'repotrail.showStorageLocation',
+      {
+        revealInOs: false,
+      },
+    );
+
+    assert.ok(storageLocation);
+
+    const investigationPath = path.join(
+      storageLocation!,
+      'investigations',
+      `${created!.id}.json`,
+    );
+    const envelope = JSON.parse(fs.readFileSync(investigationPath, 'utf-8')) as {
+      schemaVersion: number;
+      investigation: {
+        savedAt: string;
+        checkpoint: { text: string } | null;
+      };
+    };
+    envelope.investigation.savedAt = '2030-01-01T00:00:00.000Z';
+    if (envelope.investigation.checkpoint) {
+      envelope.investigation.checkpoint.text = 'Updated checkpoint';
+    }
+    fs.writeFileSync(investigationPath, JSON.stringify(envelope, null, 2), 'utf-8');
+
+    await vscode.commands.executeCommand<Investigation>('repotrail.openResumeSnapshot', {
+      id: created!.id,
+    });
+    await pause();
+
+    const secondDocument = vscode.window.activeTextEditor?.document;
+    assert.ok(secondDocument);
+    assert.strictEqual(secondDocument!.uri.toString(), firstUri);
+    assert.ok(secondDocument!.getText().includes('Updated checkpoint'));
   });
 
   test('resumes a saved investigation by reopening files and the last location', async () => {

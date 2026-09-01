@@ -159,11 +159,11 @@ export function buildResumeResultMessage(result: ResumeExecutionResult): string 
   }
 
   if (result.omittedFiles.length > 0) {
-    details.push(`left ${result.omittedFiles.length} additional saved file(s) closed`);
+    details.push(`did not reopen ${result.omittedFiles.length} additional saved file(s)`);
   }
 
   if (result.workspaceStatus === 'available') {
-    details.push('the saved workspace is not currently open');
+    details.push('the saved workspace path exists but is not currently open');
   } else if (result.workspaceStatus === 'missing') {
     details.push('the saved workspace path is no longer available');
   }
