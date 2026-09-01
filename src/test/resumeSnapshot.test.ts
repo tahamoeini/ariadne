@@ -121,7 +121,7 @@ suite('Resume Snapshot', () => {
 
     assert.ok(content.includes('- Repository: No repository was captured.'));
     assert.ok(content.includes('- No branch was captured.'));
-    assert.ok(content.includes('- No saved/current Git comparison is available.'));
+    assert.ok(content.includes('- No saved or current Git snapshot is available for comparison.'));
     assert.ok(content.includes('- No edited files were captured.'));
     assert.ok(content.includes('- No revisited files were captured.'));
     assert.ok(content.includes('- No last location was captured.'));

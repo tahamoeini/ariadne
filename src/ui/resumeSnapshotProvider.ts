@@ -31,26 +31,43 @@ function toSnapshotPath(displayName: string, investigationId: string, savedAt: s
 }
 
 class ResumeSnapshotContentProvider implements vscode.TextDocumentContentProvider {
+  private readonly contentCache = new Map<string, string>();
+
   constructor(private readonly options: ResumeSnapshotProviderOptions) {}
 
+  cacheContent(uri: vscode.Uri, content: string): void {
+    this.contentCache.set(uri.toString(), content);
+  }
+
   provideTextDocumentContent(uri: vscode.Uri): string {
+    const cached = this.contentCache.get(uri.toString());
+    if (cached) {
+      return cached;
+    }
+
     const investigationId = parseInvestigationId(uri.query);
     if (!investigationId) {
-      return buildMissingInvestigationContent('unknown');
+      const content = buildMissingInvestigationContent('unknown');
+      this.cacheContent(uri, content);
+      return content;
     }
 
     const investigation = loadInvestigation(this.options.storageDir, investigationId);
     if (!investigation) {
-      return buildMissingInvestigationContent(investigationId);
+      const content = buildMissingInvestigationContent(investigationId);
+      this.cacheContent(uri, content);
+      return content;
     }
 
     const currentGitSnapshot = (this.options.captureCurrentGitSnapshot ?? captureGitSnapshot)(
       investigation.snapshot.lastLocation?.filePath ?? investigation.repository ?? investigation.workspace,
     );
 
-    return buildResumeSnapshotContent(investigation, currentGitSnapshot, {
+    const content = buildResumeSnapshotContent(investigation, currentGitSnapshot, {
       fileExists: this.options.fileExists,
     });
+    this.cacheContent(uri, content);
+    return content;
   }
 }
 
@@ -66,6 +83,7 @@ export function createResumeSnapshotOpener(
   return {
     opener: {
       async openInvestigation(investigation): Promise<void> {
+        const fullInvestigation = loadInvestigation(options.storageDir, investigation.id);
         const uri = vscode.Uri.from({
           scheme: RESUME_SNAPSHOT_SCHEME,
           path: toSnapshotPath(investigation.name, investigation.id, investigation.savedAt),
@@ -73,6 +91,21 @@ export function createResumeSnapshotOpener(
             id: investigation.id,
           }).toString(),
         });
+        if (fullInvestigation) {
+          const currentGitSnapshot = (options.captureCurrentGitSnapshot ?? captureGitSnapshot)(
+            fullInvestigation.snapshot.lastLocation?.filePath ??
+              fullInvestigation.repository ??
+              fullInvestigation.workspace,
+          );
+          provider.cacheContent(
+            uri,
+            buildResumeSnapshotContent(fullInvestigation, currentGitSnapshot, {
+              fileExists: options.fileExists,
+            }),
+          );
+        } else {
+          provider.cacheContent(uri, buildMissingInvestigationContent(investigation.id));
+        }
         const document = await vscode.workspace.openTextDocument(uri);
         await vscode.window.showTextDocument(document, { preview: false });
       },

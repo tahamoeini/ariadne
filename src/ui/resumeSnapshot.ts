@@ -108,8 +108,16 @@ function describeGitAvailability(git: GitSnapshot | null, tense: 'saved' | 'curr
 }
 
 function compareGitSnapshots(savedGit: GitSnapshot | null, currentGit: GitSnapshot | null): string[] {
-  if (!savedGit || !currentGit) {
-    return ['- No saved/current Git comparison is available.'];
+  if (!savedGit && !currentGit) {
+    return ['- No saved or current Git snapshot is available for comparison.'];
+  }
+
+  if (!savedGit) {
+    return ['- No saved Git snapshot is available for comparison.'];
+  }
+
+  if (!currentGit) {
+    return ['- No current Git snapshot could be captured for comparison.'];
   }
 
   if (savedGit.availability !== 'available' || currentGit.availability !== 'available') {
