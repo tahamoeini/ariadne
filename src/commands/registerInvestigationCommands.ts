@@ -1,6 +1,12 @@
+import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { Investigation } from '../domain';
-import { CreateInvestigationOptions, InvestigationLifecycleService } from './investigationLifecycle';
+import {
+  CreateInvestigationOptions,
+  InvestigationLifecycleService,
+  MAX_CHECKPOINT_LENGTH,
+  MAX_INVESTIGATION_NAME_LENGTH,
+} from './investigationLifecycle';
 import {
   buildResumePlan,
   buildResumeResultMessage,
@@ -14,8 +20,10 @@ export const COMMAND_UPDATE_CHECKPOINT = 'repotrail.updateCheckpoint';
 export const COMMAND_SAVE_AND_STOP = 'repotrail.saveAndStopInvestigation';
 export const COMMAND_LIST_INVESTIGATIONS = 'repotrail.listInvestigations';
 export const COMMAND_DELETE_INVESTIGATION = 'repotrail.deleteInvestigation';
+export const COMMAND_DELETE_ALL_DATA = 'repotrail.deleteAllData';
 export const COMMAND_OPEN_RESUME_SNAPSHOT = 'repotrail.openResumeSnapshot';
 export const COMMAND_RESUME_INVESTIGATION = 'repotrail.resumeInvestigation';
+export const COMMAND_SHOW_STORAGE_LOCATION = 'repotrail.showStorageLocation';
 
 interface CreateInvestigationCommandOptions {
   workspacePath?: string;
@@ -36,6 +44,10 @@ interface DeleteInvestigationCommandOptions {
   skipConfirmation?: boolean;
 }
 
+interface DeleteAllDataCommandOptions {
+  skipConfirmation?: boolean;
+}
+
 interface OpenResumeSnapshotCommandOptions {
   id?: string;
 }
@@ -45,8 +57,16 @@ interface ResumeInvestigationCommandOptions {
   maxFilesToOpen?: number;
 }
 
+interface ShowStorageLocationCommandOptions {
+  revealInOs?: boolean;
+}
+
 interface InvestigationQuickPickItem extends vscode.QuickPickItem {
   investigation: Investigation;
+}
+
+interface RegisterInvestigationCommandsOptions {
+  clearRecentActivity?: () => void;
 }
 
 function toErrorMessage(error: unknown): string {
@@ -64,6 +84,22 @@ function trimToNull(value: string | null | undefined): string | null {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function validateBoundedText(
+  value: string,
+  label: string,
+  maxLength: number,
+): string | undefined {
+  if (value.trim().length === 0) {
+    return undefined;
+  }
+
+  if (value.trim().length > maxLength) {
+    return `${label} must be ${maxLength} characters or fewer.`;
+  }
+
+  return undefined;
 }
 
 async function resolveWorkspacePath(explicitPath?: string): Promise<string | null> {
@@ -106,9 +142,12 @@ async function resolveWorkspacePath(explicitPath?: string): Promise<string | nul
 async function promptForInvestigationName(title: string): Promise<string | undefined> {
   const name = await vscode.window.showInputBox({
     title,
-    prompt: 'Name the investigation.',
+    prompt: `Name the investigation. RepoTrail stores this locally in plain text (${MAX_INVESTIGATION_NAME_LENGTH} characters max).`,
     placeHolder: 'Fix refresh-token race',
     ignoreFocusOut: true,
+    validateInput(value) {
+      return validateBoundedText(value, 'Investigation name', MAX_INVESTIGATION_NAME_LENGTH);
+    },
   });
 
   const trimmed = name?.trim();
@@ -118,10 +157,13 @@ async function promptForInvestigationName(title: string): Promise<string | undef
 async function promptForCheckpoint(currentValue = ''): Promise<string | null | undefined> {
   const checkpoint = await vscode.window.showInputBox({
     title: 'RepoTrail: Checkpoint',
-    prompt: 'Optional checkpoint. Leave blank to skip or clear it.',
+    prompt: `Optional checkpoint stored locally in plain text. Avoid secrets or source dumps (${MAX_CHECKPOINT_LENGTH} characters max).`,
     value: currentValue,
     placeHolder: 'Current hypothesis, unresolved question, or next step',
     ignoreFocusOut: true,
+    validateInput(value) {
+      return validateBoundedText(value, 'Checkpoint', MAX_CHECKPOINT_LENGTH);
+    },
   });
 
   if (checkpoint === undefined) {
@@ -259,6 +301,7 @@ async function collectCreateOptions(
 export function registerInvestigationCommands(
   lifecycle: InvestigationLifecycleService,
   snapshotOpener: ResumeSnapshotOpener,
+  options: RegisterInvestigationCommandsOptions = {},
 ): vscode.Disposable {
   const disposables: vscode.Disposable[] = [];
 
@@ -412,6 +455,19 @@ export function registerInvestigationCommands(
       },
     ),
     vscode.commands.registerCommand(
+      COMMAND_SHOW_STORAGE_LOCATION,
+      async (commandOptions: ShowStorageLocationCommandOptions = {}) => {
+        const storageDir = lifecycle.getStorageDirectory();
+        const revealInOs = commandOptions.revealInOs ?? true;
+        if (revealInOs && fs.existsSync(storageDir)) {
+          await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(storageDir));
+        }
+
+        await vscode.window.showInformationMessage(`RepoTrail: Local data directory: ${storageDir}`);
+        return storageDir;
+      },
+    ),
+    vscode.commands.registerCommand(
       COMMAND_RESUME_INVESTIGATION,
       async (options: ResumeInvestigationCommandOptions = {}) => {
         const investigations = lifecycle.listInvestigations();
@@ -497,6 +553,7 @@ export function registerInvestigationCommands(
         try {
           const deleted = await lifecycle.deleteInvestigation(investigation.id);
           if (deleted) {
+            snapshotOpener.forgetInvestigation(investigation.id);
             vscode.window.showInformationMessage(
               `RepoTrail: Deleted investigation "${investigation.name}".`,
             );
@@ -505,6 +562,35 @@ export function registerInvestigationCommands(
         } catch (error) {
           vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
           return false;
+        }
+      },
+    ),
+    vscode.commands.registerCommand(
+      COMMAND_DELETE_ALL_DATA,
+      async (commandOptions: DeleteAllDataCommandOptions = {}) => {
+        if (!commandOptions.skipConfirmation) {
+          const confirmed = await vscode.window.showWarningMessage(
+            'Delete all RepoTrail local data? This removes saved Investigations and clears in-memory activity for the current session.',
+            { modal: true },
+            'Delete All',
+          );
+
+          if (confirmed !== 'Delete All') {
+            return 0;
+          }
+        }
+
+        try {
+          const deletedCount = await lifecycle.deleteAllData();
+          options.clearRecentActivity?.();
+          snapshotOpener.forgetAllInvestigations();
+          vscode.window.showInformationMessage(
+            `RepoTrail: Deleted all local data (${deletedCount} saved investigation(s)) and cleared in-memory activity.`,
+          );
+          return deletedCount;
+        } catch (error) {
+          vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+          return 0;
         }
       },
     ),

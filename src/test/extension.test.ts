@@ -73,6 +73,11 @@ suite('RepoTrail Extension', () => {
       'Command repotrail.resumeInvestigation not found',
     );
     assert.ok(commands.includes('repotrail.deleteInvestigation'), 'Command repotrail.deleteInvestigation not found');
+    assert.ok(commands.includes('repotrail.deleteAllData'), 'Command repotrail.deleteAllData not found');
+    assert.ok(
+      commands.includes('repotrail.showStorageLocation'),
+      'Command repotrail.showStorageLocation not found',
+    );
   });
 
   test('repotrail.hello command should execute without error', async () => {
@@ -201,6 +206,45 @@ suite('RepoTrail Extension', () => {
 
     assert.strictEqual(deleted, true);
     assert.ok(!api.debug.listInvestigations().some((investigation) => investigation.id === created!.id));
+  });
+
+  test('shows the local storage location and deletes all RepoTrail data', async () => {
+    const uri = await createTempFile('delete-all-fixture.ts', 'export const value = 1;\n');
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+    await pause();
+
+    const created = await vscode.commands.executeCommand<Investigation>(
+      'repotrail.startInvestigation',
+      {
+        workspacePath: workspaceRoot,
+        name: 'Delete all integration investigation',
+        checkpointText: 'keep this local',
+      },
+    );
+
+    assert.ok(created);
+    assert.ok(api.debug.getRecentEvents().length > 0);
+
+    const storageLocation = await vscode.commands.executeCommand<string>(
+      'repotrail.showStorageLocation',
+      {
+        revealInOs: false,
+      },
+    );
+
+    assert.ok(storageLocation);
+    assert.ok(path.isAbsolute(storageLocation!));
+
+    const deletedCount = await vscode.commands.executeCommand<number>(
+      'repotrail.deleteAllData',
+      {
+        skipConfirmation: true,
+      },
+    );
+
+    assert.strictEqual(deletedCount, 1);
+    assert.deepStrictEqual(api.debug.getRecentEvents(), []);
+    assert.deepStrictEqual(api.debug.listInvestigations(), []);
   });
 
   test('opens a resume snapshot for a saved investigation', async () => {

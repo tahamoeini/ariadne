@@ -14,6 +14,7 @@ import {
 export interface RepoTrailExtensionDebugApi
   extends CaptureDebugApi, InvestigationLifecycleDebugApi {}
 
+/** @internal Testing-only debug surface; exposes raw captured metadata. */
 export interface RepoTrailExtensionApi {
   debug: RepoTrailExtensionDebugApi;
 }
@@ -34,7 +35,11 @@ export function activate(context: vscode.ExtensionContext): RepoTrailExtensionAp
   const disposable = vscode.commands.registerCommand('repotrail.hello', () => {
     vscode.window.showInformationMessage('RepoTrail is active!');
   });
-  const lifecycleCommands = registerInvestigationCommands(lifecycle, snapshotOpener);
+  const lifecycleCommands = registerInvestigationCommands(lifecycle, snapshotOpener, {
+    clearRecentActivity: () => {
+      eventCapture.clearRecentEvents();
+    },
+  });
 
   context.subscriptions.push(
     disposable,

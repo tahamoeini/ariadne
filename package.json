@@ -58,6 +58,16 @@
         "command": "repotrail.deleteInvestigation",
         "title": "Delete Investigation",
         "category": "RepoTrail"
+      },
+      {
+        "command": "repotrail.deleteAllData",
+        "title": "Delete All RepoTrail Data",
+        "category": "RepoTrail"
+      },
+      {
+        "command": "repotrail.showStorageLocation",
+        "title": "Show Local Storage Location",
+        "category": "RepoTrail"
       }
     ]
   },
