@@ -173,3 +173,11 @@
 **Decision:** The optional Pin File action remains out of the current model and UI for the lifecycle milestone.
 
 **Reason:** RepoTrail 0.0.1 is supposed to work when the developer performs almost no manual curation. The current lifecycle already persists investigation name, optional checkpoint, rolling-buffer events, Git state, last location, edited files, and factual visit counts; adding pin management now would add disproportionate UI and state complexity before there is evidence that passive capture is insufficient.
+
+---
+
+## ADR-023: Resume Snapshot Uses a Read-Only VS Code Virtual Document
+
+**Decision:** The first Resume Snapshot surface is implemented as a read-only virtual Markdown document opened from the Command Palette or saved-Investigation picker.
+
+**Reason:** RepoTrail 0.0.1 needs a fast, trustworthy re-entry surface, not a polished custom UI. A VS Code-native virtual document keeps the implementation lightweight while still letting the product show structured factual context, current Git comparisons, and honest empty/missing states without introducing webview complexity prematurely.

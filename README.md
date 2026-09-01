@@ -32,7 +32,7 @@ npm install
 1. Open this folder in VS Code.
 2. Press **F5** to launch the Extension Development Host.
 3. Run **RepoTrail: Start Investigation** or **RepoTrail: Save Recent Activity as Investigation** from the Command Palette.
-4. Use **RepoTrail: Add or Update Checkpoint**, **RepoTrail: Save and Stop Investigation**, **RepoTrail: List Saved Investigations**, and **RepoTrail: Delete Investigation** as needed.
+4. Use **RepoTrail: Add or Update Checkpoint**, **RepoTrail: Save and Stop Investigation**, **RepoTrail: List Saved Investigations**, **RepoTrail: Open Resume Snapshot**, and **RepoTrail: Delete Investigation** as needed.
 
 ### Run Tests
 
