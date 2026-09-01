@@ -45,6 +45,11 @@
         "category": "RepoTrail"
       },
       {
+        "command": "repotrail.openResumeSnapshot",
+        "title": "Open Resume Snapshot",
+        "category": "RepoTrail"
+      },
+      {
         "command": "repotrail.deleteInvestigation",
         "title": "Delete Investigation",
         "category": "RepoTrail"
@@ -58,7 +63,7 @@
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vscode-test",
-    "test:unit": "mocha out/test/domain.test.js out/test/storage.test.js out/test/capture.test.js out/test/git.test.js out/test/investigationLifecycle.test.js --ui tdd",
+    "test:unit": "mocha out/test/domain.test.js out/test/storage.test.js out/test/capture.test.js out/test/git.test.js out/test/investigationLifecycle.test.js out/test/resumeSnapshot.test.js --ui tdd",
     "package": "vsce package"
   },
   "devDependencies": {

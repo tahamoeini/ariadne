@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { Investigation } from '../domain';
 import { CreateInvestigationOptions, InvestigationLifecycleService } from './investigationLifecycle';
+import { ResumeSnapshotOpener } from '../ui';
 
 export const COMMAND_START_INVESTIGATION = 'repotrail.startInvestigation';
 export const COMMAND_SAVE_RECENT_ACTIVITY = 'repotrail.saveRecentActivityAsInvestigation';
@@ -8,6 +9,7 @@ export const COMMAND_UPDATE_CHECKPOINT = 'repotrail.updateCheckpoint';
 export const COMMAND_SAVE_AND_STOP = 'repotrail.saveAndStopInvestigation';
 export const COMMAND_LIST_INVESTIGATIONS = 'repotrail.listInvestigations';
 export const COMMAND_DELETE_INVESTIGATION = 'repotrail.deleteInvestigation';
+export const COMMAND_OPEN_RESUME_SNAPSHOT = 'repotrail.openResumeSnapshot';
 
 interface CreateInvestigationCommandOptions {
   workspacePath?: string;
@@ -26,6 +28,10 @@ interface ListInvestigationsCommandOptions {
 interface DeleteInvestigationCommandOptions {
   id?: string;
   skipConfirmation?: boolean;
+}
+
+interface OpenResumeSnapshotCommandOptions {
+  id?: string;
 }
 
 interface InvestigationQuickPickItem extends vscode.QuickPickItem {
@@ -179,6 +185,7 @@ async function collectCreateOptions(
 
 export function registerInvestigationCommands(
   lifecycle: InvestigationLifecycleService,
+  snapshotOpener: ResumeSnapshotOpener,
 ): vscode.Disposable {
   const disposables: vscode.Disposable[] = [];
 
@@ -306,6 +313,32 @@ export function registerInvestigationCommands(
       },
     ),
     vscode.commands.registerCommand(
+      COMMAND_OPEN_RESUME_SNAPSHOT,
+      async (options: OpenResumeSnapshotCommandOptions = {}) => {
+        const investigations = lifecycle.listInvestigations();
+        if (investigations.length === 0) {
+          vscode.window.showInformationMessage('RepoTrail: No saved investigations were found.');
+          return null;
+        }
+
+        const investigation =
+          investigations.find((candidate) => candidate.id === options.id) ??
+          (await pickInvestigation(investigations, 'RepoTrail: Open Resume Snapshot'));
+
+        if (!investigation) {
+          return null;
+        }
+
+        try {
+          await snapshotOpener.openInvestigation(investigation);
+          return investigation;
+        } catch (error) {
+          vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+          return null;
+        }
+      },
+    ),
+    vscode.commands.registerCommand(
       COMMAND_LIST_INVESTIGATIONS,
       async (options: ListInvestigationsCommandOptions = {}) => {
         const investigations = lifecycle.listInvestigations();
@@ -315,7 +348,17 @@ export function registerInvestigationCommands(
         }
 
         if (!options.quiet) {
-          await pickInvestigation(investigations, 'RepoTrail: Saved Investigations');
+          const investigation = await pickInvestigation(
+            investigations,
+            'RepoTrail: Saved Investigations',
+          );
+          if (investigation) {
+            try {
+              await snapshotOpener.openInvestigation(investigation);
+            } catch (error) {
+              vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+            }
+          }
         }
 
         return investigations;

@@ -4,6 +4,7 @@ import {
   RepoTrailDebugApi as CaptureDebugApi,
   VsCodeObservedEventCapture,
 } from './capture/vscodeEventCapture';
+import { createResumeSnapshotOpener } from './ui';
 import {
   InvestigationLifecycleDebugApi,
   InvestigationLifecycleService,
@@ -24,15 +25,24 @@ export function activate(context: vscode.ExtensionContext): RepoTrailExtensionAp
     capture: eventCapture,
     stateStore: context.workspaceState,
   });
+  const { opener: snapshotOpener, disposable: snapshotProvider } = createResumeSnapshotOpener({
+    storageDir: context.globalStorageUri.fsPath,
+  });
   const lifecycleEventSubscription = eventCapture.onDidObserveEvent((event) => {
     lifecycle.recordObservedEvent(event);
   });
   const disposable = vscode.commands.registerCommand('repotrail.hello', () => {
     vscode.window.showInformationMessage('RepoTrail is active!');
   });
-  const lifecycleCommands = registerInvestigationCommands(lifecycle);
+  const lifecycleCommands = registerInvestigationCommands(lifecycle, snapshotOpener);
 
-  context.subscriptions.push(disposable, lifecycleCommands, lifecycleEventSubscription, eventCapture);
+  context.subscriptions.push(
+    disposable,
+    lifecycleCommands,
+    lifecycleEventSubscription,
+    eventCapture,
+    snapshotProvider,
+  );
 
   return {
     debug: {

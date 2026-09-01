@@ -33,7 +33,7 @@ src/
 │   ├── investigationLifecycle.ts      # Active-investigation state + snapshot assembly
 │   ├── registerInvestigationCommands.ts # Command Palette handlers and prompts
 │   └── index.ts                      # Public re-exports
-├── ui/             # Webview panels, tree views, status bar
+├── ui/             # Resume Snapshot rendering + virtual-document provider
 └── test/           # Unit and integration tests
 ```
 
@@ -170,9 +170,10 @@ Minimal command surface for 0.0.1:
 - Add or update Checkpoint text on the active Investigation.
 - Save and stop the active Investigation.
 - List saved Investigations.
+- Open Resume Snapshot for a saved Investigation.
 - Delete an Investigation.
 
-The current lifecycle uses only VS Code-native `showInputBox`, `showQuickPick`, and confirmation messages. No custom webview or complex UI is introduced in this milestone.
+The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confirmation messages, and a read-only virtual Markdown document for the Resume Snapshot. No custom webview or complex UI is introduced in this milestone.
 
 ## Investigation Lifecycle (Implemented)
 
@@ -181,6 +182,12 @@ The current lifecycle uses only VS Code-native `showInputBox`, `showQuickPick`, 
 - While an Investigation is active, newly observed events are merged into its in-memory Snapshot so developers do not need to manually curate visit/edit evidence during longer sessions.
 - Checkpoint updates persist immediately and refresh the saved Git Snapshot without introducing additional workflow states.
 - Saving/stopping the Investigation persists the latest factual state and clears the active workspace pointer.
+
+## Resume Snapshot (Implemented)
+
+- Saved Investigations can be opened into a read-only virtual Markdown document backed by a VS Code `TextDocumentContentProvider`.
+- The Snapshot shows factual re-entry context in a fixed order: investigation name, optional checkpoint, saved timestamp, workspace/repository, branch when saved, saved Git state, current Git state, factual saved-vs-current Git differences, edited files, revisited files with explicit visit counts, last location, and a short recent observed path.
+- Missing or unavailable data is rendered explicitly instead of inferred, including absent checkpoints, missing Git state, deleted/moved saved paths, and missing/corrupted Investigation payloads.
 
 ## Testing Strategy
 
