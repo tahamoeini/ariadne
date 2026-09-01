@@ -121,6 +121,10 @@ function compareGitSnapshots(savedGit: GitSnapshot | null, currentGit: GitSnapsh
   }
 
   const differences: string[] = [];
+  const savedModifiedSet = new Set(savedGit.modifiedFiles);
+  const currentModifiedSet = new Set(currentGit.modifiedFiles);
+  const savedUntrackedSet = new Set(savedGit.untrackedFiles);
+  const currentUntrackedSet = new Set(currentGit.untrackedFiles);
 
   if (savedGit.branch !== currentGit.branch) {
     differences.push(`- Branch changed: ${describeBranch(savedGit.branch)} → ${describeBranch(currentGit.branch)}`);
@@ -142,27 +146,23 @@ function compareGitSnapshots(savedGit: GitSnapshot | null, currentGit: GitSnapsh
     );
   }
 
-  const nowModified = currentGit.modifiedFiles.filter((filePath) => !savedGit.modifiedFiles.includes(filePath));
+  const nowModified = currentGit.modifiedFiles.filter((filePath) => !savedModifiedSet.has(filePath));
   if (nowModified.length > 0) {
     differences.push(`- Now modified: ${summarizeFileList(nowModified)}`);
   }
 
-  const noLongerModified = savedGit.modifiedFiles.filter(
-    (filePath) => !currentGit.modifiedFiles.includes(filePath),
-  );
+  const noLongerModified = savedGit.modifiedFiles.filter((filePath) => !currentModifiedSet.has(filePath));
   if (noLongerModified.length > 0) {
     differences.push(`- No longer modified: ${summarizeFileList(noLongerModified)}`);
   }
 
-  const nowUntracked = currentGit.untrackedFiles.filter(
-    (filePath) => !savedGit.untrackedFiles.includes(filePath),
-  );
+  const nowUntracked = currentGit.untrackedFiles.filter((filePath) => !savedUntrackedSet.has(filePath));
   if (nowUntracked.length > 0) {
     differences.push(`- Now untracked: ${summarizeFileList(nowUntracked)}`);
   }
 
   const noLongerUntracked = savedGit.untrackedFiles.filter(
-    (filePath) => !currentGit.untrackedFiles.includes(filePath),
+    (filePath) => !currentUntrackedSet.has(filePath),
   );
   if (noLongerUntracked.length > 0) {
     differences.push(`- No longer untracked: ${summarizeFileList(noLongerUntracked)}`);

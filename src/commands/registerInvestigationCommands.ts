@@ -326,7 +326,7 @@ export function registerInvestigationCommands(
           (await pickInvestigation(investigations, 'RepoTrail: Open Resume Snapshot'));
 
         if (!investigation) {
-          return undefined;
+          return null;
         }
 
         try {
@@ -353,7 +353,11 @@ export function registerInvestigationCommands(
             'RepoTrail: Saved Investigations',
           );
           if (investigation) {
-            await snapshotOpener.openInvestigation(investigation.id, investigation.name);
+            try {
+              await snapshotOpener.openInvestigation(investigation.id, investigation.name);
+            } catch (error) {
+              vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+            }
           }
         }
 
