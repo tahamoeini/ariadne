@@ -169,6 +169,10 @@ function clampPosition(
   line: number,
   column: number,
 ): vscode.Position {
+  if (document.lineCount === 0) {
+    return new vscode.Position(0, 0);
+  }
+
   const targetLine = Math.min(Math.max(line - 1, 0), Math.max(document.lineCount - 1, 0));
   const lineText = document.lineAt(targetLine).text;
   const targetColumn = Math.min(Math.max(column - 1, 0), lineText.length);
