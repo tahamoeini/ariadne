@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { GitSnapshot, Investigation } from '../domain';
 import { captureGitSnapshot } from '../git';
 import { loadInvestigation } from '../storage';
+import { captureProfileIncludesGit } from '../validation';
 import { buildMissingInvestigationContent, buildResumeSnapshotContent } from './resumeSnapshot';
 
 export interface ResumeSnapshotOpener {
@@ -89,9 +90,13 @@ class ResumeSnapshotContentProvider
       return content;
     }
 
-    const currentGitSnapshot = (this.options.captureCurrentGitSnapshot ?? captureGitSnapshot)(
-      investigation.snapshot.lastLocation?.filePath ?? investigation.repository ?? investigation.workspace,
-    );
+    const currentGitSnapshot = captureProfileIncludesGit(investigation.captureProfile)
+      ? (this.options.captureCurrentGitSnapshot ?? captureGitSnapshot)(
+          investigation.snapshot.lastLocation?.filePath ??
+            investigation.repository ??
+            investigation.workspace,
+        )
+      : null;
 
     const content = buildResumeSnapshotContent(investigation, currentGitSnapshot, {
       fileExists: this.options.fileExists,
@@ -127,11 +132,13 @@ export function createResumeSnapshotOpener(
           }).toString(),
         });
         if (fullInvestigation) {
-          const currentGitSnapshot = (options.captureCurrentGitSnapshot ?? captureGitSnapshot)(
-            fullInvestigation.snapshot.lastLocation?.filePath ??
-              fullInvestigation.repository ??
-              fullInvestigation.workspace,
-          );
+          const currentGitSnapshot = captureProfileIncludesGit(fullInvestigation.captureProfile)
+            ? (options.captureCurrentGitSnapshot ?? captureGitSnapshot)(
+                fullInvestigation.snapshot.lastLocation?.filePath ??
+                  fullInvestigation.repository ??
+                  fullInvestigation.workspace,
+              )
+            : null;
           provider.cacheContent(
             uri,
             buildResumeSnapshotContent(fullInvestigation, currentGitSnapshot, {

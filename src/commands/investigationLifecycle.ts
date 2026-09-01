@@ -4,6 +4,7 @@ import {
   FileLocation,
   GitSnapshot,
   Investigation,
+  InvestigationCaptureProfile,
   ObservedEvent,
   Snapshot,
   createInvestigation,
@@ -16,6 +17,14 @@ import {
   loadInvestigation,
   saveInvestigation,
 } from '../storage';
+import {
+  DEFAULT_INVESTIGATION_CAPTURE_PROFILE,
+  applyCaptureProfileToCheckpoint,
+  applyCaptureProfileToSnapshot,
+  captureProfileIncludesGit,
+  captureProfileIncludesTrail,
+  normalizeInvestigationCaptureProfile,
+} from '../validation';
 
 const ACTIVE_INVESTIGATIONS_KEY = 'repotrail.activeInvestigations';
 export const MAX_INVESTIGATION_NAME_LENGTH = 120;
@@ -48,6 +57,7 @@ export interface CreateInvestigationOptions {
   workspace: string;
   name: string;
   checkpointText?: string | null;
+  captureProfile?: InvestigationCaptureProfile;
 }
 
 export interface InvestigationLifecycleDebugApi {
@@ -197,7 +207,7 @@ function compareInvestigations(a: Investigation, b: Investigation): number {
 
 export function buildSnapshotFromObservedEvents(
   events: ObservedEvent[],
-  git: GitSnapshot,
+  git: GitSnapshot | null,
   lastLocation: FileLocation | null,
 ): Snapshot {
   const visitedFileCounts: Record<string, number> = {};
@@ -305,6 +315,10 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
       return;
     }
 
+    if (!captureProfileIncludesTrail(active.captureProfile)) {
+      return;
+    }
+
     const snapshot = applyObservedEventToSnapshot(active.snapshot, event);
     this.activeInvestigations.set(event.workspace, {
       ...cloneInvestigation(active),
@@ -403,8 +417,11 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
       MAX_INVESTIGATION_NAME_LENGTH,
     );
 
-    const snapshot = this.buildSeedSnapshot(workspace);
-    if (requireRecentActivity && snapshot.recentEvents.length === 0) {
+    const captureProfile = normalizeInvestigationCaptureProfile(
+      options.captureProfile ?? DEFAULT_INVESTIGATION_CAPTURE_PROFILE,
+    );
+    const seedSnapshot = this.buildSeedSnapshot(workspace, captureProfile);
+    if (requireRecentActivity && seedSnapshot.recentEvents.length === 0) {
       return null;
     }
 
@@ -413,10 +430,15 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
       'Checkpoint',
       MAX_CHECKPOINT_LENGTH,
     );
+    const snapshot = applyCaptureProfileToSnapshot(seedSnapshot, captureProfile);
+    const repository = resolveRepository(snapshot, null);
     const investigation: Investigation = {
-      ...createInvestigation(name, workspace, resolveRepository(snapshot, null)),
-      checkpoint: checkpointText ? createCheckpoint(checkpointText) : null,
-      repository: resolveRepository(snapshot, null),
+      ...createInvestigation(name, workspace, repository, captureProfile),
+      checkpoint: applyCaptureProfileToCheckpoint(
+        checkpointText ? createCheckpoint(checkpointText) : null,
+        captureProfile,
+      ),
+      repository,
       snapshot,
     };
 
@@ -426,26 +448,32 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
     return cloneInvestigation(saved);
   }
 
-  private buildSeedSnapshot(workspace: string): Snapshot {
+  private buildSeedSnapshot(workspace: string, captureProfile: InvestigationCaptureProfile): Snapshot {
     const recentEvents = this.options.capture.getRecentEvents(workspace);
     const lastLocation = this.options.capture.getLastLocation(workspace);
-    const git = this.captureGitSnapshotForTarget(lastLocation?.filePath ?? workspace);
+    const git = captureProfileIncludesGit(captureProfile)
+      ? this.captureGitSnapshotForTarget(lastLocation?.filePath ?? workspace)
+      : null;
     return buildSnapshotFromObservedEvents(recentEvents, git, lastLocation);
   }
 
   private refreshSnapshot(investigation: Investigation): Snapshot {
+    const captureProfile = normalizeInvestigationCaptureProfile(investigation.captureProfile);
     const currentLastLocation =
       this.options.capture.getLastLocation(investigation.workspace) ?? investigation.snapshot.lastLocation;
-    const git = this.captureGitSnapshotForTarget(
-      currentLastLocation?.filePath ?? investigation.workspace,
-    );
+    const git = captureProfileIncludesGit(captureProfile)
+      ? this.captureGitSnapshotForTarget(currentLastLocation?.filePath ?? investigation.workspace)
+      : null;
 
-    return {
-      ...cloneSnapshot(investigation.snapshot),
-      lastLocation: cloneLocation(currentLastLocation),
-      git: cloneGitSnapshot(git),
-      recentEvents: trimRecentEvents(investigation.snapshot.recentEvents.map(cloneObservedEvent)),
-    };
+    return applyCaptureProfileToSnapshot(
+      {
+        ...cloneSnapshot(investigation.snapshot),
+        lastLocation: cloneLocation(currentLastLocation),
+        git: cloneGitSnapshot(git),
+        recentEvents: trimRecentEvents(investigation.snapshot.recentEvents.map(cloneObservedEvent)),
+      },
+      captureProfile,
+    );
   }
 
   private restoreActiveInvestigations(): void {
@@ -463,9 +491,15 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
   }
 
   private async persistActiveInvestigation(investigation: Investigation): Promise<Investigation> {
+    const captureProfile = normalizeInvestigationCaptureProfile(investigation.captureProfile);
     const snapshot = this.refreshSnapshot(investigation);
     const saved = saveInvestigation(this.options.storageDir, {
       ...cloneInvestigation(investigation),
+      captureProfile,
+      checkpoint: applyCaptureProfileToCheckpoint(
+        cloneCheckpoint(investigation.checkpoint),
+        captureProfile,
+      ),
       repository: resolveRepository(snapshot, investigation.repository),
       snapshot,
     });

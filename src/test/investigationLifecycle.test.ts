@@ -367,6 +367,168 @@ suite('Investigation Lifecycle', () => {
     assert.strictEqual(created.snapshot.git?.repositoryRoot, null);
   });
 
+  test('allows retroactive save while persisting only the checkpoint', async () => {
+    const workspace = '/workspace';
+    const filePath = '/workspace/src/checkpoint-only.ts';
+    const capture = new FakeCapture();
+    const stateStore = new FakeStateStore();
+    capture.setEvents(workspace, [
+      makeEvent(
+        'editor.active',
+        workspace,
+        filePath,
+        '2026-05-01T12:30:00.000Z',
+        4,
+        2,
+      ),
+      makeEvent(
+        'file.edit',
+        workspace,
+        filePath,
+        '2026-05-01T12:31:00.000Z',
+        5,
+        1,
+      ),
+    ]);
+
+    let gitCaptureCount = 0;
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore,
+      captureGitSnapshot: () => {
+        gitCaptureCount += 1;
+        return makeGitSnapshot();
+      },
+    });
+
+    const created = await service.saveRecentActivityAsInvestigation({
+      workspace,
+      name: 'Checkpoint only',
+      checkpointText: 'Resume from the failing branch.',
+      captureProfile: 'checkpoint-only',
+    });
+
+    assert.ok(created);
+    assert.strictEqual(created!.captureProfile, 'checkpoint-only');
+    assert.strictEqual(created!.checkpoint?.text, 'Resume from the failing branch.');
+    assert.strictEqual(created!.repository, null);
+    assert.strictEqual(created!.snapshot.git, null);
+    assert.deepStrictEqual(created!.snapshot.editedFiles, []);
+    assert.deepStrictEqual(created!.snapshot.visitedFileCounts, {});
+    assert.strictEqual(created!.snapshot.lastLocation, null);
+    assert.deepStrictEqual(created!.snapshot.recentEvents, []);
+    assert.strictEqual(gitCaptureCount, 0);
+
+    const loaded = loadInvestigation(tmpDir, created!.id);
+    assert.ok(loaded);
+    assert.strictEqual(loaded!.snapshot.git, null);
+    assert.deepStrictEqual(loaded!.snapshot.recentEvents, []);
+  });
+
+  test('keeps git while dropping trail data when the capture profile disables trail', async () => {
+    const workspace = '/workspace';
+    const firstFile = '/workspace/src/checkpoint-git.ts';
+    const secondFile = '/workspace/src/follow-up.ts';
+    const capture = new FakeCapture();
+    const stateStore = new FakeStateStore();
+    capture.setEvents(workspace, [
+      makeEvent(
+        'editor.active',
+        workspace,
+        firstFile,
+        '2026-05-01T12:40:00.000Z',
+        9,
+        3,
+      ),
+      makeEvent(
+        'file.edit',
+        workspace,
+        firstFile,
+        '2026-05-01T12:41:00.000Z',
+        9,
+        3,
+      ),
+    ]);
+
+    let gitCaptureCount = 0;
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore,
+      captureGitSnapshot: () => {
+        gitCaptureCount += 1;
+        return makeGitSnapshot();
+      },
+    });
+
+    const created = await service.startInvestigation({
+      workspace,
+      name: 'Checkpoint plus git',
+      checkpointText: 'Check the dirty tree first.',
+      captureProfile: 'checkpoint-git',
+    });
+
+    assert.strictEqual(created.captureProfile, 'checkpoint-git');
+    assert.strictEqual(created.repository, '/repo');
+    assert.ok(created.snapshot.git);
+    assert.deepStrictEqual(created.snapshot.editedFiles, []);
+    assert.deepStrictEqual(created.snapshot.visitedFileCounts, {});
+    assert.strictEqual(created.snapshot.lastLocation, null);
+    assert.deepStrictEqual(created.snapshot.recentEvents, []);
+    assert.strictEqual(gitCaptureCount, 1);
+
+    const nextEvent = makeEvent(
+      'editor.active',
+      workspace,
+      secondFile,
+      '2026-05-01T12:42:00.000Z',
+      1,
+      1,
+    );
+    capture.addEvent(nextEvent);
+    service.recordObservedEvent(nextEvent);
+
+    assert.deepStrictEqual(service.getActiveInvestigation(workspace)?.snapshot.recentEvents, []);
+  });
+
+  test('drops checkpoints when the capture profile disables them', async () => {
+    const workspace = '/workspace';
+    const filePath = '/workspace/src/git-trail.ts';
+    const capture = new FakeCapture();
+    capture.setEvents(workspace, [
+      makeEvent(
+        'editor.active',
+        workspace,
+        filePath,
+        '2026-05-01T12:50:00.000Z',
+        2,
+        1,
+      ),
+    ]);
+
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore: new FakeStateStore(),
+      captureGitSnapshot: () => makeGitSnapshot(),
+    });
+
+    const created = await service.startInvestigation({
+      workspace,
+      name: 'Git and trail',
+      checkpointText: 'This should not persist.',
+      captureProfile: 'git-trail',
+    });
+
+    assert.strictEqual(created.captureProfile, 'git-trail');
+    assert.strictEqual(created.checkpoint, null);
+
+    const updated = await service.updateCheckpoint(workspace, 'Still should not persist.');
+    assert.ok(updated);
+    assert.strictEqual(updated!.checkpoint, null);
+  });
+
   test('restores the active investigation after an extension restart', async () => {
     const workspace = '/workspace';
     const filePath = '/workspace/src/index.ts';

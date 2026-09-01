@@ -2,65 +2,74 @@
 
 ## Current Milestone
 
-**Prompt 9 — RepoTrail 0.0.1 Quality Pass**
+Prepare RepoTrail 0.0.1 for controlled and natural-use validation.
+
+## Build / Version
+
+- Extension version: `0.0.1`
+- Packaged build: `repotrail-0.0.1.vsix`
+- Storage schema: `4`
+- Validation setting: `repotrail.validationMode`
 
 ## Status
 
-⚠️ Quality-pass code and documentation updates are complete, but the required extension-host smoke test could not finish in this sandbox.
+✅ Minimal validation support and tester-facing documentation are in place.
 
-## Ready for External Validation
+## Install Procedure
 
-**Not yet confirmed from this sandbox.**
+1. `npm install`
+2. `npm run compile`
+3. `npm run package`
+4. In VS Code, run **Extensions: Install from VSIX...**
+5. Select `repotrail-0.0.1.vsix`
+6. If needed, set **RepoTrail › Validation Mode** before starting an investigation:
+   - `standard`
+   - `checkpoint-only`
+   - `checkpoint-git`
+   - `git-trail`
 
-## Remaining Blockers
+## Validation Readiness
 
-1. `npm test` could not run to completion because `@vscode/test-cli` could not resolve `update.code.visualstudio.com`, and no local VS Code test binary was available to reuse.
+Ready for controlled and natural-use validation from the packaged VSIX, with manual study recording. Extension-host smoke coverage still needs a network-enabled environment or a cached VS Code test binary.
 
 ## What Was Completed
 
-- Added startup activation with `onStartupFinished` so the rolling buffer exists before the first RepoTrail command.
-- Persisted active investigations during extension shutdown so normal close/reload preserves the latest active snapshot state.
-- Guarded `saveAndStopInvestigation` so a workspace-state persistence failure keeps the investigation active instead of silently clearing it in memory.
-- Aligned capture-layer repository detection with the Git adapter so nested workspace folders can still report their repository root.
-- Reused one Resume Snapshot virtual document per investigation and refreshed it in place to avoid duplicate snapshot tabs and stale cached content.
-- Removed the placeholder `repotrail.hello` command.
-- Tightened command/result wording to better reflect actual behavior.
-- Replaced the duplicated `docs/PRODUCT_BASELINE.md` stub with an actual product baseline and updated README and implementation docs to match the shipped 0.0.1 behavior.
-- Added clean packaging metadata (`repository`) and a `LICENSE` file so `vsce package` completes without the earlier warnings.
-- Added tests for startup activation, Resume Snapshot refresh reuse, active-investigation persistence, and stop rollback behavior.
+- Added one validation setting that safely limits saved context for the early study variants.
+- Persisted the selected validation mode with each investigation so the Resume Snapshot stays aligned with the assigned variant after resume.
+- Omitted Git, trail, or checkpoint data from saved investigations and Resume Snapshot output when the assigned mode disables that data family.
+- Disabled checkpoint capture for the Git + trail variant.
+- Added `docs/TESTER_GUIDE.md` for participants.
+- Added `docs/EXPERIMENT_PROTOCOL.md` for facilitators.
+- Updated this handoff with build, install, limitation, and readiness details.
 
 ## Files Changed
 
-- `LICENSE`
-- `README.md`
 - `docs/AGENT_HANDOFF.md`
-- `docs/ARCHITECTURE.md`
-- `docs/DECISIONS.md`
-- `docs/PRODUCT_BASELINE.md`
-- `docs/VALIDATION.md`
+- `docs/EXPERIMENT_PROTOCOL.md`
+- `docs/TESTER_GUIDE.md`
 - `package.json`
-- `src/capture/vscodeEventCapture.ts`
 - `src/commands/investigationLifecycle.ts`
 - `src/commands/registerInvestigationCommands.ts`
-- `src/commands/resumePlan.ts`
+- `src/domain/investigation.ts`
 - `src/domain/types.ts`
 - `src/extension.ts`
-- `src/test/extension.test.ts`
+- `src/storage/store.ts`
+- `src/test/domain.test.ts`
 - `src/test/investigationLifecycle.test.ts`
+- `src/test/resumeSnapshot.test.ts`
 - `src/test/storage.test.ts`
+- `src/ui/resumeSnapshot.ts`
 - `src/ui/resumeSnapshotProvider.ts`
+- `src/validation/captureProfile.ts`
+- `src/validation/index.ts`
 
-## Important Implementation Details
+## Known Limitations
 
-1. Retroactive capture now depends on startup activation rather than first-command activation, which restores the intended rolling-buffer behavior for `Save Recent Activity as Investigation`.
-2. Active investigations are still saved immediately on creation, but shutdown now refreshes their last location, edited files, recent path, and Git snapshot before the extension exits.
-3. Resume Snapshot documents now use a stable per-investigation URI, so reopening the same investigation updates the existing tab instead of generating one tab per save timestamp.
-4. `README.md`, `docs/PRODUCT_BASELINE.md`, `docs/ARCHITECTURE.md`, and `docs/VALIDATION.md` now describe the actual 0.0.1 command set and no longer imply unimplemented 0.0.1 behavior such as Pin File support or definition/reference capture in the current build.
-
-## Known Issues
-
-1. The extension-host smoke test still depends on a VS Code binary that is either cached locally or downloadable by `@vscode/test-cli`; this sandbox had neither.
-2. Definition/reference navigation events remain intentionally deferred until they can be detected reliably through supported VS Code APIs.
+1. `npm test` still depends on a VS Code test binary that must be cached locally or downloadable from `update.code.visualstudio.com`; this sandbox cannot confirm that path.
+2. Definition/reference navigation capture remains deferred until a reliable supported VS Code API path exists.
+3. RepoTrail still does not promise exact restore of tabs, layout, terminals, or mental state.
+4. `checkpoint-only` and `checkpoint-git` intentionally omit trail data, so **RepoTrail: Resume Investigation** may reopen fewer or no files.
+5. Variant E is manual baseline use of ordinary VS Code + Git, so it is outside RepoTrail configuration.
 
 ## Tests / Verification
 
@@ -68,27 +77,16 @@
 - `npm run compile` — succeeds
 - `npm run lint` — succeeds
 - `npm run typecheck` — succeeds
-- `npm run test:unit` — succeeds (64 passing)
+- `npm run test:unit` — succeeds (72 passing)
 - `npm run package` — succeeds and produces `repotrail-0.0.1.vsix`
-- `npm test` — attempted, but failed because `update.code.visualstudio.com` could not be resolved in this sandbox
-
-## Decisions Made This Session
-
-- ADR-027: Activate on Startup So Retroactive Capture Works
-- ADR-028: Persist Active Investigations on Shutdown
-- ADR-029: Reuse One Resume Snapshot Document per Investigation
+- `npm test` — fails in this sandbox with `getaddrinfo ENOTFOUND update.code.visualstudio.com`
 
 ## What Remains
 
-- Run the extension-host smoke test in an environment with network access to the VS Code download endpoint or with a cached VS Code test binary.
-- If that passes, begin external validation for RepoTrail 0.0.1.
+- Run the extension-host smoke test where a VS Code test binary is available.
+- Distribute the packaged VSIX to testers.
+- Start controlled and natural-use validation with manual study logging.
 
 ## Next Recommended Action
 
-**Run `npm test` (or the equivalent extension-host smoke test) in a network-enabled environment, then start external validation if it passes.**
-
-## Do Not Touch / Deferred
-
-- Do not add AI, graph, timeline dashboard, or browser integration features.
-- Do not add exact workspace/session restore behavior.
-- Do not redesign the architecture further unless a concrete defect requires it.
+**Package the VSIX, run `npm test` in a network-enabled environment, and begin validation using `docs/TESTER_GUIDE.md` and `docs/EXPERIMENT_PROTOCOL.md`.**

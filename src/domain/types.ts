@@ -20,6 +20,13 @@ export type GitSnapshotAvailability =
   | 'git-missing'
   | 'git-error';
 
+/** Persisted capture profile used for controlled validation. */
+export type InvestigationCaptureProfile =
+  | 'standard'
+  | 'checkpoint-only'
+  | 'checkpoint-git'
+  | 'git-trail';
+
 /** A single factual observation of developer activity. */
 export interface ObservedEvent {
   /** ISO-8601 timestamp. */
@@ -107,6 +114,8 @@ export interface Investigation {
   savedAt: string;
   /** ISO-8601 timestamp when last resumed, if ever. */
   lastResumedAt: string | null;
+  /** Which data families are allowed to persist for this investigation. */
+  captureProfile: InvestigationCaptureProfile;
   /** Optional developer checkpoint. */
   checkpoint: Checkpoint | null;
   /** Current snapshot of investigation state. */

@@ -47,6 +47,7 @@ suite('Storage', () => {
       assert.ok(loaded);
       assert.strictEqual(loaded!.id, inv.id);
       assert.strictEqual(loaded!.name, inv.name);
+      assert.strictEqual(loaded!.captureProfile, 'standard');
     });
 
     test('savedAt is updated on save', () => {
@@ -127,6 +128,7 @@ suite('Storage', () => {
       assert.strictEqual(savedJson.schemaVersion, SCHEMA_VERSION);
       assert.ok(!('createdAt' in investigation));
       assert.ok(!('lastResumedAt' in investigation));
+      assert.strictEqual(investigation.captureProfile, 'standard');
       assert.deepStrictEqual(investigation.checkpoint, { text: 'local note' });
       assert.deepStrictEqual(snapshot.editedFiles, ['src/token.ts']);
       assert.deepStrictEqual(snapshot.visitedFileCounts, { 'src/token.ts': 3 });
@@ -287,8 +289,19 @@ suite('Storage', () => {
         loaded!.snapshot.recentEvents.map((event) => event.filePath),
         ['/ws/src/helper.ts', '/ws/src/token.ts'],
       );
+      assert.strictEqual(loaded!.captureProfile, 'standard');
       assert.strictEqual(loaded!.checkpoint?.createdAt, '2026-01-01T00:00:00.000Z');
       assert.strictEqual(loaded!.snapshot.git?.repositoryRoot, '/repo');
+    });
+
+    test('preserves an explicit capture profile', () => {
+      const inv = createInvestigation('Variant D', '/ws', '/repo', 'git-trail');
+      saveInvestigation(tmpDir, inv);
+
+      const loaded = loadInvestigation(tmpDir, inv.id);
+
+      assert.ok(loaded);
+      assert.strictEqual(loaded!.captureProfile, 'git-trail');
     });
 
     test('recovers from a valid backup when the primary file is malformed', () => {

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { GitSnapshot, Investigation, ObservedEvent } from '../domain';
+import { getInvestigationCapturePolicy } from '../validation';
 
 const VISIT_EVENT_TYPES: ReadonlySet<ObservedEvent['type']> = new Set([
   'editor.active',
@@ -229,6 +230,7 @@ export function buildResumeSnapshotContent(
   options: ResumeSnapshotRenderOptions = {},
 ): string {
   const fileExists = options.fileExists ?? fs.existsSync;
+  const capturePolicy = getInvestigationCapturePolicy(investigation.captureProfile);
   const revisitedFiles = Object.entries(investigation.snapshot.visitedFileCounts)
     .filter(([, count]) => count > 1)
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
@@ -253,50 +255,64 @@ export function buildResumeSnapshotContent(
     '',
   ];
 
-  if (investigation.checkpoint) {
+  if (capturePolicy.includeCheckpoint && investigation.checkpoint) {
     sections.push('## Checkpoint', '', investigation.checkpoint.text, '');
+  }
+
+  const workspaceLines = [`- Workspace: ${investigation.workspace}`];
+  if (capturePolicy.includeGit || investigation.repository) {
+    workspaceLines.push(`- Repository: ${investigation.repository ?? 'No repository was captured.'}`);
   }
 
   sections.push(
     `Saved timestamp: ${investigation.savedAt}`,
     '',
-    '## Workspace / repository',
+    workspaceLines.length > 1 ? '## Workspace / repository' : '## Workspace',
     '',
-    `- Workspace: ${investigation.workspace}`,
-    `- Repository: ${investigation.repository ?? 'No repository was captured.'}`,
-    '',
-    '## Branch when saved',
-    '',
-    `- ${investigation.snapshot.git?.availability === 'available' ? describeBranch(investigation.snapshot.git.branch) : 'No branch was captured.'}`,
-    '',
-    '## Git state when saved',
-    '',
-    ...describeGitAvailability(investigation.snapshot.git, 'saved'),
-    '',
-    '## Current Git state',
-    '',
-    ...describeGitAvailability(currentGit, 'current'),
-    '',
-    '## Saved vs current differences',
-    '',
-    ...compareGitSnapshots(investigation.snapshot.git, currentGit),
-    '',
-    '## Edited files',
-    '',
-    ...editedFiles,
-    '',
-    '## Revisited files',
-    '',
-    ...revisitedFileLines,
-    '',
-    '## Last location',
-    '',
-    describeLastLocation(investigation, fileExists),
-    '',
-    '## Recent observed path',
-    '',
-    ...buildRecentPathLines(investigation, fileExists),
+    ...workspaceLines,
   );
+
+  if (capturePolicy.includeGit) {
+    sections.push(
+      '',
+      '## Branch when saved',
+      '',
+      `- ${investigation.snapshot.git?.availability === 'available' ? describeBranch(investigation.snapshot.git.branch) : 'No branch was captured.'}`,
+      '',
+      '## Git state when saved',
+      '',
+      ...describeGitAvailability(investigation.snapshot.git, 'saved'),
+      '',
+      '## Current Git state',
+      '',
+      ...describeGitAvailability(currentGit, 'current'),
+      '',
+      '## Saved vs current differences',
+      '',
+      ...compareGitSnapshots(investigation.snapshot.git, currentGit),
+    );
+  }
+
+  if (capturePolicy.includeTrail) {
+    sections.push(
+      '',
+      '## Edited files',
+      '',
+      ...editedFiles,
+      '',
+      '## Revisited files',
+      '',
+      ...revisitedFileLines,
+      '',
+      '## Last location',
+      '',
+      describeLastLocation(investigation, fileExists),
+      '',
+      '## Recent observed path',
+      '',
+      ...buildRecentPathLines(investigation, fileExists),
+    );
+  }
 
   return sections.join('\n');
 }

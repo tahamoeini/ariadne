@@ -16,10 +16,17 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { FileLocation, GitSnapshot, Investigation, ObservedEvent } from '../domain/types';
+import {
+  FileLocation,
+  GitSnapshot,
+  Investigation,
+  InvestigationCaptureProfile,
+  ObservedEvent,
+} from '../domain/types';
+import { normalizeInvestigationCaptureProfile } from '../validation';
 
 /** Current schema version. Bump when the persisted shape changes. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 const INVESTIGATIONS_DIR_NAME = 'investigations';
 const BACKUP_SUFFIX = '.bak';
@@ -91,6 +98,7 @@ interface PersistedInvestigation {
   workspace: string;
   repository: string | null;
   savedAt: string;
+  captureProfile: InvestigationCaptureProfile;
   checkpoint: PersistedCheckpoint | null;
   snapshot: {
     editedFiles: string[];
@@ -452,6 +460,7 @@ function buildRuntimeInvestigation(
     createdAt: normalizeString(value.createdAt) ?? savedAt,
     savedAt,
     lastResumedAt: normalizeNullableString(value.lastResumedAt),
+    captureProfile: normalizeInvestigationCaptureProfile(value.captureProfile),
     checkpoint: normalizeCheckpoint(value.checkpoint, savedAt),
     snapshot: {
       editedFiles: normalizeWorkspaceFileList(snapshot.editedFiles, workspace),
@@ -486,6 +495,7 @@ function migrateGitSnapshot(
 function migrateInvestigationV1(investigation: LegacyInvestigation): Investigation {
   return {
     ...investigation,
+    captureProfile: 'standard',
     snapshot: {
       ...investigation.snapshot,
       git: migrateGitSnapshot(investigation.snapshot.git, investigation.repository),
@@ -523,7 +533,14 @@ function inflateEnvelope(envelope: unknown): Investigation | null {
     );
   }
 
-  if (envelope.schemaVersion !== SCHEMA_VERSION || !isRecord(envelope.investigation)) {
+  if (
+    envelope.schemaVersion !== 3 &&
+    envelope.schemaVersion !== SCHEMA_VERSION
+  ) {
+    return null;
+  }
+
+  if (!isRecord(envelope.investigation)) {
     return null;
   }
 
@@ -592,6 +609,7 @@ function toPersistedInvestigation(investigation: Investigation): PersistedInvest
     workspace: investigation.workspace,
     repository: investigation.repository,
     savedAt: investigation.savedAt,
+    captureProfile: normalizeInvestigationCaptureProfile(investigation.captureProfile),
     checkpoint: investigation.checkpoint ? { text: investigation.checkpoint.text } : null,
     snapshot: {
       editedFiles: dedupePaths(

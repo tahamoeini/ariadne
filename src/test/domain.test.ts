@@ -17,6 +17,7 @@ suite('Domain Model', () => {
       assert.ok(inv.createdAt);
       assert.ok(inv.savedAt);
       assert.strictEqual(inv.lastResumedAt, null);
+      assert.strictEqual(inv.captureProfile, 'standard');
       assert.strictEqual(inv.checkpoint, null);
       assert.deepStrictEqual(inv.snapshot.editedFiles, []);
       assert.deepStrictEqual(inv.snapshot.visitedFileCounts, {});
@@ -28,6 +29,11 @@ suite('Domain Model', () => {
     test('accepts optional repository path', () => {
       const inv = createInvestigation('Fix', '/ws', '/ws/repo');
       assert.strictEqual(inv.repository, '/ws/repo');
+    });
+
+    test('accepts an explicit capture profile', () => {
+      const inv = createInvestigation('Variant B', '/ws', '/ws/repo', 'checkpoint-git');
+      assert.strictEqual(inv.captureProfile, 'checkpoint-git');
     });
 
     test('generates unique ids', () => {

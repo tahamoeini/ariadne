@@ -3,7 +3,12 @@
  */
 
 import * as crypto from 'crypto';
-import { Investigation, Snapshot, Checkpoint } from './types';
+import {
+  Investigation,
+  Snapshot,
+  Checkpoint,
+  InvestigationCaptureProfile,
+} from './types';
 
 /** Create an empty Snapshot. */
 export function createEmptySnapshot(): Snapshot {
@@ -21,6 +26,7 @@ export function createInvestigation(
   name: string,
   workspace: string,
   repository: string | null = null,
+  captureProfile: InvestigationCaptureProfile = 'standard',
 ): Investigation {
   const now = new Date().toISOString();
   return {
@@ -31,6 +37,7 @@ export function createInvestigation(
     createdAt: now,
     savedAt: now,
     lastResumedAt: null,
+    captureProfile,
     checkpoint: null,
     snapshot: createEmptySnapshot(),
   };

@@ -71,7 +71,23 @@
         "title": "Show Local Storage Location",
         "category": "RepoTrail"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "RepoTrail",
+      "properties": {
+        "repotrail.validationMode": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "checkpoint-only",
+            "checkpoint-git",
+            "git-trail"
+          ],
+          "default": "standard",
+          "markdownDescription": "Temporarily limits what RepoTrail saves and shows for early validation. `standard` keeps normal RepoTrail behavior. `checkpoint-only` keeps only the optional checkpoint. `checkpoint-git` keeps the optional checkpoint plus Git state. `git-trail` keeps Git state and the observed trail while disabling checkpoint capture."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

@@ -128,6 +128,58 @@ suite('Resume Snapshot', () => {
     assert.ok(content.includes('No recent navigation path was captured.'));
   });
 
+  test('omits Git and trail sections for checkpoint-only validation', () => {
+    const investigation = makeInvestigation();
+    investigation.captureProfile = 'checkpoint-only';
+    investigation.repository = null;
+    investigation.snapshot.editedFiles = [];
+    investigation.snapshot.visitedFileCounts = {};
+    investigation.snapshot.lastLocation = null;
+    investigation.snapshot.recentEvents = [];
+    investigation.snapshot.git = null;
+
+    const content = buildResumeSnapshotContent(investigation, null, {
+      fileExists: () => true,
+    });
+
+    assert.ok(content.includes('## Checkpoint'));
+    assert.ok(content.includes('## Workspace'));
+    assert.ok(!content.includes('## Workspace / repository'));
+    assert.ok(!content.includes('## Git state when saved'));
+    assert.ok(!content.includes('## Edited files'));
+  });
+
+  test('omits trail sections for checkpoint-plus-git validation', () => {
+    const investigation = makeInvestigation();
+    investigation.captureProfile = 'checkpoint-git';
+    investigation.snapshot.editedFiles = [];
+    investigation.snapshot.visitedFileCounts = {};
+    investigation.snapshot.lastLocation = null;
+    investigation.snapshot.recentEvents = [];
+
+    const content = buildResumeSnapshotContent(investigation, makeGitSnapshot(), {
+      fileExists: () => true,
+    });
+
+    assert.ok(content.includes('## Checkpoint'));
+    assert.ok(content.includes('## Git state when saved'));
+    assert.ok(!content.includes('## Edited files'));
+    assert.ok(!content.includes('## Recent observed path'));
+  });
+
+  test('omits the checkpoint section when the capture profile disables checkpoints', () => {
+    const investigation = makeInvestigation();
+    investigation.captureProfile = 'git-trail';
+
+    const content = buildResumeSnapshotContent(investigation, makeGitSnapshot(), {
+      fileExists: () => true,
+    });
+
+    assert.ok(!content.includes('## Checkpoint'));
+    assert.ok(content.includes('## Git state when saved'));
+    assert.ok(content.includes('## Edited files'));
+  });
+
   test('renders missing investigation content', () => {
     const content = buildMissingInvestigationContent('missing-id');
 

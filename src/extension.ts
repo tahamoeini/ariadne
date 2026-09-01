@@ -10,6 +10,10 @@ import {
   InvestigationLifecycleService,
   registerInvestigationCommands,
 } from './commands';
+import {
+  DEFAULT_INVESTIGATION_CAPTURE_PROFILE,
+  normalizeInvestigationCaptureProfile,
+} from './validation';
 
 let activeLifecycleService: InvestigationLifecycleService | null = null;
 
@@ -19,6 +23,14 @@ export interface RepoTrailExtensionDebugApi
 /** @internal Testing-only debug surface; exposes raw captured metadata. */
 export interface RepoTrailExtensionApi {
   debug: RepoTrailExtensionDebugApi;
+}
+
+function getConfiguredCaptureProfile() {
+  return normalizeInvestigationCaptureProfile(
+    vscode.workspace
+      .getConfiguration('repotrail')
+      .get('validationMode', DEFAULT_INVESTIGATION_CAPTURE_PROFILE),
+  );
 }
 
 export function activate(context: vscode.ExtensionContext): RepoTrailExtensionApi {
@@ -39,6 +51,7 @@ export function activate(context: vscode.ExtensionContext): RepoTrailExtensionAp
     clearRecentActivity: () => {
       eventCapture.clearRecentEvents();
     },
+    getDefaultCaptureProfile: getConfiguredCaptureProfile,
   });
 
   context.subscriptions.push(

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as vscode from 'vscode';
-import { Investigation } from '../domain';
+import { Investigation, InvestigationCaptureProfile } from '../domain';
 import {
   CreateInvestigationOptions,
   InvestigationLifecycleService,
@@ -13,6 +13,11 @@ import {
   ResumeExecutionResult,
 } from './resumePlan';
 import { ResumeSnapshotOpener } from '../ui';
+import {
+  DEFAULT_INVESTIGATION_CAPTURE_PROFILE,
+  captureProfileAllowsCheckpoint,
+  normalizeInvestigationCaptureProfile,
+} from '../validation';
 
 export const COMMAND_START_INVESTIGATION = 'repotrail.startInvestigation';
 export const COMMAND_SAVE_RECENT_ACTIVITY = 'repotrail.saveRecentActivityAsInvestigation';
@@ -29,6 +34,7 @@ interface CreateInvestigationCommandOptions {
   workspacePath?: string;
   name?: string;
   checkpointText?: string | null;
+  captureProfile?: InvestigationCaptureProfile;
 }
 
 interface SaveAndStopCommandOptions {
@@ -67,6 +73,7 @@ interface InvestigationQuickPickItem extends vscode.QuickPickItem {
 
 interface RegisterInvestigationCommandsOptions {
   clearRecentActivity?: () => void;
+  getDefaultCaptureProfile?: () => InvestigationCaptureProfile;
 }
 
 function toErrorMessage(error: unknown): string {
@@ -275,6 +282,7 @@ async function reopenSavedFiles(investigation: Investigation, maxFilesToOpen?: n
 async function collectCreateOptions(
   title: string,
   options: CreateInvestigationCommandOptions,
+  getDefaultCaptureProfile: () => InvestigationCaptureProfile,
 ): Promise<CreateInvestigationOptions | null> {
   const workspace = await resolveWorkspacePath(options.workspacePath);
   if (!workspace) {
@@ -287,8 +295,13 @@ async function collectCreateOptions(
     return null;
   }
 
+  const captureProfile = normalizeInvestigationCaptureProfile(
+    options.captureProfile ?? getDefaultCaptureProfile(),
+  );
   let checkpointText = options.checkpointText;
-  if (checkpointText === undefined) {
+  if (!captureProfileAllowsCheckpoint(captureProfile)) {
+    checkpointText = null;
+  } else if (checkpointText === undefined) {
     checkpointText = await promptForCheckpoint();
     if (checkpointText === undefined) {
       return null;
@@ -299,21 +312,29 @@ async function collectCreateOptions(
     workspace,
     name,
     checkpointText: trimToNull(checkpointText),
+    captureProfile,
   };
 }
 
 export function registerInvestigationCommands(
   lifecycle: InvestigationLifecycleService,
   snapshotOpener: ResumeSnapshotOpener,
-  options: RegisterInvestigationCommandsOptions = {},
+  registerOptions: RegisterInvestigationCommandsOptions = {},
 ): vscode.Disposable {
   const disposables: vscode.Disposable[] = [];
+  const getDefaultCaptureProfile =
+    registerOptions.getDefaultCaptureProfile ??
+    (() => DEFAULT_INVESTIGATION_CAPTURE_PROFILE);
 
   disposables.push(
     vscode.commands.registerCommand(
       COMMAND_START_INVESTIGATION,
       async (options: CreateInvestigationCommandOptions = {}) => {
-        const createOptions = await collectCreateOptions('RepoTrail: Start Investigation', options);
+        const createOptions = await collectCreateOptions(
+          'RepoTrail: Start Investigation',
+          options,
+          getDefaultCaptureProfile,
+        );
         if (!createOptions) {
           return undefined;
         }
@@ -336,6 +357,7 @@ export function registerInvestigationCommands(
         const createOptions = await collectCreateOptions(
           'RepoTrail: Save Recent Activity as Investigation',
           options,
+          getDefaultCaptureProfile,
         );
         if (!createOptions) {
           return undefined;
@@ -371,6 +393,13 @@ export function registerInvestigationCommands(
         if (!activeInvestigation) {
           vscode.window.showInformationMessage(
             'RepoTrail: No active investigation was found for this workspace.',
+          );
+          return null;
+        }
+
+        if (!captureProfileAllowsCheckpoint(activeInvestigation.captureProfile)) {
+          vscode.window.showInformationMessage(
+            'RepoTrail: Checkpoint capture is disabled for this validation mode.',
           );
           return null;
         }
@@ -586,7 +615,7 @@ export function registerInvestigationCommands(
 
         try {
           const deletedCount = await lifecycle.deleteAllData();
-          options.clearRecentActivity?.();
+          registerOptions.clearRecentActivity?.();
           snapshotOpener.forgetAllInvestigations();
           vscode.window.showInformationMessage(
             `RepoTrail: Deleted all local data (${deletedCount} saved investigation(s)) and cleared in-memory activity.`,
