@@ -157,3 +157,19 @@
 **Decision:** `GitSnapshot` records explicit availability states (`available`, `not-repository`, `git-missing`, `git-error`), includes `repositoryRoot`, and allows `head` to be null when a repository has no commits. Persisted snapshots represent Git state at save time only; future resume comparisons must capture a fresh current snapshot separately.
 
 **Reason:** RepoTrail must continue functioning when Git context is missing or incomplete without failing the rest of an Investigation. Making the saved Git state explicit preserves honest THEN context now while leaving room for a later NOW comparison without adding historical Git analytics.
+
+---
+
+## ADR-021: One Active Investigation Per Workspace
+
+**Decision:** RepoTrail keeps at most one active Investigation per workspace and stores only the active Investigation id in `workspaceState` for restart recovery.
+
+**Reason:** The lifecycle milestone needs a concrete active Investigation concept for checkpoint and save/stop flows, but the product explicitly avoids complicated workflow states. One active Investigation per workspace keeps the model simple, matches the per-workspace rolling buffer, and is enough to preserve context without introducing queues, tabs, or scheduling logic.
+
+---
+
+## ADR-022: Pin File Is Deferred Until Passive Evidence Proves Insufficient
+
+**Decision:** The optional Pin File action remains out of the current model and UI for the lifecycle milestone.
+
+**Reason:** RepoTrail 0.0.1 is supposed to work when the developer performs almost no manual curation. The current lifecycle already persists investigation name, optional checkpoint, rolling-buffer events, Git state, last location, edited files, and factual visit counts; adding pin management now would add disproportionate UI and state complexity before there is evidence that passive capture is insufficient.

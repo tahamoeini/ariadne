@@ -18,6 +18,36 @@
       {
         "command": "repotrail.hello",
         "title": "RepoTrail: Hello"
+      },
+      {
+        "command": "repotrail.startInvestigation",
+        "title": "Start Investigation",
+        "category": "RepoTrail"
+      },
+      {
+        "command": "repotrail.saveRecentActivityAsInvestigation",
+        "title": "Save Recent Activity as Investigation",
+        "category": "RepoTrail"
+      },
+      {
+        "command": "repotrail.updateCheckpoint",
+        "title": "Add or Update Checkpoint",
+        "category": "RepoTrail"
+      },
+      {
+        "command": "repotrail.saveAndStopInvestigation",
+        "title": "Save and Stop Investigation",
+        "category": "RepoTrail"
+      },
+      {
+        "command": "repotrail.listInvestigations",
+        "title": "List Saved Investigations",
+        "category": "RepoTrail"
+      },
+      {
+        "command": "repotrail.deleteInvestigation",
+        "title": "Delete Investigation",
+        "category": "RepoTrail"
       }
     ]
   },
@@ -28,7 +58,7 @@
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vscode-test",
-    "test:unit": "mocha out/test/domain.test.js out/test/storage.test.js out/test/capture.test.js out/test/git.test.js --ui tdd",
+    "test:unit": "mocha out/test/domain.test.js out/test/storage.test.js out/test/capture.test.js out/test/git.test.js out/test/investigationLifecycle.test.js --ui tdd",
     "package": "vsce package"
   },
   "devDependencies": {

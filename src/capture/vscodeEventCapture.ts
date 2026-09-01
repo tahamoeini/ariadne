@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { FileLocation, ObservedEvent } from '../domain';
-import { createWorkspaceEventBuffer, EventBufferOptions, WorkspaceEventBuffer } from './eventBuffer';
+import { createWorkspaceEventBuffer, EventBufferOptions } from './eventBuffer';
 
 interface DocumentContext {
   workspace: string;
@@ -18,6 +18,9 @@ export interface RepoTrailDebugApi {
 
 export interface VsCodeObservedEventCapture extends vscode.Disposable {
   debug: RepoTrailDebugApi;
+  getRecentEvents(workspace?: string): ObservedEvent[];
+  getLastLocation(workspace?: string): FileLocation | null;
+  readonly onDidObserveEvent: vscode.Event<ObservedEvent>;
 }
 
 function toTimestamp(now: (() => number) | undefined): string {
@@ -29,6 +32,22 @@ function toFileLocation(filePath: string, position: vscode.Position): FileLocati
     filePath,
     line: position.line + 1,
     column: position.character + 1,
+  };
+}
+
+function cloneLocation(location: FileLocation | null | undefined): FileLocation | null {
+  if (!location) {
+    return null;
+  }
+
+  return { ...location };
+}
+
+function cloneObservedEvent(event: ObservedEvent): ObservedEvent {
+  return {
+    ...event,
+    location: event.location ? { ...event.location } : undefined,
+    source: event.source ? { ...event.source } : undefined,
   };
 }
 
@@ -97,17 +116,6 @@ function resolveDocumentContext(
   };
 }
 
-function addEvent(
-  buffer: WorkspaceEventBuffer,
-  now: (() => number) | undefined,
-  event: Omit<ObservedEvent, 'timestamp'>,
-): void {
-  buffer.add({
-    ...event,
-    timestamp: toTimestamp(now),
-  });
-}
-
 export function createVsCodeObservedEventCapture(
   options: EventBufferOptions = {},
 ): VsCodeObservedEventCapture {
@@ -115,6 +123,16 @@ export function createVsCodeObservedEventCapture(
   const repositoryCache = new Map<string, string | null>();
   const selectionKeys = new Map<string, string>();
   const disposables: vscode.Disposable[] = [];
+  const observedEventEmitter = new vscode.EventEmitter<ObservedEvent>();
+
+  function addEvent(event: Omit<ObservedEvent, 'timestamp'>): void {
+    const observedEvent: ObservedEvent = {
+      ...event,
+      timestamp: toTimestamp(options.now),
+    };
+    buffer.add(observedEvent);
+    observedEventEmitter.fire(cloneObservedEvent(observedEvent));
+  }
 
   function recordActiveEditor(editor: vscode.TextEditor | undefined): void {
     if (!editor) {
@@ -126,7 +144,7 @@ export function createVsCodeObservedEventCapture(
       return;
     }
 
-    addEvent(buffer, options.now, {
+    addEvent({
       type: 'editor.active',
       workspace: context.workspace,
       repository: context.repository,
@@ -155,7 +173,7 @@ export function createVsCodeObservedEventCapture(
     }
 
     selectionKeys.set(context.workspace, selectionKey);
-    addEvent(buffer, options.now, {
+    addEvent({
       type: 'editor.selection',
       workspace: context.workspace,
       repository: context.repository,
@@ -175,7 +193,7 @@ export function createVsCodeObservedEventCapture(
       return;
     }
 
-    addEvent(buffer, options.now, {
+    addEvent({
       type: 'file.edit',
       workspace: context.workspace,
       repository: context.repository,
@@ -216,10 +234,18 @@ export function createVsCodeObservedEventCapture(
         buffer.clear(workspace);
       },
     },
+    getRecentEvents(workspace?: string): ObservedEvent[] {
+      return buffer.getRecentEvents(workspace);
+    },
+    getLastLocation(workspace?: string): FileLocation | null {
+      return cloneLocation(buffer.getLastLocation(workspace));
+    },
+    onDidObserveEvent: observedEventEmitter.event,
     dispose(): void {
       for (const disposable of disposables) {
         disposable.dispose();
       }
+      observedEventEmitter.dispose();
     },
   };
 }

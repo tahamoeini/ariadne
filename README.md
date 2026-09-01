@@ -23,6 +23,7 @@ npm install
 | `npm run watch` | Compile in watch mode |
 | `npm run lint` | Run ESLint on `src/` |
 | `npm run typecheck` | Type-check without emitting |
+| `npm run test:unit` | Run unit tests without launching VS Code |
 | `npm test` | Run extension tests (downloads VS Code) |
 | `npm run package` | Package as `.vsix` |
 
@@ -30,13 +31,19 @@ npm install
 
 1. Open this folder in VS Code.
 2. Press **F5** to launch the Extension Development Host.
-3. Run **RepoTrail: Hello** from the Command Palette.
+3. Run **RepoTrail: Start Investigation** or **RepoTrail: Save Recent Activity as Investigation** from the Command Palette.
+4. Use **RepoTrail: Add or Update Checkpoint**, **RepoTrail: Save and Stop Investigation**, **RepoTrail: List Saved Investigations**, and **RepoTrail: Delete Investigation** as needed.
 
 ### Run Tests
 
 ```bash
-npm test
+npm run compile
+npm run lint
+npm run typecheck
+npm run test:unit
 ```
+
+`npm test` exercises the VS Code extension host and requires downloading VS Code when it is not already cached.
 
 ---
 

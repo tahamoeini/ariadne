@@ -29,7 +29,10 @@ src/
 ├── storage/        # JSON-file persistence
 │   ├── store.ts    # CRUD operations + schema envelope
 │   └── index.ts    # Public re-exports
-├── commands/       # VS Code command handlers
+├── commands/       # Investigation lifecycle service + VS Code command handlers
+│   ├── investigationLifecycle.ts      # Active-investigation state + snapshot assembly
+│   ├── registerInvestigationCommands.ts # Command Palette handlers and prompts
+│   └── index.ts                      # Public re-exports
 ├── ui/             # Webview panels, tree views, status bar
 └── test/           # Unit and integration tests
 ```
@@ -63,7 +66,7 @@ Modules communicate through domain types. No module directly imports another mod
 | editedFiles | string[] | Files edited during investigation |
 | visitedFileCounts | Record<string, number> | File path → visit count |
 | lastLocation | FileLocation \| null | Last cursor position |
-| recentEvents | ObservedEvent[] | Recent events from rolling buffer |
+| recentEvents | ObservedEvent[] | Recent factual observed events retained for the investigation |
 | git | GitSnapshot \| null | Git capture result at snapshot time |
 
 ### GitSnapshot
@@ -119,6 +122,7 @@ ObservedEventType: `editor.active`, `editor.selection`, `file.edit`, `navigation
 - Survives extension restarts and VS Code reloads (files on disk).
 - No external database.
 - Malformed files are silently skipped during listing.
+- Active investigation pointers are stored separately in `ExtensionContext.workspaceState` so a workspace can recover its current investigation after extension restart without changing the on-disk investigation schema.
 
 ## Event Capture Concept
 
@@ -140,6 +144,7 @@ Observed events are stored in a bounded, time-limited rolling buffer rather than
 - Buffer is kept in memory only and resets on extension restart.
 - Buffer is per-workspace, with a safety max-event cap to avoid unbounded growth during noisy sessions.
 - Purpose: provide recent activity context when a Snapshot is taken, not permanent telemetry.
+- The capture adapter also exposes synchronous reads of recent events/last location plus an observed-event stream so an active Investigation can accumulate factual visit/edit evidence while it remains active.
 - A developer-only debug API exposes the current factual events for inspection during extension development.
 
 ## Git Adapter Boundary
@@ -160,16 +165,27 @@ Git enriches context; it does not become the product.
 
 Minimal command surface for 0.0.1:
 
-- Save/create Investigation.
-- Resume Investigation.
-- List Investigations.
-- Add/edit Checkpoint text.
-- View current Snapshot.
+- Start Investigation.
+- Save Recent Activity as Investigation.
+- Add or update Checkpoint text on the active Investigation.
+- Save and stop the active Investigation.
+- List saved Investigations.
+- Delete an Investigation.
+
+The current lifecycle uses only VS Code-native `showInputBox`, `showQuickPick`, and confirmation messages. No custom webview or complex UI is introduced in this milestone.
+
+## Investigation Lifecycle (Implemented)
+
+- At most one Investigation is active per workspace.
+- Creating an Investigation captures the current rolling-buffer evidence, current Git Snapshot, last known location, edited-file evidence, and visited-file counts.
+- While an Investigation is active, newly observed events are merged into its in-memory Snapshot so developers do not need to manually curate visit/edit evidence during longer sessions.
+- Checkpoint updates persist immediately and refresh the saved Git Snapshot without introducing additional workflow states.
+- Saving/stopping the Investigation persists the latest factual state and clears the active workspace pointer.
 
 ## Testing Strategy
 
-- **Unit tests** (`npm run test:unit`): Domain model, storage, rolling buffer, and Git snapshot parser/adapter tests run via Mocha without VS Code.
-- **Integration tests** (`npm test`): Extension activation and VS Code event-capture tests via `@vscode/test-cli`.
+- **Unit tests** (`npm run test:unit`): Domain model, storage, rolling buffer, Git snapshot parser/adapter, and Investigation lifecycle service tests run via Mocha without VS Code.
+- **Integration tests** (`npm test`): Extension activation, command registration, lifecycle command flow, and VS Code event-capture tests via `@vscode/test-cli`.
 - Test runner TDD-style suites with `suite`/`test`.
 
 ## Unresolved Technical Questions
