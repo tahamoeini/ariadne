@@ -357,7 +357,11 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
     }
 
     const saved = await this.persistActiveInvestigation(active);
-    const persistedActive = this.activeInvestigations.get(workspace) ?? cloneInvestigation(saved);
+    const persistedActive = this.activeInvestigations.get(workspace);
+    if (!persistedActive) {
+      throw new Error('Active investigation state was lost before stopping.');
+    }
+
     this.activeInvestigations.delete(workspace);
     try {
       await this.persistActiveInvestigationIds();

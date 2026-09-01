@@ -63,10 +63,15 @@ function findRepositoryRoot(
   }
 
   const repositoryRoot = findGitRepositoryRoot(filePath);
+  if (!repositoryRoot) {
+    cache.set(startDir, null);
+    return null;
+  }
+
   let currentDir = startDir;
   while (true) {
     cache.set(currentDir, repositoryRoot);
-    if (repositoryRoot && currentDir === repositoryRoot) {
+    if (currentDir === repositoryRoot) {
       break;
     }
 

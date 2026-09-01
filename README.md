@@ -76,11 +76,11 @@ RepoTrail 0.0.1 does not include:
 
 ## Source-of-truth docs
 
-- `/home/runner/work/repotrail/repotrail/docs/PRODUCT_BASELINE.md`
-- `/home/runner/work/repotrail/repotrail/docs/ARCHITECTURE.md`
-- `/home/runner/work/repotrail/repotrail/docs/DECISIONS.md`
-- `/home/runner/work/repotrail/repotrail/docs/VALIDATION.md`
-- `/home/runner/work/repotrail/repotrail/docs/AGENT_HANDOFF.md`
+- [`docs/PRODUCT_BASELINE.md`](docs/PRODUCT_BASELINE.md)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/DECISIONS.md`](docs/DECISIONS.md)
+- [`docs/VALIDATION.md`](docs/VALIDATION.md)
+- [`docs/AGENT_HANDOFF.md`](docs/AGENT_HANDOFF.md)
 
 ## Development
 
