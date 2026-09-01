@@ -330,7 +330,7 @@ export function registerInvestigationCommands(
         }
 
         try {
-          await snapshotOpener.openInvestigation(investigation.id, investigation.name);
+          await snapshotOpener.openInvestigation(investigation);
           return investigation;
         } catch (error) {
           vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
@@ -354,7 +354,7 @@ export function registerInvestigationCommands(
           );
           if (investigation) {
             try {
-              await snapshotOpener.openInvestigation(investigation.id, investigation.name);
+              await snapshotOpener.openInvestigation(investigation);
             } catch (error) {
               vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
             }

@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
-import { GitSnapshot } from '../domain';
+import { GitSnapshot, Investigation } from '../domain';
 import { captureGitSnapshot } from '../git';
 import { loadInvestigation } from '../storage';
 import { buildMissingInvestigationContent, buildResumeSnapshotContent } from './resumeSnapshot';
 
 export interface ResumeSnapshotOpener {
-  openInvestigation(investigationId: string, displayName?: string): Promise<void>;
+  openInvestigation(investigation: Pick<Investigation, 'id' | 'name' | 'savedAt'>): Promise<void>;
 }
 
 export interface ResumeSnapshotProviderOptions {
@@ -22,8 +22,8 @@ function parseInvestigationId(query: string): string | null {
   return investigationId?.trim() || null;
 }
 
-function toSnapshotPath(displayName: string | undefined, investigationId: string): string {
-  const baseName = (displayName?.trim() || investigationId)
+function toSnapshotPath(displayName: string, investigationId: string): string {
+  const baseName = (displayName.trim() || investigationId)
     .replace(/[^\w.-]+/g, '-')
     .replace(/^-+|-+$/g, '');
   return `/${baseName || 'resume-snapshot'}.md`;
@@ -64,13 +64,13 @@ export function createResumeSnapshotOpener(
 
   return {
     opener: {
-      async openInvestigation(investigationId: string, displayName?: string): Promise<void> {
+      async openInvestigation(investigation): Promise<void> {
         const uri = vscode.Uri.from({
           scheme: RESUME_SNAPSHOT_SCHEME,
-          path: toSnapshotPath(displayName, investigationId),
+          path: toSnapshotPath(investigation.name, investigation.id),
           query: new URLSearchParams({
-            id: investigationId,
-            openedAt: new Date().toISOString(),
+            id: investigation.id,
+            savedAt: investigation.savedAt,
           }).toString(),
         });
         const document = await vscode.workspace.openTextDocument(uri);
