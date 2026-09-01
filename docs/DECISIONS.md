@@ -202,6 +202,6 @@
 
 ## ADR-026: Use the Actual Local Security Model, Not Cosmetic Encryption
 
-**Decision:** RepoTrail keeps saved Investigations as local JSON under `globalStorageUri`, applies best-effort private filesystem permissions where supported, writes through temp-file replacement with transient backup recovery, and exposes user commands to reveal or delete all local data. RepoTrail does not add custom encryption or move general Investigation metadata into secret storage.
+**Decision:** RepoTrail keeps saved Investigations as local JSON under `globalStorageUri`, applies best-effort private filesystem permissions where supported, writes through temp-file replacement while retaining the previous saved version as a `.bak` recovery copy, and exposes user commands to reveal or delete all local data. RepoTrail does not add custom encryption or move general Investigation metadata into secret storage.
 
 **Reason:** RepoTrail's threat model is local developer metadata on the same machine, not remote secret distribution. VS Code secret storage is appropriate for credentials, but RepoTrail intentionally does not collect credentials; pretending otherwise with ad-hoc encryption would add complexity without providing a trustworthy security boundary.

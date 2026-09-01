@@ -198,7 +198,7 @@ function normalizeString(value: unknown): string | null {
 }
 
 function normalizeNullableString(value: unknown): string | null {
-  return typeof value === 'string' ? value : value === null ? null : null;
+  return typeof value === 'string' ? value : null;
 }
 
 function isGitAvailability(value: unknown): value is GitSnapshot['availability'] {
@@ -335,7 +335,9 @@ function normalizeRecentPathEntries(
       continue;
     }
 
-    const normalizedPath = toStoredPath(fromStoredPath(filePath, workspacePath), workspacePath);
+    const normalizedPath = path.isAbsolute(filePath)
+      ? toStoredPath(filePath, workspacePath)
+      : filePath;
     if (recentPath[recentPath.length - 1] !== normalizedPath) {
       recentPath.push(normalizedPath);
     }
@@ -735,7 +737,6 @@ export function saveInvestigation(
   try {
     fs.renameSync(temp, primary);
     ensurePrivatePermissions(primary, false);
-    fs.rmSync(backup, { force: true });
   } catch (error) {
     fs.rmSync(temp, { force: true });
     if (!fs.existsSync(primary) && fs.existsSync(backup)) {

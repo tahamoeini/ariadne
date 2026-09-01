@@ -293,18 +293,20 @@ suite('Storage', () => {
 
     test('recovers from a valid backup when the primary file is malformed', () => {
       const inv = createInvestigation('Recover me', '/ws', '/repo');
-      inv.snapshot.editedFiles = ['/ws/src/token.ts'];
+      saveInvestigation(tmpDir, inv);
+      inv.checkpoint = createCheckpoint('latest version');
       saveInvestigation(tmpDir, inv);
 
       const dir = path.join(tmpDir, 'investigations');
       const primaryPath = path.join(dir, `${inv.id}.json`);
       const backupPath = `${primaryPath}.bak`;
-      fs.copyFileSync(primaryPath, backupPath);
+      assert.ok(fs.existsSync(backupPath));
       fs.writeFileSync(primaryPath, '{broken json', 'utf-8');
 
       const loaded = loadInvestigation(tmpDir, inv.id);
       assert.ok(loaded);
       assert.strictEqual(loaded!.id, inv.id);
+      assert.strictEqual(loaded!.checkpoint, null);
 
       const restored = JSON.parse(fs.readFileSync(primaryPath, 'utf-8')) as Record<string, unknown>;
       assert.strictEqual(restored.schemaVersion, SCHEMA_VERSION);

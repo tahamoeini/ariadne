@@ -108,7 +108,7 @@ The runtime model is intentionally richer than the persisted schema. RepoTrail r
 <globalStorageDir>/
   investigations/
     <uuid>.json
-    <uuid>.json.bak   # temporary recovery copy during replace/recovery flows
+    <uuid>.json.bak   # previous saved Investigation retained for recovery
 ```
 
 **Format:** Each file is a JSON envelope:
@@ -156,7 +156,7 @@ When file paths are inside the saved workspace, RepoTrail stores them as workspa
 - No external database.
 - Plain local JSON by design; no custom encryption is added.
 - Best-effort private filesystem permissions are applied to RepoTrail directories/files where the platform supports them.
-- Saves use temp-file replacement and a transient `.bak` recovery copy so interrupted or malformed primary files can fall back safely.
+- Saves use temp-file replacement and a retained `.bak` copy of the previous save so interrupted or malformed primary files can fall back safely.
 - Malformed files and malformed `workspaceState` entries are skipped so extension activation continues.
 - Active Investigation pointers are stored separately in `ExtensionContext.workspaceState` so a workspace can recover its current Investigation after extension restart without expanding the on-disk Investigation schema.
 
