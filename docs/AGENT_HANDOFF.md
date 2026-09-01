@@ -60,8 +60,9 @@
 - `npm install` — succeeds.
 - `npm run compile` — succeeds.
 - `npm run lint` — passes after the privacy hardening changes.
+- `npm run typecheck` — passes.
 - `npm run test:unit` — 62 tests passing.
-- `npm test` — not rerun here; previous runs remain subject to VS Code download/network availability in this sandbox.
+- `npm test` — attempted, but `@vscode/test-cli` could not resolve `update.code.visualstudio.com` in this sandbox.
 
 ## Decisions Made This Session
 
