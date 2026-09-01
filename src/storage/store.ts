@@ -27,6 +27,7 @@ import { normalizeInvestigationCaptureProfile } from '../validation';
 
 /** Current schema version. Bump when the persisted shape changes. */
 export const SCHEMA_VERSION = 4;
+const MIN_RECENT_PATH_SCHEMA_VERSION = 3;
 
 const INVESTIGATIONS_DIR_NAME = 'investigations';
 const BACKUP_SUFFIX = '.bak';
@@ -534,8 +535,8 @@ function inflateEnvelope(envelope: unknown): Investigation | null {
   }
 
   if (
-    envelope.schemaVersion !== 3 &&
-    envelope.schemaVersion !== SCHEMA_VERSION
+    envelope.schemaVersion < MIN_RECENT_PATH_SCHEMA_VERSION ||
+    envelope.schemaVersion > SCHEMA_VERSION
   ) {
     return null;
   }
