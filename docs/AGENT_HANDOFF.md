@@ -2,39 +2,49 @@
 
 ## Current Milestone
 
-**Prompt 8 — Privacy, Data Control, and Failure Hardening**
+**Prompt 9 — RepoTrail 0.0.1 Quality Pass**
 
 ## Status
 
-✅ Complete
+⚠️ Quality-pass code and documentation updates are complete, but the required extension-host smoke test could not finish in this sandbox.
 
-## What Has Been Built
+## Ready for External Validation
 
-### Prompts 1–7 remain in place
-- VS Code extension scaffold, local-only investigation storage, in-memory rolling buffer, read-only Git snapshot capture, Investigation lifecycle commands, Resume Snapshot rendering, and conservative Resume actions remain intact.
+**Not yet confirmed from this sandbox.**
 
-### Prompt 8 (Privacy / Local Data Control / Failure Hardening)
-- **Persisted-schema minimization** (`src/storage/store.ts`): schema version 3 now saves only re-entry-critical data, stores workspace file paths relatively when possible, persists only a short `recentPath` instead of full observed-event objects, and drops non-essential persisted fields such as `createdAt`, `lastResumedAt`, `checkpoint.createdAt`, event metadata, and duplicated Git repository-root storage.
-- **Corruption-safe storage** (`src/storage/store.ts`): saves now use temp-file replacement with a retained `.bak` copy of the previous save, best-effort private filesystem permissions, strict envelope validation, and safe fallback loading so malformed files are skipped or recovered instead of breaking activation.
-- **Activation hardening** (`src/commands/investigationLifecycle.ts`): malformed `workspaceState` active-id payloads are ignored safely, and mismatched saved-workspace entries are not restored as active investigations.
-- **Local data controls** (`src/commands/registerInvestigationCommands.ts`, `src/commands/index.ts`, `src/extension.ts`, `src/capture/vscodeEventCapture.ts`, `src/ui/resumeSnapshotProvider.ts`, `package.json`): adds `RepoTrail: Delete All RepoTrail Data` and `RepoTrail: Show Local Storage Location`, clears in-memory activity during delete-all, and invalidates cached Resume Snapshots after one-item or full deletion.
-- **Checkpoint hardening** (`src/commands/investigationLifecycle.ts`, `src/commands/registerInvestigationCommands.ts`): investigation names and checkpoint text now have explicit length limits, and checkpoint prompts warn that notes are stored locally in plain text.
-- **Tests** (`src/test/storage.test.ts`, `src/test/investigationLifecycle.test.ts`, `src/test/extension.test.ts`): cover minimized schema persistence, relative-path rehydration, backup recovery, malformed restart state, delete-all behavior, storage-location command coverage, and oversized checkpoint rejection.
+## Remaining Blockers
+
+1. `npm test` could not run to completion because `@vscode/test-cli` could not resolve `update.code.visualstudio.com`, and no local VS Code test binary was available to reuse.
+
+## What Was Completed
+
+- Added startup activation with `onStartupFinished` so the rolling buffer exists before the first RepoTrail command.
+- Persisted active investigations during extension shutdown so normal close/reload preserves the latest active snapshot state.
+- Guarded `saveAndStopInvestigation` so a workspace-state persistence failure keeps the investigation active instead of silently clearing it in memory.
+- Aligned capture-layer repository detection with the Git adapter so nested workspace folders can still report their repository root.
+- Reused one Resume Snapshot virtual document per investigation and refreshed it in place to avoid duplicate snapshot tabs and stale cached content.
+- Removed the placeholder `repotrail.hello` command.
+- Tightened command/result wording to better reflect actual behavior.
+- Replaced the duplicated `docs/PRODUCT_BASELINE.md` stub with an actual product baseline and updated README and implementation docs to match the shipped 0.0.1 behavior.
+- Added clean packaging metadata (`repository`) and a `LICENSE` file so `vsce package` completes without the earlier warnings.
+- Added tests for startup activation, Resume Snapshot refresh reuse, active-investigation persistence, and stop rollback behavior.
 
 ## Files Changed
 
+- `LICENSE`
 - `README.md`
 - `docs/AGENT_HANDOFF.md`
 - `docs/ARCHITECTURE.md`
 - `docs/DECISIONS.md`
+- `docs/PRODUCT_BASELINE.md`
+- `docs/VALIDATION.md`
 - `package.json`
 - `src/capture/vscodeEventCapture.ts`
-- `src/commands/index.ts`
 - `src/commands/investigationLifecycle.ts`
 - `src/commands/registerInvestigationCommands.ts`
+- `src/commands/resumePlan.ts`
+- `src/domain/types.ts`
 - `src/extension.ts`
-- `src/storage/index.ts`
-- `src/storage/store.ts`
 - `src/test/extension.test.ts`
 - `src/test/investigationLifecycle.test.ts`
 - `src/test/storage.test.ts`
@@ -42,47 +52,43 @@
 
 ## Important Implementation Details
 
-1. RepoTrail still requires no account, makes no network requests, uses no analytics, and performs no repository upload; the privacy pass hardened the existing local-first implementation rather than adding security theater.
-2. Saved Investigations remain plain local JSON by design. The real security model is: same-machine, same-user local storage plus best-effort filesystem permissions where the platform supports them.
-3. RepoTrail now persists only the data needed to remember/reopen an Investigation: identity, workspace context, optional checkpoint text, reopen evidence, short recent path, and Git drift metadata.
-4. Full observed-event objects remain in memory only. On load, the storage layer rehydrates a minimal runtime `recentEvents` trail from saved `recentPath` so existing Resume Snapshot rendering can stay simple.
-5. Delete-all clears saved investigations, active-investigation restart state, in-memory recent activity, and cached virtual Resume Snapshot content.
-6. Resume Snapshot documents already open in the editor are invalidated through the content provider when their backing Investigation is deleted.
+1. Retroactive capture now depends on startup activation rather than first-command activation, which restores the intended rolling-buffer behavior for `Save Recent Activity as Investigation`.
+2. Active investigations are still saved immediately on creation, but shutdown now refreshes their last location, edited files, recent path, and Git snapshot before the extension exits.
+3. Resume Snapshot documents now use a stable per-investigation URI, so reopening the same investigation updates the existing tab instead of generating one tab per save timestamp.
+4. `README.md`, `docs/PRODUCT_BASELINE.md`, `docs/ARCHITECTURE.md`, and `docs/VALIDATION.md` now describe the actual 0.0.1 command set and no longer imply unimplemented 0.0.1 behavior such as Pin File support or definition/reference capture in the current build.
 
 ## Known Issues
 
-1. **Integration tests still depend on VS Code download availability** — `npm test` can still fail in restricted environments if `@vscode/test-cli` cannot reach `update.code.visualstudio.com`.
-2. **Checkpoint text is intentionally plain local text** — this is the actual product model, so users must avoid placing secrets in checkpoints.
-3. **`docs/PRODUCT_BASELINE.md` still duplicates `PROMPT_CHAIN.md`** — the authoritative product narrative is effectively captured in `README.md` plus the implementation docs until that documentation discrepancy is cleaned up later.
+1. The extension-host smoke test still depends on a VS Code binary that is either cached locally or downloadable by `@vscode/test-cli`; this sandbox had neither.
+2. Definition/reference navigation events remain intentionally deferred until they can be detected reliably through supported VS Code APIs.
 
 ## Tests / Verification
 
-- `npm install` — succeeds.
-- `npm run compile` — succeeds.
-- `npm run lint` — passes after the privacy hardening changes.
-- `npm run typecheck` — passes.
-- `npm run test:unit` — 62 tests passing.
-- `npm test` — attempted, but `@vscode/test-cli` could not resolve `update.code.visualstudio.com` in this sandbox.
+- `npm install` — succeeds
+- `npm run compile` — succeeds
+- `npm run lint` — succeeds
+- `npm run typecheck` — succeeds
+- `npm run test:unit` — succeeds (64 passing)
+- `npm run package` — succeeds and produces `repotrail-0.0.1.vsix`
+- `npm test` — attempted, but failed because `update.code.visualstudio.com` could not be resolved in this sandbox
 
 ## Decisions Made This Session
 
-- ADR-025: Persist only re-entry-critical Investigation data.
-- ADR-026: Use the actual local security model, not cosmetic encryption.
+- ADR-027: Activate on Startup So Retroactive Capture Works
+- ADR-028: Persist Active Investigations on Shutdown
+- ADR-029: Reuse One Resume Snapshot Document per Investigation
 
 ## What Remains
 
-- **Prompt 9+:** MVP quality pass and final validation polish on top of the hardened privacy/local-data baseline.
+- Run the extension-host smoke test in an environment with network access to the VS Code download endpoint or with a cached VS Code test binary.
+- If that passes, begin external validation for RepoTrail 0.0.1.
 
 ## Next Recommended Action
 
-**Prompt 9 — MVP Quality Pass**
-
-Entry condition: RepoTrail’s persisted schema, delete controls, storage documentation, and corruption handling now match the local-first privacy promise (satisfied).
+**Run `npm test` (or the equivalent extension-host smoke test) in a network-enabled environment, then start external validation if it passes.**
 
 ## Do Not Touch / Deferred
 
-- Do not add cloud sync, analytics, or remote repository integrations.
-- Do not add encryption theater around general Investigation metadata.
-- Do not expand capture into terminal, clipboard, screenshots, or source-content logging.
-- Do not add semantic interpretation or AI-derived summaries.
-- Do not turn Resume into exact restore behavior.
+- Do not add AI, graph, timeline dashboard, or browser integration features.
+- Do not add exact workspace/session restore behavior.
+- Do not redesign the architecture further unless a concrete defect requires it.

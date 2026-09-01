@@ -75,12 +75,23 @@ class FakeCapture implements InvestigationLifecycleCapture {
 
 class FakeStateStore implements InvestigationLifecycleStateStore {
   private readonly values = new Map<string, unknown>();
+  private nextError: Error | null = null;
 
   get<T>(key: string): T | undefined {
     return this.values.get(key) as T | undefined;
   }
 
+  rejectNextUpdate(error: Error): void {
+    this.nextError = error;
+  }
+
   update(key: string, value: unknown): Promise<void> {
+    if (this.nextError) {
+      const error = this.nextError;
+      this.nextError = null;
+      return Promise.reject(error);
+    }
+
     this.values.set(key, value);
     return Promise.resolve();
   }
@@ -399,6 +410,120 @@ suite('Investigation Lifecycle', () => {
     assert.ok(saved);
     assert.strictEqual(saved!.snapshot.git?.head, 'after-restart');
     assert.strictEqual(restartedService.getActiveInvestigation(workspace), null);
+  });
+
+  test('persists active investigation progress without stopping it', async () => {
+    const workspace = '/workspace';
+    const firstFile = '/workspace/src/start.ts';
+    const secondFile = '/workspace/src/continue.ts';
+    const capture = new FakeCapture();
+    const stateStore = new FakeStateStore();
+
+    capture.setEvents(workspace, [
+      makeEvent(
+        'editor.active',
+        workspace,
+        firstFile,
+        '2026-05-01T13:30:00.000Z',
+        2,
+        1,
+      ),
+    ]);
+
+    const gitSnapshots = [
+      makeGitSnapshot({
+        timestamp: '2026-05-01T13:30:00.000Z',
+        head: 'before-flush',
+        modifiedFiles: ['src/start.ts'],
+      }),
+      makeGitSnapshot({
+        timestamp: '2026-05-01T13:35:00.000Z',
+        head: 'after-flush',
+        modifiedFiles: ['src/start.ts', 'src/continue.ts'],
+        diffStats: { filesChanged: 2, insertions: 5, deletions: 1 },
+      }),
+    ];
+    let gitSnapshotIndex = 0;
+
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore,
+      captureGitSnapshot: () => gitSnapshots[Math.min(gitSnapshotIndex++, gitSnapshots.length - 1)],
+    });
+
+    const created = await service.startInvestigation({
+      workspace,
+      name: 'Persist active progress',
+      checkpointText: null,
+    });
+
+    const followUpEdit = makeEvent(
+      'file.edit',
+      workspace,
+      secondFile,
+      '2026-05-01T13:34:00.000Z',
+      7,
+      3,
+    );
+    capture.addEvent(followUpEdit);
+    service.recordObservedEvent(followUpEdit);
+
+    await service.persistActiveInvestigations();
+
+    assert.strictEqual(service.getActiveInvestigation(workspace)?.id, created.id);
+    assert.strictEqual(
+      service.getActiveInvestigation(workspace)?.snapshot.lastLocation?.filePath,
+      secondFile,
+    );
+    assert.strictEqual(service.getActiveInvestigation(workspace)?.snapshot.git?.head, 'after-flush');
+
+    const loaded = loadInvestigation(tmpDir, created.id);
+    assert.ok(loaded);
+    assert.deepStrictEqual(loaded!.snapshot.editedFiles, [secondFile]);
+    assert.strictEqual(loaded!.snapshot.lastLocation?.filePath, secondFile);
+    assert.strictEqual(loaded!.snapshot.git?.head, 'after-flush');
+  });
+
+  test('keeps an investigation active if workspace-state persistence fails while stopping', async () => {
+    const workspace = '/workspace';
+    const filePath = '/workspace/src/index.ts';
+    const capture = new FakeCapture();
+    const stateStore = new FakeStateStore();
+    capture.setEvents(workspace, [
+      makeEvent(
+        'editor.active',
+        workspace,
+        filePath,
+        '2026-05-01T13:40:00.000Z',
+        3,
+        1,
+      ),
+    ]);
+
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore,
+      captureGitSnapshot: () => makeGitSnapshot(),
+    });
+
+    const created = await service.startInvestigation({
+      workspace,
+      name: 'Stop failure rollback',
+      checkpointText: null,
+    });
+
+    stateStore.rejectNextUpdate(new Error('workspaceState unavailable'));
+
+    await assert.rejects(
+      async () => {
+        await service.saveAndStopInvestigation(workspace);
+      },
+      /workspaceState unavailable/,
+    );
+
+    assert.strictEqual(service.getActiveInvestigation(workspace)?.id, created.id);
   });
 
   test('deletes a saved investigation', async () => {

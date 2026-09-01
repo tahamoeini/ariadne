@@ -1,8 +1,8 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { FileLocation, ObservedEvent } from '../domain';
 import { createWorkspaceEventBuffer, EventBufferOptions } from './eventBuffer';
+import { findGitRepositoryRoot } from '../git';
 
 interface DocumentContext {
   workspace: string;
@@ -52,13 +52,8 @@ function cloneObservedEvent(event: ObservedEvent): ObservedEvent {
   };
 }
 
-function hasGitDirectory(directoryPath: string): boolean {
-  return fs.existsSync(path.join(directoryPath, '.git'));
-}
-
 function findRepositoryRoot(
   filePath: string,
-  workspacePath: string,
   cache: Map<string, string | null>,
 ): string | null {
   const startDir = path.dirname(filePath);
@@ -67,18 +62,16 @@ function findRepositoryRoot(
     return cached;
   }
 
-  const visited: string[] = [];
+  const repositoryRoot = findGitRepositoryRoot(filePath);
+  if (!repositoryRoot) {
+    cache.set(startDir, null);
+    return null;
+  }
+
   let currentDir = startDir;
   while (true) {
-    visited.push(currentDir);
-    if (hasGitDirectory(currentDir)) {
-      for (const dir of visited) {
-        cache.set(dir, currentDir);
-      }
-      return currentDir;
-    }
-
-    if (currentDir === workspacePath) {
+    cache.set(currentDir, repositoryRoot);
+    if (currentDir === repositoryRoot) {
       break;
     }
 
@@ -89,10 +82,7 @@ function findRepositoryRoot(
     currentDir = parentDir;
   }
 
-  for (const dir of visited) {
-    cache.set(dir, null);
-  }
-  return null;
+  return repositoryRoot;
 }
 
 function resolveDocumentContext(
@@ -111,7 +101,7 @@ function resolveDocumentContext(
   const filePath = document.uri.fsPath;
   return {
     workspace: workspaceFolder.uri.fsPath,
-    repository: findRepositoryRoot(filePath, workspaceFolder.uri.fsPath, repositoryCache),
+    repository: findRepositoryRoot(filePath, repositoryCache),
     filePath,
     languageId: document.languageId,
   };

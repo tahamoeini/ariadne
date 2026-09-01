@@ -8,7 +8,7 @@ Developers who resume an interrupted code investigation with RepoTrail context r
 
 ### H2: Capture Sufficiency
 
-The combination of observed activity trail, Git state snapshot, and optional developer checkpoint captures enough context to meaningfully support re-entry — without requiring exhaustive logging or AI interpretation.
+The combination of observed activity trail, Git state snapshot, and optional developer checkpoint captures enough context to support re-entry without requiring exhaustive logging or AI interpretation.
 
 ### H3: Natural Behavior
 
@@ -36,7 +36,7 @@ Developers use RepoTrail without significant changes to their existing workflow.
 
 Metrics to be defined before validation begins. Candidates include:
 
-- Time to first meaningful edit after resuming.
+- Time to first edit after resuming.
 - Self-reported confidence in understanding where they left off.
 - Number of re-exploration actions (reopening files already visited).
 - Perceived usefulness rating.
