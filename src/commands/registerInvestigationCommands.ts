@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import { Investigation } from '../domain';
 import { CreateInvestigationOptions, InvestigationLifecycleService } from './investigationLifecycle';
+import {
+  buildResumePlan,
+  buildResumeResultMessage,
+  ResumeExecutionResult,
+} from './resumePlan';
 import { ResumeSnapshotOpener } from '../ui';
 
 export const COMMAND_START_INVESTIGATION = 'repotrail.startInvestigation';
@@ -10,6 +15,7 @@ export const COMMAND_SAVE_AND_STOP = 'repotrail.saveAndStopInvestigation';
 export const COMMAND_LIST_INVESTIGATIONS = 'repotrail.listInvestigations';
 export const COMMAND_DELETE_INVESTIGATION = 'repotrail.deleteInvestigation';
 export const COMMAND_OPEN_RESUME_SNAPSHOT = 'repotrail.openResumeSnapshot';
+export const COMMAND_RESUME_INVESTIGATION = 'repotrail.resumeInvestigation';
 
 interface CreateInvestigationCommandOptions {
   workspacePath?: string;
@@ -32,6 +38,11 @@ interface DeleteInvestigationCommandOptions {
 
 interface OpenResumeSnapshotCommandOptions {
   id?: string;
+}
+
+interface ResumeInvestigationCommandOptions {
+  id?: string;
+  maxFilesToOpen?: number;
 }
 
 interface InvestigationQuickPickItem extends vscode.QuickPickItem {
@@ -151,6 +162,64 @@ async function pickInvestigation(
   );
 
   return selected?.investigation;
+}
+
+function clampPosition(
+  document: vscode.TextDocument,
+  line: number,
+  column: number,
+): vscode.Position {
+  const targetLine = Math.min(Math.max(line - 1, 0), Math.max(document.lineCount - 1, 0));
+  const lineText = document.lineAt(targetLine).text;
+  const targetColumn = Math.min(Math.max(column - 1, 0), lineText.length);
+  return new vscode.Position(targetLine, targetColumn);
+}
+
+async function reopenSavedFiles(investigation: Investigation, maxFilesToOpen?: number) {
+  const plan = buildResumePlan(investigation, {
+    currentWorkspacePaths: (vscode.workspace.workspaceFolders ?? []).map(
+      (workspaceFolder) => workspaceFolder.uri.fsPath,
+    ),
+    maxFilesToOpen,
+  });
+  const reopenedFiles: string[] = [];
+  const failedToOpenFiles: string[] = [];
+  let revealedLocation: ResumeExecutionResult['revealedLocation'] = null;
+
+  for (const filePath of plan.filesToOpen) {
+    try {
+      const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+      const editor = await vscode.window.showTextDocument(document, { preview: false });
+      reopenedFiles.push(filePath);
+
+      if (plan.targetLocation?.filePath === filePath) {
+        const position = clampPosition(
+          document,
+          plan.targetLocation.line,
+          plan.targetLocation.column,
+        );
+        editor.selection = new vscode.Selection(position, position);
+        editor.revealRange(
+          new vscode.Range(position, position),
+          vscode.TextEditorRevealType.InCenterIfOutsideViewport,
+        );
+        revealedLocation = {
+          filePath,
+          line: position.line + 1,
+          column: position.character + 1,
+        };
+      }
+    } catch {
+      failedToOpenFiles.push(filePath);
+    }
+  }
+
+  return {
+    ...plan,
+    reopenedFiles,
+    failedToOpenFiles,
+    revealedLocation,
+  } satisfies ResumeExecutionResult;
 }
 
 async function collectCreateOptions(
@@ -332,6 +401,34 @@ export function registerInvestigationCommands(
         try {
           await snapshotOpener.openInvestigation(investigation);
           return investigation;
+        } catch (error) {
+          vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
+          return null;
+        }
+      },
+    ),
+    vscode.commands.registerCommand(
+      COMMAND_RESUME_INVESTIGATION,
+      async (options: ResumeInvestigationCommandOptions = {}) => {
+        const investigations = lifecycle.listInvestigations();
+        if (investigations.length === 0) {
+          vscode.window.showInformationMessage('RepoTrail: No saved investigations were found.');
+          return null;
+        }
+
+        const investigation =
+          investigations.find((candidate) => candidate.id === options.id) ??
+          (await pickInvestigation(investigations, 'RepoTrail: Resume Investigation'));
+
+        if (!investigation) {
+          return null;
+        }
+
+        try {
+          await snapshotOpener.openInvestigation(investigation);
+          const result = await reopenSavedFiles(investigation, options.maxFilesToOpen);
+          vscode.window.showInformationMessage(buildResumeResultMessage(result));
+          return result;
         } catch (error) {
           vscode.window.showErrorMessage(`RepoTrail: ${toErrorMessage(error)}`);
           return null;
