@@ -138,12 +138,12 @@ export function buildResumePlan(
 }
 
 export function buildResumeResultMessage(result: ResumeExecutionResult): string {
-  const details: string[] = [];
+  const details: string[] = ['opened the Resume Snapshot'];
 
   if (result.reopenedFiles.length > 0) {
     details.push(`reopened ${result.reopenedFiles.length} saved file(s)`);
   } else {
-    details.push('opened the Resume Snapshot without reopening saved files');
+    details.push('did not reopen any saved files');
   }
 
   if (result.revealedLocation) {

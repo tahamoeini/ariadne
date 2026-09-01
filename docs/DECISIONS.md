@@ -181,3 +181,11 @@
 **Decision:** The first Resume Snapshot surface is implemented as a read-only virtual Markdown document opened from the Command Palette or saved-Investigation picker.
 
 **Reason:** RepoTrail 0.0.1 needs a fast, trustworthy re-entry surface, not a polished custom UI. A VS Code-native virtual document keeps the implementation lightweight while still letting the product show structured factual context, current Git comparisons, and honest empty/missing states without introducing webview complexity prematurely.
+
+---
+
+## ADR-024: Resume Uses Conservative Reopen, Not Restore
+
+**Decision:** RepoTrail 0.0.1 resume actions open the factual Resume Snapshot and then reopen at most five saved files, prioritizing the last saved file, edited files, and factual revisit counts. Missing files and workspace drift are reported as partial recovery instead of triggering exact restore attempts.
+
+**Reason:** VS Code can reliably reopen existing files and reveal saved positions, but it cannot truthfully promise full restoration of a prior tab set, window layout, workspace session, or a developer's mental state. Keeping reopen behavior small and factual makes Resume helpful without turning it into noisy tab explosion or making claims the product cannot support.
