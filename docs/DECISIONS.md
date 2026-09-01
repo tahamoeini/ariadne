@@ -189,3 +189,19 @@
 **Decision:** RepoTrail 0.0.1 resume actions open the factual Resume Snapshot and then reopen at most five saved files, prioritizing the last saved file, edited files, and factual revisit counts. Missing files and workspace drift are reported as partial recovery instead of triggering exact restore attempts.
 
 **Reason:** VS Code can reliably reopen existing files and reveal saved positions, but it cannot truthfully promise full restoration of a prior tab set, window layout, workspace session, or a developer's mental state. Keeping reopen behavior small and factual makes Resume helpful without turning it into noisy tab explosion or making claims the product cannot support.
+
+---
+
+## ADR-025: Persist Only Re-Entry-Critical Investigation Data
+
+**Decision:** Schema version 3 persists only the subset of Investigation data required for re-entry: investigation identity, workspace context, optional checkpoint text, workspace-relative reopen evidence, a short recent path, and saved Git drift metadata. RepoTrail no longer persists `createdAt`, `lastResumedAt`, `checkpoint.createdAt`, full observed-event objects, or per-event source metadata.
+
+**Reason:** Prompt 8 requires every persisted field to justify itself against the question "Is this required for re-entry?" The removed fields added sensitive local metadata without materially improving reopen behavior, while the retained fields directly support remembering, reopening, or honestly showing repository drift.
+
+---
+
+## ADR-026: Use the Actual Local Security Model, Not Cosmetic Encryption
+
+**Decision:** RepoTrail keeps saved Investigations as local JSON under `globalStorageUri`, applies best-effort private filesystem permissions where supported, writes through temp-file replacement with transient backup recovery, and exposes user commands to reveal or delete all local data. RepoTrail does not add custom encryption or move general Investigation metadata into secret storage.
+
+**Reason:** RepoTrail's threat model is local developer metadata on the same machine, not remote secret distribution. VS Code secret storage is appropriate for credentials, but RepoTrail intentionally does not collect credentials; pretending otherwise with ad-hoc encryption would add complexity without providing a trustworthy security boundary.

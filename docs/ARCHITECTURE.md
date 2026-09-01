@@ -94,35 +94,78 @@ Modules communicate through domain types. No module directly imports another mod
 
 ObservedEventType: `editor.active`, `editor.selection`, `file.edit`, `navigation.definition`, `navigation.reference`.
 
+The runtime model is intentionally richer than the persisted schema. RepoTrail rehydrates a small runtime `recentEvents` trail from saved path history, but it does not persist full observed-event objects once an Investigation is written to disk.
+
 ## Storage Mechanism
 
-**Location:** `ExtensionContext.globalStorageUri.fsPath` (passed to storage module by caller).
+**Locations:**
+
+- Saved Investigations: `ExtensionContext.globalStorageUri.fsPath`
+- Active Investigation ids for restart recovery: `ExtensionContext.workspaceState`
 
 **Layout:**
 ```
 <globalStorageDir>/
   investigations/
     <uuid>.json
-    <uuid>.json
+    <uuid>.json.bak   # temporary recovery copy during replace/recovery flows
 ```
 
 **Format:** Each file is a JSON envelope:
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "investigation": { ... }
 }
 ```
 
-**Schema versioning:** The `schemaVersion` field is checked on load. Current saves use schema version 2. Legacy version 1 investigations are migrated on load to populate the explicit Git availability fields. Unknown future versions are rejected (returns null).
+**Persisted fields and re-entry rationale:**
+
+| Persisted field | Why it remains |
+|---|---|
+| `id` | Required to address, open, and delete one Investigation |
+| `name` | Required to find the saved Investigation again |
+| `workspace` | Required to reopen files and report workspace drift |
+| `repository` | Kept only to preserve saved repository context when the workspace is nested |
+| `savedAt` | Required to sort and display recency |
+| `checkpoint.text` | Optional human-authored re-entry note |
+| `snapshot.editedFiles` | Factual reopen evidence |
+| `snapshot.visitedFileCounts` | Factual revisit priority signal |
+| `snapshot.lastLocation` | Required to return to the last saved cursor location |
+| `snapshot.recentPath` | Short saved navigation path used by the Resume Snapshot |
+| `snapshot.git.{timestamp,availability,head,branch,modifiedFiles,untrackedFiles,diffStats}` | Saved-vs-current Git drift context used during re-entry |
+
+**Not persisted by schema version 3:**
+
+- `createdAt`
+- `lastResumedAt`
+- `checkpoint.createdAt`
+- full `recentEvents`
+- per-event `source` metadata
+- selection history beyond the last saved location
+- duplicated `snapshot.git.repositoryRoot`
+
+When file paths are inside the saved workspace, RepoTrail stores them as workspace-relative paths on disk and expands them back to absolute paths only when loading the Investigation.
+
+**Schema versioning:** The `schemaVersion` field is checked on load. Current saves use schema version 3. Legacy version 1 investigations are migrated to the explicit Git availability model. Legacy version 2 investigations are minimized on load into the new schema shape. Unknown future versions are rejected (returns null).
 
 **Properties:**
 - Local-only, no cloud.
 - Human-inspectable JSON files.
 - Survives extension restarts and VS Code reloads (files on disk).
 - No external database.
-- Malformed files are silently skipped during listing.
-- Active investigation pointers are stored separately in `ExtensionContext.workspaceState` so a workspace can recover its current investigation after extension restart without changing the on-disk investigation schema.
+- Plain local JSON by design; no custom encryption is added.
+- Best-effort private filesystem permissions are applied to RepoTrail directories/files where the platform supports them.
+- Saves use temp-file replacement and a transient `.bak` recovery copy so interrupted or malformed primary files can fall back safely.
+- Malformed files and malformed `workspaceState` entries are skipped so extension activation continues.
+- Active Investigation pointers are stored separately in `ExtensionContext.workspaceState` so a workspace can recover its current Investigation after extension restart without expanding the on-disk Investigation schema.
+
+## Security / Privacy Model
+
+- RepoTrail requires no account and makes no network, cloud, analytics, or repository-upload requests.
+- The rolling event buffer stays in memory only; saving an Investigation persists only the reduced re-entry subset above.
+- RepoTrail does not store keystrokes, clipboard data, screenshots, terminal content, or full source-code contents.
+- Checkpoint text is persisted as plain local text because it is the user-authored re-entry note; it should not contain secrets.
 
 ## Event Capture Concept
 
@@ -173,8 +216,10 @@ Minimal command surface for 0.0.1:
 - Open Resume Snapshot for a saved Investigation.
 - Resume a saved Investigation by reopening a conservative set of files.
 - Delete an Investigation.
+- Delete all RepoTrail data.
+- Show the local RepoTrail storage location.
 
-The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confirmation messages, and a read-only virtual Markdown document for the Resume Snapshot. No custom webview or complex UI is introduced in this milestone.
+The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confirmation messages, OS reveal behavior for the storage folder, and a read-only virtual Markdown document for the Resume Snapshot. No custom webview or complex UI is introduced in this milestone.
 
 ## Investigation Lifecycle (Implemented)
 
@@ -201,7 +246,7 @@ The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confi
 
 ## Testing Strategy
 
-- **Unit tests** (`npm run test:unit`): Domain model, storage, rolling buffer, Git snapshot parser/adapter, and Investigation lifecycle service tests run via Mocha without VS Code.
+- **Unit tests** (`npm run test:unit`): Domain model, storage, rolling buffer, Git snapshot parser/adapter, and Investigation lifecycle service tests run via Mocha without VS Code. Privacy hardening tests cover schema minimization, relative-path persistence, backup recovery, malformed restart state, delete-all behavior, and oversized checkpoint rejection.
 - **Integration tests** (`npm test`): Extension activation, command registration, lifecycle command flow, and VS Code event-capture tests via `@vscode/test-cli`.
 - Test runner TDD-style suites with `suite`/`test`.
 

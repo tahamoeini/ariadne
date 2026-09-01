@@ -164,7 +164,7 @@ RepoTrail 0.0.1 is deliberately narrow.
 
 ## Storage
 
-**Local only**
+**Local only in VS Code extension storage (`globalStorageUri`)**
 
 ## Core objects
 
@@ -179,6 +179,9 @@ RepoTrail 0.0.1 is deliberately narrow.
 * Save Recent Activity as Investigation
 * Add Checkpoint
 * Resume Investigation
+* Delete Investigation
+* Delete All RepoTrail Data
+* Show Local Storage Location
 
 Optional experimental action:
 
@@ -793,6 +796,16 @@ No repository upload
 
 RepoTrail stores only what it needs for local investigation continuity.
 
+Actual 0.0.1 implementation:
+
+* requires no account or sign-in,
+* makes no cloud or external API requests,
+* uses no analytics or telemetry,
+* uploads no repository data,
+* keeps the rolling activity buffer in memory only until an Investigation is saved,
+* persists only re-entry data: investigation name, workspace path, optional checkpoint text, workspace-relative saved file paths, short recent path, and saved Git drift metadata,
+* does not persist keystrokes, clipboard data, screenshots, terminal content, full source-code contents, or full recent event objects.
+
 Users should be able to:
 
 * inspect stored Investigations,
@@ -801,6 +814,12 @@ Users should be able to:
 * configure retention later,
 * disable the extension,
 * export their own data later if useful.
+
+Current local controls:
+
+* `RepoTrail: Delete Investigation`
+* `RepoTrail: Delete All RepoTrail Data`
+* `RepoTrail: Show Local Storage Location`
 
 The product should never gradually mutate into employee monitoring.
 
@@ -823,6 +842,12 @@ Therefore:
 * treat file paths and branch names as potentially sensitive.
 
 Security complexity should remain proportional to the narrow local-first architecture.
+
+Current security model:
+
+* Saved Investigations are plain local JSON files inside VS Code's extension storage directory for RepoTrail.
+* RepoTrail applies best-effort private filesystem permissions where the platform supports them, but it is not a secret store or encryption layer.
+* Checkpoint text is stored verbatim as the user-authored re-entry note, so it should not contain secrets.
 
 ---
 

@@ -10,6 +10,7 @@ import {
 } from '../domain';
 import { captureGitSnapshot } from '../git';
 import {
+  deleteAllInvestigations as deleteAllStoredInvestigations,
   deleteInvestigation as deleteStoredInvestigation,
   listInvestigations as listStoredInvestigations,
   loadInvestigation,
@@ -17,6 +18,8 @@ import {
 } from '../storage';
 
 const ACTIVE_INVESTIGATIONS_KEY = 'repotrail.activeInvestigations';
+export const MAX_INVESTIGATION_NAME_LENGTH = 120;
+export const MAX_CHECKPOINT_LENGTH = 1000;
 
 const VISIT_EVENT_TYPES: ReadonlySet<ObservedEvent['type']> = new Set([
   'editor.active',
@@ -51,6 +54,14 @@ export interface InvestigationLifecycleDebugApi {
   getActiveInvestigation(workspace?: string): Investigation | null;
   listInvestigations(): Investigation[];
   clearInvestigations(): Promise<void>;
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value).every((entry) => typeof entry === 'string');
 }
 
 function cloneLocation(location: FileLocation | null): FileLocation | null {
@@ -107,6 +118,40 @@ function trimToNull(value: string | null | undefined): string | null {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function requireBoundedText(
+  value: string | null | undefined,
+  fieldName: string,
+  maxLength: number,
+): string {
+  const trimmed = trimToNull(value);
+  if (!trimmed) {
+    throw new Error(`${fieldName} is required.`);
+  }
+
+  if (trimmed.length > maxLength) {
+    throw new Error(`${fieldName} must be ${maxLength} characters or fewer.`);
+  }
+
+  return trimmed;
+}
+
+function optionalBoundedText(
+  value: string | null | undefined,
+  fieldName: string,
+  maxLength: number,
+): string | null {
+  const trimmed = trimToNull(value);
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.length > maxLength) {
+    throw new Error(`${fieldName} must be ${maxLength} characters or fewer.`);
+  }
+
+  return trimmed;
 }
 
 function createCheckpoint(text: string): Checkpoint {
@@ -229,13 +274,18 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
   }
 
   async clearInvestigations(): Promise<void> {
-    const investigations = listStoredInvestigations(this.options.storageDir);
-    for (const investigation of investigations) {
-      deleteStoredInvestigation(this.options.storageDir, investigation.id);
-    }
+    await this.deleteAllData();
+  }
 
+  getStorageDirectory(): string {
+    return this.options.storageDir;
+  }
+
+  async deleteAllData(): Promise<number> {
+    const deletedCount = deleteAllStoredInvestigations(this.options.storageDir);
     this.activeInvestigations.clear();
     await this.persistActiveInvestigationIds();
+    return deletedCount;
   }
 
   recordObservedEvent(event: ObservedEvent): void {
@@ -276,9 +326,14 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
       return null;
     }
 
+    const nextCheckpointText = optionalBoundedText(
+      checkpointText,
+      'Checkpoint',
+      MAX_CHECKPOINT_LENGTH,
+    );
     const updated: Investigation = {
       ...cloneInvestigation(active),
-      checkpoint: checkpointText ? createCheckpoint(checkpointText) : null,
+      checkpoint: nextCheckpointText ? createCheckpoint(nextCheckpointText) : null,
     };
 
     return this.persistActiveInvestigation(updated);
@@ -321,17 +376,22 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
       throw new Error('An investigation is already active in this workspace.');
     }
 
-    const name = trimToNull(options.name);
-    if (!name) {
-      throw new Error('Investigation name is required.');
-    }
+    const name = requireBoundedText(
+      options.name,
+      'Investigation name',
+      MAX_INVESTIGATION_NAME_LENGTH,
+    );
 
     const snapshot = this.buildSeedSnapshot(workspace);
     if (requireRecentActivity && snapshot.recentEvents.length === 0) {
       return null;
     }
 
-    const checkpointText = trimToNull(options.checkpointText);
+    const checkpointText = optionalBoundedText(
+      options.checkpointText,
+      'Checkpoint',
+      MAX_CHECKPOINT_LENGTH,
+    );
     const investigation: Investigation = {
       ...createInvestigation(name, workspace, resolveRepository(snapshot, null)),
       checkpoint: checkpointText ? createCheckpoint(checkpointText) : null,
@@ -368,12 +428,14 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
   }
 
   private restoreActiveInvestigations(): void {
-    const activeInvestigationIds =
-      this.options.stateStore.get<Record<string, string>>(ACTIVE_INVESTIGATIONS_KEY) ?? {};
+    const rawActiveInvestigationIds = this.options.stateStore.get<unknown>(ACTIVE_INVESTIGATIONS_KEY);
+    const activeInvestigationIds = isStringRecord(rawActiveInvestigationIds)
+      ? rawActiveInvestigationIds
+      : {};
 
     for (const [workspace, investigationId] of Object.entries(activeInvestigationIds)) {
       const investigation = loadInvestigation(this.options.storageDir, investigationId);
-      if (investigation) {
+      if (investigation && investigation.workspace === workspace) {
         this.activeInvestigations.set(workspace, cloneInvestigation(investigation));
       }
     }

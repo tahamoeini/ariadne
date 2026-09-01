@@ -20,6 +20,7 @@ export interface VsCodeObservedEventCapture extends vscode.Disposable {
   debug: RepoTrailDebugApi;
   getRecentEvents(workspace?: string): ObservedEvent[];
   getLastLocation(workspace?: string): FileLocation | null;
+  clearRecentEvents(workspace?: string): void;
   readonly onDidObserveEvent: vscode.Event<ObservedEvent>;
 }
 
@@ -239,6 +240,14 @@ export function createVsCodeObservedEventCapture(
     },
     getLastLocation(workspace?: string): FileLocation | null {
       return cloneLocation(buffer.getLastLocation(workspace));
+    },
+    clearRecentEvents(workspace?: string): void {
+      if (!workspace) {
+        selectionKeys.clear();
+      } else {
+        selectionKeys.delete(workspace);
+      }
+      buffer.clear(workspace);
     },
     onDidObserveEvent: observedEventEmitter.event,
     dispose(): void {

@@ -7,6 +7,7 @@ import {
   InvestigationLifecycleCapture,
   InvestigationLifecycleService,
   InvestigationLifecycleStateStore,
+  MAX_CHECKPOINT_LENGTH,
 } from '../commands/investigationLifecycle';
 import { loadInvestigation } from '../storage';
 
@@ -433,5 +434,96 @@ suite('Investigation Lifecycle', () => {
     assert.deepStrictEqual(service.listInvestigations(), []);
     assert.strictEqual(service.getActiveInvestigation(workspace), null);
     assert.strictEqual(loadInvestigation(tmpDir, created.id), null);
+  });
+
+  test('deletes all saved data and clears restart state', async () => {
+    const workspace = '/workspace';
+    const filePath = '/workspace/src/delete-all.ts';
+    const capture = new FakeCapture();
+    const stateStore = new FakeStateStore();
+    capture.setEvents(workspace, [
+      makeEvent(
+        'editor.active',
+        workspace,
+        filePath,
+        '2026-05-01T15:00:00.000Z',
+        2,
+        1,
+      ),
+    ]);
+
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore,
+      captureGitSnapshot: () => makeGitSnapshot(),
+    });
+
+    const created = await service.startInvestigation({
+      workspace,
+      name: 'Delete all data',
+      checkpointText: null,
+    });
+
+    const deletedCount = await service.deleteAllData();
+
+    assert.strictEqual(deletedCount, 1);
+    assert.strictEqual(service.getActiveInvestigation(workspace), null);
+    assert.deepStrictEqual(service.listInvestigations(), []);
+    assert.strictEqual(loadInvestigation(tmpDir, created.id), null);
+    assert.deepStrictEqual(
+      stateStore.get<Record<string, string>>('repotrail.activeInvestigations'),
+      {},
+    );
+  });
+
+  test('ignores malformed active-investigation state during restoration', async () => {
+    const workspace = '/workspace';
+    const stateStore = new FakeStateStore();
+    await stateStore.update('repotrail.activeInvestigations', 42);
+
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture: new FakeCapture(),
+      stateStore,
+      captureGitSnapshot: () => makeGitSnapshot(),
+    });
+
+    assert.strictEqual(service.getActiveInvestigation(workspace), null);
+    assert.deepStrictEqual(service.listInvestigations(), []);
+  });
+
+  test('rejects oversized checkpoints before persisting them', async () => {
+    const workspace = '/workspace';
+    const filePath = '/workspace/src/checkpoint.ts';
+    const capture = new FakeCapture();
+    capture.setEvents(workspace, [
+      makeEvent(
+        'editor.active',
+        workspace,
+        filePath,
+        '2026-05-01T16:00:00.000Z',
+        1,
+        1,
+      ),
+    ]);
+
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore: new FakeStateStore(),
+      captureGitSnapshot: () => makeGitSnapshot(),
+    });
+
+    await assert.rejects(
+      () =>
+        service.startInvestigation({
+          workspace,
+          name: 'Checkpoint limit',
+          checkpointText: 'x'.repeat(MAX_CHECKPOINT_LENGTH + 1),
+        }),
+      /Checkpoint must be 1000 characters or fewer\./,
+    );
+    assert.deepStrictEqual(service.listInvestigations(), []);
   });
 });

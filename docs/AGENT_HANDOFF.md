@@ -2,7 +2,7 @@
 
 ## Current Milestone
 
-**Prompt 7 — Implement Resume Actions**
+**Prompt 8 — Privacy, Data Control, and Failure Hardening**
 
 ## Status
 
@@ -10,33 +10,16 @@
 
 ## What Has Been Built
 
-### Prompt 1–5 Foundations
-- VS Code extension scaffold, domain model, JSON persistence, rolling buffer, and read-only Git snapshot capture remain in place from the previous milestone.
+### Prompts 1–7 remain in place
+- VS Code extension scaffold, local-only investigation storage, in-memory rolling buffer, read-only Git snapshot capture, Investigation lifecycle commands, Resume Snapshot rendering, and conservative Resume actions remain intact.
 
-### Prompt 5 (Investigation Lifecycle)
-- **Lifecycle service** (`src/commands/investigationLifecycle.ts`): manages one active Investigation per workspace, assembles snapshots from buffered observed events + current Git state + last location, accumulates live visit/edit evidence while active, restores active ids from `workspaceState`, and supports start/retroactive-create/checkpoint/save-stop/list/delete flows.
-- **Command Palette wiring** (`src/commands/registerInvestigationCommands.ts`, `src/commands/index.ts`, `src/extension.ts`, `package.json`): adds `RepoTrail` commands for:
-  - Start Investigation
-  - Save Recent Activity as Investigation
-  - Add or Update Checkpoint
-  - Save and Stop Investigation
-  - List Saved Investigations
-  - Delete Investigation
-- **Capture adapter update** (`src/capture/vscodeEventCapture.ts`, `src/capture/index.ts`): exposes current recent events, last known location, and an observed-event stream so the lifecycle service can append factual evidence while an Investigation stays active.
-- **Storage update** (`src/storage/store.ts`): `saveInvestigation()` now returns the persisted Investigation object with the updated `savedAt` value so the lifecycle service can keep in-memory active state aligned with disk.
-- **Tests** (`src/test/investigationLifecycle.test.ts`, `src/test/extension.test.ts`, `package.json`): cover explicit creation, retroactive creation, empty rolling buffer, checkpoint present/absent, no Git repository, persistence after extension restart, deletion, command registration, and command-driven lifecycle flow.
-
-### Prompt 6 (Resume Snapshot)
-- **Resume Snapshot renderer** (`src/ui/resumeSnapshot.ts`): produces a concise, factual Snapshot view from a saved Investigation plus a fresh current Git snapshot, with explicit handling for missing checkpoint, missing Git data, deleted/moved files, and missing/corrupted Investigation payloads.
-- **VS Code-native Snapshot surface** (`src/ui/resumeSnapshotProvider.ts`, `src/ui/index.ts`): registers a read-only virtual Markdown document provider so a developer can open a saved Investigation into a Resume Snapshot without a webview.
-- **Command wiring** (`src/commands/registerInvestigationCommands.ts`, `src/commands/index.ts`, `src/extension.ts`, `package.json`): adds `RepoTrail: Open Resume Snapshot` and makes `RepoTrail: List Saved Investigations` open the selected Investigation’s Resume Snapshot.
-- **Tests** (`src/test/resumeSnapshot.test.ts`, `src/test/extension.test.ts`, `package.json`): cover rendering order, empty/unavailable states, missing Investigation handling, command registration, and opening a Snapshot document for a saved Investigation.
-
-### Prompt 7 (Resume Actions)
-- **Conservative reopen planning** (`src/commands/resumePlan.ts`): derives a small factual reopen plan from the saved Investigation, using only last saved file/location, edited files, revisited-file counts, workspace availability, and a hard reopen cap of 5 files.
-- **Resume command wiring** (`src/commands/registerInvestigationCommands.ts`, `src/commands/index.ts`, `package.json`): adds `RepoTrail: Resume Investigation`, opens the Resume Snapshot first, then reopens the planned files, returns to the saved location when possible, and reports partial recovery without failing on missing files or workspace drift.
-- **Stale-location handling** (`src/commands/registerInvestigationCommands.ts`): clamps the saved line/column to the current document bounds so moved or shortened files still reopen safely.
-- **Tests** (`src/test/resumeAction.test.ts`, `src/test/extension.test.ts`, `package.json`): cover no-Git resume planning, changed workspace, large Investigation caps, successful resume, missing file recovery, and stale saved locations.
+### Prompt 8 (Privacy / Local Data Control / Failure Hardening)
+- **Persisted-schema minimization** (`src/storage/store.ts`): schema version 3 now saves only re-entry-critical data, stores workspace file paths relatively when possible, persists only a short `recentPath` instead of full observed-event objects, and drops non-essential persisted fields such as `createdAt`, `lastResumedAt`, `checkpoint.createdAt`, event metadata, and duplicated Git repository-root storage.
+- **Corruption-safe storage** (`src/storage/store.ts`): saves now use temp-file replacement with a transient `.bak` recovery copy, best-effort private filesystem permissions, strict envelope validation, and safe fallback loading so malformed files are skipped or recovered instead of breaking activation.
+- **Activation hardening** (`src/commands/investigationLifecycle.ts`): malformed `workspaceState` active-id payloads are ignored safely, and mismatched saved-workspace entries are not restored as active investigations.
+- **Local data controls** (`src/commands/registerInvestigationCommands.ts`, `src/commands/index.ts`, `src/extension.ts`, `src/capture/vscodeEventCapture.ts`, `src/ui/resumeSnapshotProvider.ts`, `package.json`): adds `RepoTrail: Delete All RepoTrail Data` and `RepoTrail: Show Local Storage Location`, clears in-memory activity during delete-all, and invalidates cached Resume Snapshots after one-item or full deletion.
+- **Checkpoint hardening** (`src/commands/investigationLifecycle.ts`, `src/commands/registerInvestigationCommands.ts`): investigation names and checkpoint text now have explicit length limits, and checkpoint prompts warn that notes are stored locally in plain text.
+- **Tests** (`src/test/storage.test.ts`, `src/test/investigationLifecycle.test.ts`, `src/test/extension.test.ts`): cover minimized schema persistence, relative-path rehydration, backup recovery, malformed restart state, delete-all behavior, storage-location command coverage, and oversized checkpoint rejection.
 
 ## Files Changed
 
@@ -45,61 +28,60 @@
 - `docs/ARCHITECTURE.md`
 - `docs/DECISIONS.md`
 - `package.json`
+- `src/capture/vscodeEventCapture.ts`
 - `src/commands/index.ts`
-- `src/commands/resumePlan.ts`
+- `src/commands/investigationLifecycle.ts`
 - `src/commands/registerInvestigationCommands.ts`
-- `src/test/resumeAction.test.ts`
+- `src/extension.ts`
+- `src/storage/index.ts`
+- `src/storage/store.ts`
 - `src/test/extension.test.ts`
+- `src/test/investigationLifecycle.test.ts`
+- `src/test/storage.test.ts`
+- `src/ui/resumeSnapshotProvider.ts`
 
 ## Important Implementation Details
 
-1. Resume Snapshot content is intentionally factual and compact: no AI summary, importance scoring, semantic explanations, timelines, or graphs were added.
-2. The Snapshot is rendered into a virtual Markdown document, not a custom webview, to keep the first re-entry surface simple and VS Code-native.
-3. The Snapshot captures THEN vs NOW by comparing the saved `snapshot.git` state against a fresh current Git snapshot taken when the Snapshot document is opened.
-4. Missing data is rendered explicitly: absent checkpoints are omitted, missing Git state is stated plainly, saved files that no longer exist are labeled as missing/deleted-or-moved, and missing/corrupted Investigation payloads render a dedicated unavailable message.
-5. `RepoTrail: List Saved Investigations` remains the selection entry point and now opens the selected Investigation’s Resume Snapshot, while `RepoTrail: Open Resume Snapshot` offers a direct dedicated command.
-6. `RepoTrail: Resume Investigation` is intentionally a **reopen** flow, not a restore flow: it opens the Resume Snapshot first, then reopens at most 5 files based on factual evidence only (last file/location, edited files, revisited counts), and finishes on the last saved file when it still exists.
-7. Resume is partial by design: missing files, stale line/column data, workspace drift, repository drift, and no-Git states do not fail the command; the action reports what reopened and what was skipped.
+1. RepoTrail still requires no account, makes no network requests, uses no analytics, and performs no repository upload; the privacy pass hardened the existing local-first implementation rather than adding security theater.
+2. Saved Investigations remain plain local JSON by design. The real security model is: same-machine, same-user local storage plus best-effort filesystem permissions where the platform supports them.
+3. RepoTrail now persists only the data needed to remember/reopen an Investigation: identity, workspace context, optional checkpoint text, reopen evidence, short recent path, and Git drift metadata.
+4. Full observed-event objects remain in memory only. On load, the storage layer rehydrates a minimal runtime `recentEvents` trail from saved `recentPath` so existing Resume Snapshot rendering can stay simple.
+5. Delete-all clears saved investigations, active-investigation restart state, in-memory recent activity, and cached virtual Resume Snapshot content.
+6. Resume Snapshot documents already open in the editor are invalidated through the content provider when their backing Investigation is deleted.
 
 ## Known Issues
 
-1. **Definition/reference navigation remains deferred** — current VS Code APIs still do not provide a reliable MVP signal without guesswork.
-2. **Integration tests depend on VS Code download availability** — `npm test` still fails in restricted environments if the VS Code test host cannot be downloaded.
-3. **Corrupted Investigation files are skipped in saved-Investigation lists** — the dedicated unavailable Snapshot state mainly covers direct open-by-id cases or investigations deleted after selection.
-4. **`docs/PRODUCT_BASELINE.md` currently duplicates `PROMPT_CHAIN.md`** — the product-baseline narrative is effectively represented in `README.md` and the milestone prompts until that documentation discrepancy is cleaned up in a later doc-focused pass.
-5. **Resume does not auto-switch workspaces/windows** — if the saved workspace path exists but is not currently open, RepoTrail reopens whatever saved files still exist and reports the mismatch instead of forcing a folder change.
+1. **Integration tests still depend on VS Code download availability** — `npm test` can still fail in restricted environments if `@vscode/test-cli` cannot reach `update.code.visualstudio.com`.
+2. **Checkpoint text is intentionally plain local text** — this is the actual product model, so users must avoid placing secrets in checkpoints.
+3. **`docs/PRODUCT_BASELINE.md` still duplicates `PROMPT_CHAIN.md`** — the authoritative product narrative is effectively captured in `README.md` plus the implementation docs until that documentation discrepancy is cleaned up later.
 
 ## Tests / Verification
 
 - `npm install` — succeeds.
 - `npm run compile` — succeeds.
-- `npm run lint` — passes.
-- `npm run typecheck` — passes.
-- `npm run test:unit` — 55 tests passing.
-- `npm test` — attempted, but `@vscode/test-cli` could not resolve `update.code.visualstudio.com` in this sandbox.
+- `npm run lint` — passes after the privacy hardening changes.
+- `npm run test:unit` — 62 tests passing.
+- `npm test` — not rerun here; previous runs remain subject to VS Code download/network availability in this sandbox.
 
 ## Decisions Made This Session
 
-- ADR-021: One active Investigation per workspace.
-- ADR-022: Pin File remains deferred until passive evidence proves insufficient.
-- ADR-023: Resume Snapshot uses a read-only VS Code virtual document.
-- ADR-024: Resume uses conservative reopen, not restore.
+- ADR-025: Persist only re-entry-critical Investigation data.
+- ADR-026: Use the actual local security model, not cosmetic encryption.
 
 ## What Remains
 
-- **Prompt 8+:** Harden privacy, local data control, and failure handling on top of the working resume flow.
+- **Prompt 9+:** MVP quality pass and final validation polish on top of the hardened privacy/local-data baseline.
 
 ## Next Recommended Action
 
-**Prompt 8 — Privacy, Data Control, and Failure Hardening**
+**Prompt 9 — MVP Quality Pass**
 
-Entry condition: A developer can select a saved Investigation, inspect the Resume Snapshot, and conservatively reopen saved context without restore promises (satisfied).
+Entry condition: RepoTrail’s persisted schema, delete controls, storage documentation, and corruption handling now match the local-first privacy promise (satisfied).
 
 ## Do Not Touch / Deferred
 
-- Do not add Pin File UI/state unless evidence shows passive capture is insufficient.
-- Do not add Git analytics (blame, ownership, co-change, churn, hotspots, commit graphs).
-- Do not add GitHub/GitLab or any remote repository operations.
+- Do not add cloud sync, analytics, or remote repository integrations.
+- Do not add encryption theater around general Investigation metadata.
+- Do not expand capture into terminal, clipboard, screenshots, or source-content logging.
 - Do not add semantic interpretation or AI-derived summaries.
-- Do not add aggressive restore behavior; resume actions must stay conservative and factual.
-- Do not auto-infer "important" files from semantics; resume priority must stay grounded in recorded evidence only.
+- Do not turn Resume into exact restore behavior.

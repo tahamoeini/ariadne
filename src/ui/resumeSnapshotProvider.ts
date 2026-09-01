@@ -6,6 +6,8 @@ import { buildMissingInvestigationContent, buildResumeSnapshotContent } from './
 
 export interface ResumeSnapshotOpener {
   openInvestigation(investigation: Pick<Investigation, 'id' | 'name' | 'savedAt'>): Promise<void>;
+  forgetInvestigation(investigationId: string): void;
+  forgetAllInvestigations(): void;
 }
 
 export interface ResumeSnapshotProviderOptions {
@@ -30,13 +32,37 @@ function toSnapshotPath(displayName: string, investigationId: string, savedAt: s
   return `/${baseName || 'resume-snapshot'}-${versionSuffix || 'snapshot'}.md`;
 }
 
-class ResumeSnapshotContentProvider implements vscode.TextDocumentContentProvider {
+class ResumeSnapshotContentProvider
+  implements vscode.TextDocumentContentProvider, vscode.Disposable
+{
   private readonly contentCache = new Map<string, string>();
+  private readonly onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
+  readonly onDidChange = this.onDidChangeEmitter.event;
 
   constructor(private readonly options: ResumeSnapshotProviderOptions) {}
 
   cacheContent(uri: vscode.Uri, content: string): void {
     this.contentCache.set(uri.toString(), content);
+  }
+
+  forgetInvestigation(investigationId: string): void {
+    for (const key of Array.from(this.contentCache.keys())) {
+      const uri = vscode.Uri.parse(key);
+      if (parseInvestigationId(uri.query) !== investigationId) {
+        continue;
+      }
+
+      this.contentCache.delete(key);
+      this.onDidChangeEmitter.fire(uri);
+    }
+  }
+
+  forgetAllInvestigations(): void {
+    for (const key of Array.from(this.contentCache.keys())) {
+      const uri = vscode.Uri.parse(key);
+      this.contentCache.delete(key);
+      this.onDidChangeEmitter.fire(uri);
+    }
   }
 
   provideTextDocumentContent(uri: vscode.Uri): string {
@@ -68,6 +94,11 @@ class ResumeSnapshotContentProvider implements vscode.TextDocumentContentProvide
     });
     this.cacheContent(uri, content);
     return content;
+  }
+
+  dispose(): void {
+    this.contentCache.clear();
+    this.onDidChangeEmitter.dispose();
   }
 }
 
@@ -109,7 +140,13 @@ export function createResumeSnapshotOpener(
         const document = await vscode.workspace.openTextDocument(uri);
         await vscode.window.showTextDocument(document, { preview: false });
       },
+      forgetInvestigation(investigationId: string): void {
+        provider.forgetInvestigation(investigationId);
+      },
+      forgetAllInvestigations(): void {
+        provider.forgetAllInvestigations();
+      },
     },
-    disposable: registration,
+    disposable: vscode.Disposable.from(registration, provider),
   };
 }
