@@ -63,6 +63,10 @@ suite('RepoTrail Extension', () => {
       'Command repotrail.saveAndStopInvestigation not found',
     );
     assert.ok(commands.includes('repotrail.listInvestigations'), 'Command repotrail.listInvestigations not found');
+    assert.ok(
+      commands.includes('repotrail.openResumeSnapshot'),
+      'Command repotrail.openResumeSnapshot not found',
+    );
     assert.ok(commands.includes('repotrail.deleteInvestigation'), 'Command repotrail.deleteInvestigation not found');
   });
 
@@ -192,5 +196,40 @@ suite('RepoTrail Extension', () => {
 
     assert.strictEqual(deleted, true);
     assert.ok(!api.debug.listInvestigations().some((investigation) => investigation.id === created!.id));
+  });
+
+  test('opens a resume snapshot for a saved investigation', async () => {
+    const uri = await createTempFile('snapshot-fixture.ts', 'export const value = 1;\n');
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+    await pause();
+
+    const created = await vscode.commands.executeCommand<Investigation>(
+      'repotrail.startInvestigation',
+      {
+        workspacePath: workspaceRoot,
+        name: 'Snapshot investigation',
+        checkpointText: 'Verify the saved snapshot surface.',
+      },
+    );
+
+    assert.ok(created);
+
+    await vscode.commands.executeCommand<Investigation>('repotrail.saveAndStopInvestigation', {
+      workspacePath: workspaceRoot,
+    });
+
+    const opened = await vscode.commands.executeCommand<Investigation>(
+      'repotrail.openResumeSnapshot',
+      {
+        id: created!.id,
+      },
+    );
+
+    assert.strictEqual(opened?.id, created!.id);
+    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, 'repotrail-snapshot');
+    const text = vscode.window.activeTextEditor?.document.getText() ?? '';
+    assert.ok(text.includes('# Snapshot investigation'));
+    assert.ok(text.includes('## Checkpoint'));
+    assert.ok(text.includes('## Current Git state'));
   });
 });
