@@ -22,11 +22,12 @@ function parseInvestigationId(query: string): string | null {
   return investigationId?.trim() || null;
 }
 
-function toSnapshotPath(displayName: string, investigationId: string): string {
+function toSnapshotPath(displayName: string, investigationId: string, savedAt: string): string {
   const baseName = (displayName.trim() || investigationId)
     .replace(/[^\w.-]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  return `/${baseName || 'resume-snapshot'}.md`;
+  const versionSuffix = savedAt.replace(/[^\dT]/g, '').slice(0, 15);
+  return `/${baseName || 'resume-snapshot'}-${versionSuffix || 'snapshot'}.md`;
 }
 
 class ResumeSnapshotContentProvider implements vscode.TextDocumentContentProvider {
@@ -67,10 +68,9 @@ export function createResumeSnapshotOpener(
       async openInvestigation(investigation): Promise<void> {
         const uri = vscode.Uri.from({
           scheme: RESUME_SNAPSHOT_SCHEME,
-          path: toSnapshotPath(investigation.name, investigation.id),
+          path: toSnapshotPath(investigation.name, investigation.id, investigation.savedAt),
           query: new URLSearchParams({
             id: investigation.id,
-            savedAt: investigation.savedAt,
           }).toString(),
         });
         const document = await vscode.workspace.openTextDocument(uri);
