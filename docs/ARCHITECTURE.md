@@ -171,6 +171,7 @@ Minimal command surface for 0.0.1:
 - Save and stop the active Investigation.
 - List saved Investigations.
 - Open Resume Snapshot for a saved Investigation.
+- Resume a saved Investigation by reopening a conservative set of files.
 - Delete an Investigation.
 
 The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confirmation messages, and a read-only virtual Markdown document for the Resume Snapshot. No custom webview or complex UI is introduced in this milestone.
@@ -188,6 +189,15 @@ The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confi
 - Saved Investigations can be opened into a read-only virtual Markdown document backed by a VS Code `TextDocumentContentProvider`.
 - The Snapshot shows factual re-entry context in a fixed order: investigation name, optional checkpoint, saved timestamp, workspace/repository, branch when saved, saved Git state, current Git state, factual saved-vs-current Git differences, edited files, revisited files with explicit visit counts, last location, and a short recent observed path.
 - Missing or unavailable data is rendered explicitly instead of inferred, including absent checkpoints, missing Git state, deleted/moved saved paths, and missing/corrupted Investigation payloads.
+
+## Resume Actions (Implemented)
+
+- `RepoTrail: Resume Investigation` first opens the read-only Resume Snapshot (remember) and then reopens a conservative set of saved files (reopen).
+- Reopen planning is based only on factual evidence already captured in the Investigation: the last saved file/location, edited files, and revisited-file counts.
+- The reopen limit is intentionally small (5 files by default) to avoid recreating a huge tab set.
+- If the last saved file still exists, the command reopens it last and moves the cursor to the saved line/column, clamped to the file's current bounds when the location is stale.
+- Missing files, missing workspaces, changed branches, repository drift, and no-Git states do not fail the resume flow; the Snapshot still opens and the command reports partial recovery honestly.
+- Resume does not attempt exact workspace/window/tab restoration or infer semantic importance.
 
 ## Testing Strategy
 

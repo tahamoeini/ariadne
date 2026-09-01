@@ -32,7 +32,7 @@ npm install
 1. Open this folder in VS Code.
 2. Press **F5** to launch the Extension Development Host.
 3. Run **RepoTrail: Start Investigation** or **RepoTrail: Save Recent Activity as Investigation** from the Command Palette.
-4. Use **RepoTrail: Add or Update Checkpoint**, **RepoTrail: Save and Stop Investigation**, **RepoTrail: List Saved Investigations**, **RepoTrail: Open Resume Snapshot**, and **RepoTrail: Delete Investigation** as needed.
+4. Use **RepoTrail: Add or Update Checkpoint**, **RepoTrail: Save and Stop Investigation**, **RepoTrail: List Saved Investigations**, **RepoTrail: Open Resume Snapshot**, **RepoTrail: Resume Investigation**, and **RepoTrail: Delete Investigation** as needed.
 
 ### Run Tests
 
@@ -465,6 +465,20 @@ authController.ts
 
 [ Resume Investigation ]
 ```
+
+RepoTrail separates three ideas:
+
+* **Remember** — inspect the saved Resume Snapshot.
+* **Reopen** — use **Resume Investigation** to reopen a small, factual set of saved files.
+* **Restore** — not supported in 0.0.1; RepoTrail does not promise exact tab, layout, workspace, or mental-state restoration.
+
+For 0.0.1, Resume Investigation stays conservative:
+
+* it opens the Resume Snapshot first,
+* reopens at most 5 saved files,
+* prioritizes the last saved file, edited files, and then revisited files by observed count,
+* returns to the last saved line/column when the file still exists,
+* reports missing files or workspace drift without failing.
 
 RepoTrail should expose **observable evidence**, not synthetic judgments.
 
@@ -1574,13 +1588,13 @@ recent observed path
 
 Where supported:
 
-* open workspace
-* reopen relevant files
-* return to last file/location
+* reopen a small saved file set
+* return to the last file/location
+* report workspace drift or missing paths honestly instead of failing or claiming full restoration
 
 Deliverable:
 
-RepoTrail assists continuation rather than merely describing history.
+RepoTrail assists continuation rather than merely describing history, without making restore promises it cannot keep.
 
 ---
 

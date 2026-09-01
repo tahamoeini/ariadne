@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { ResumeExecutionResult } from '../commands/resumePlan';
 import { Investigation } from '../domain';
 import { RepoTrailExtensionApi } from '../extension';
 
@@ -66,6 +67,10 @@ suite('RepoTrail Extension', () => {
     assert.ok(
       commands.includes('repotrail.openResumeSnapshot'),
       'Command repotrail.openResumeSnapshot not found',
+    );
+    assert.ok(
+      commands.includes('repotrail.resumeInvestigation'),
+      'Command repotrail.resumeInvestigation not found',
     );
     assert.ok(commands.includes('repotrail.deleteInvestigation'), 'Command repotrail.deleteInvestigation not found');
   });
@@ -231,5 +236,168 @@ suite('RepoTrail Extension', () => {
     assert.ok(text.includes('# Snapshot investigation'));
     assert.ok(text.includes('## Checkpoint'));
     assert.ok(text.includes('## Current Git state'));
+  });
+
+  test('resumes a saved investigation by reopening files and the last location', async () => {
+    const supportUri = await createTempFile('resume-support.ts', 'export const support = 1;\n');
+    const lastUri = await createTempFile(
+      'resume-last.ts',
+      'first line\nsecond line\nthird line\n',
+    );
+
+    const created = await vscode.commands.executeCommand<Investigation>(
+      'repotrail.startInvestigation',
+      {
+        workspacePath: workspaceRoot,
+        name: 'Resume flow investigation',
+        checkpointText: 'Need to continue from the last file.',
+      },
+    );
+
+    assert.ok(created);
+
+    const supportEditor = await vscode.window.showTextDocument(
+      await vscode.workspace.openTextDocument(supportUri),
+    );
+    await pause();
+    await supportEditor.edit((editBuilder) => {
+      editBuilder.insert(new vscode.Position(1, 0), 'export const updated = 2;\n');
+    });
+    await pause();
+
+    const lastEditor = await vscode.window.showTextDocument(
+      await vscode.workspace.openTextDocument(lastUri),
+    );
+    await pause();
+    lastEditor.selection = new vscode.Selection(new vscode.Position(2, 1), new vscode.Position(2, 1));
+    await pause();
+
+    await vscode.commands.executeCommand<Investigation>('repotrail.saveAndStopInvestigation', {
+      workspacePath: workspaceRoot,
+    });
+
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    await pause();
+
+    const result = await vscode.commands.executeCommand<ResumeExecutionResult>(
+      'repotrail.resumeInvestigation',
+      {
+        id: created!.id,
+      },
+    );
+
+    assert.ok(result);
+    assert.deepStrictEqual(result!.reopenedFiles, [supportUri.fsPath, lastUri.fsPath]);
+    assert.deepStrictEqual(result!.missingFiles, []);
+    assert.deepStrictEqual(result!.revealedLocation, {
+      filePath: lastUri.fsPath,
+      line: 3,
+      column: 2,
+    });
+    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.fsPath, lastUri.fsPath);
+    assert.strictEqual(vscode.window.activeTextEditor?.selection.active.line, 2);
+    assert.strictEqual(vscode.window.activeTextEditor?.selection.active.character, 1);
+  });
+
+  test('continues resuming when one saved file is missing', async () => {
+    const missingUri = await createTempFile('resume-missing.ts', 'export const gone = true;\n');
+    const keepUri = await createTempFile('resume-keep.ts', 'export const keep = true;\n');
+
+    const created = await vscode.commands.executeCommand<Investigation>(
+      'repotrail.startInvestigation',
+      {
+        workspacePath: workspaceRoot,
+        name: 'Resume missing file investigation',
+        checkpointText: null,
+      },
+    );
+
+    assert.ok(created);
+
+    const missingEditor = await vscode.window.showTextDocument(
+      await vscode.workspace.openTextDocument(missingUri),
+    );
+    await pause();
+    await missingEditor.edit((editBuilder) => {
+      editBuilder.insert(new vscode.Position(1, 0), 'export const edited = true;\n');
+    });
+    await pause();
+
+    const keepEditor = await vscode.window.showTextDocument(
+      await vscode.workspace.openTextDocument(keepUri),
+    );
+    await pause();
+    keepEditor.selection = new vscode.Selection(new vscode.Position(0, 7), new vscode.Position(0, 7));
+    await pause();
+
+    await vscode.commands.executeCommand<Investigation>('repotrail.saveAndStopInvestigation', {
+      workspacePath: workspaceRoot,
+    });
+
+    fs.rmSync(missingUri.fsPath, { force: true });
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    await pause();
+
+    const result = await vscode.commands.executeCommand<ResumeExecutionResult>(
+      'repotrail.resumeInvestigation',
+      {
+        id: created!.id,
+      },
+    );
+
+    assert.ok(result);
+    assert.deepStrictEqual(result!.reopenedFiles, [keepUri.fsPath]);
+    assert.deepStrictEqual(result!.missingFiles, [missingUri.fsPath]);
+    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.fsPath, keepUri.fsPath);
+  });
+
+  test('clamps stale saved locations when the file shrank', async () => {
+    const staleUri = await createTempFile(
+      'resume-stale.ts',
+      'first line\nsecond line\nthird line stays long enough\n',
+    );
+
+    const created = await vscode.commands.executeCommand<Investigation>(
+      'repotrail.startInvestigation',
+      {
+        workspacePath: workspaceRoot,
+        name: 'Resume stale location investigation',
+        checkpointText: null,
+      },
+    );
+
+    assert.ok(created);
+
+    const staleEditor = await vscode.window.showTextDocument(
+      await vscode.workspace.openTextDocument(staleUri),
+    );
+    await pause();
+    staleEditor.selection = new vscode.Selection(new vscode.Position(2, 20), new vscode.Position(2, 20));
+    await pause();
+
+    await vscode.commands.executeCommand<Investigation>('repotrail.saveAndStopInvestigation', {
+      workspacePath: workspaceRoot,
+    });
+
+    fs.writeFileSync(staleUri.fsPath, 'tiny\n', 'utf-8');
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    await pause();
+
+    const result = await vscode.commands.executeCommand<ResumeExecutionResult>(
+      'repotrail.resumeInvestigation',
+      {
+        id: created!.id,
+      },
+    );
+
+    assert.ok(result);
+    assert.deepStrictEqual(result!.revealedLocation, {
+      filePath: staleUri.fsPath,
+      line: 1,
+      column: 5,
+    });
+    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.fsPath, staleUri.fsPath);
+    assert.strictEqual(vscode.window.activeTextEditor?.selection.active.line, 0);
+    assert.strictEqual(vscode.window.activeTextEditor?.selection.active.character, 4);
   });
 });
