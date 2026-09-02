@@ -32,7 +32,7 @@ import {
   saveInvestigation,
 } from '../storage';
 
-const ACTIVE_INVESTIGATIONS_KEY = 'repotrail.activeInvestigations';
+const ACTIVE_INVESTIGATIONS_KEY = 'ariadne.activeInvestigations';
 export const MAX_INVESTIGATION_NAME_LENGTH = 120;
 export const MAX_CHECKPOINT_LENGTH = 1000;
 export const MAX_BROWSER_REFERENCE_URL_LENGTH = 2000;
@@ -60,6 +60,13 @@ export interface InvestigationLifecycleOptions {
   stateStore: InvestigationLifecycleStateStore;
   captureGitSnapshot?: (targetPath: string) => GitSnapshot | PromiseLike<GitSnapshot>;
   autoSaveDebounceMs?: number;
+  onAutoSaveStatusChanged?: (status: AutoSaveStatus) => void;
+}
+
+export interface AutoSaveStatus {
+  workspace: string;
+  status: 'error' | 'recovered';
+  error?: unknown;
 }
 
 export interface CreateInvestigationOptions {
@@ -168,6 +175,10 @@ function parseBrowserReferenceUrl(value: string): string {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error('Browser reference URL must use http:// or https://.');
   }
+
+  // Protect local privacy by default: strip query strings and fragments.
+  parsed.search = '';
+  parsed.hash = '';
 
   return parsed.toString();
 }
@@ -348,6 +359,7 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
   private readonly autoSaveDebounceMs: number;
   private readonly autoSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly inFlightAutoSave = new Set<string>();
+  private readonly failedAutoSaveWorkspaces = new Set<string>();
 
   constructor(private readonly options: InvestigationLifecycleOptions) {
     this.captureGitSnapshotForTarget = options.captureGitSnapshot ?? captureGitSnapshot;
@@ -726,8 +738,22 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
     this.inFlightAutoSave.add(workspace);
     try {
       await this.persistActiveInvestigation(active, 'save');
-    } catch {
-      // Ignore autosave failures; explicit save/stop remains available.
+      if (this.failedAutoSaveWorkspaces.has(workspace)) {
+        this.failedAutoSaveWorkspaces.delete(workspace);
+        this.options.onAutoSaveStatusChanged?.({
+          workspace,
+          status: 'recovered',
+        });
+      }
+    } catch (error) {
+      if (!this.failedAutoSaveWorkspaces.has(workspace)) {
+        this.failedAutoSaveWorkspaces.add(workspace);
+        this.options.onAutoSaveStatusChanged?.({
+          workspace,
+          status: 'error',
+          error,
+        });
+      }
     } finally {
       this.inFlightAutoSave.delete(workspace);
     }

@@ -12,7 +12,7 @@ import {
 import { loadInvestigation } from '../storage';
 
 function makeTmpDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'repotrail-lifecycle-test-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-lifecycle-test-'));
 }
 
 function rmDir(dir: string): void {
@@ -710,6 +710,147 @@ suite('Investigation Lifecycle', () => {
     service.dispose();
   });
 
+  test('reports autosave failure once and recovery after subsequent success', async () => {
+    const workspace = '/workspace';
+    const filePath = '/workspace/src/auto-error.ts';
+    const capture = new FakeCapture();
+    const stateStore = new FakeStateStore();
+
+    capture.setEvents(workspace, [
+      makeEvent(
+        'editor.active',
+        workspace,
+        filePath,
+        '2026-05-01T13:40:00.000Z',
+        2,
+        1,
+      ),
+    ]);
+
+    let shouldFailGitSnapshot = false;
+    const statuses: { workspace: string; status: 'error' | 'recovered' }[] = [];
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore,
+      autoSaveDebounceMs: 5,
+      captureGitSnapshot: () => {
+        if (shouldFailGitSnapshot) {
+          throw new Error('simulated autosave failure');
+        }
+
+        return makeGitSnapshot({
+          timestamp: '2026-05-01T13:41:00.000Z',
+          head: 'recovered',
+        });
+      },
+      onAutoSaveStatusChanged: (status) => {
+        statuses.push({ workspace: status.workspace, status: status.status });
+      },
+    });
+
+    await service.startInvestigation({
+      workspace,
+      name: 'Autosave warning coverage',
+      checkpointText: null,
+    });
+
+    shouldFailGitSnapshot = true;
+
+    const firstEvent = makeEvent(
+      'file.edit',
+      workspace,
+      filePath,
+      '2026-05-01T13:40:10.000Z',
+      4,
+      2,
+    );
+    capture.addEvent(firstEvent);
+    service.recordObservedEvent(firstEvent);
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const secondEvent = makeEvent(
+      'file.edit',
+      workspace,
+      filePath,
+      '2026-05-01T13:40:20.000Z',
+      5,
+      2,
+    );
+    capture.addEvent(secondEvent);
+    service.recordObservedEvent(secondEvent);
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    // Repeat failure should not emit repeated error noise.
+    const thirdEvent = makeEvent(
+      'file.edit',
+      workspace,
+      filePath,
+      '2026-05-01T13:40:30.000Z',
+      6,
+      2,
+    );
+    capture.addEvent(thirdEvent);
+    service.recordObservedEvent(thirdEvent);
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    shouldFailGitSnapshot = false;
+    const fourthEvent = makeEvent(
+      'file.edit',
+      workspace,
+      filePath,
+      '2026-05-01T13:40:40.000Z',
+      7,
+      2,
+    );
+    capture.addEvent(fourthEvent);
+    service.recordObservedEvent(fourthEvent);
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    assert.deepStrictEqual(statuses, [
+      { workspace, status: 'error' },
+      { workspace, status: 'recovered' },
+    ]);
+
+    service.dispose();
+  });
+
+  test('sanitizes attached browser reference URLs by removing query and fragment', async () => {
+    const workspace = '/workspace';
+    const capture = new FakeCapture();
+    const stateStore = new FakeStateStore();
+
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore,
+      captureGitSnapshot: () => makeGitSnapshot(),
+    });
+
+    const created = await service.startInvestigation({
+      workspace,
+      name: 'URL sanitization',
+      checkpointText: null,
+    });
+
+    const attached = await service.attachBrowserReference(workspace, {
+      url: 'https://example.com/callback?token=secret&state=abc#frag',
+      title: 'Auth callback',
+    });
+
+    assert.ok(attached);
+    assert.strictEqual(attached!.browserReferences.length, 1);
+    assert.strictEqual(attached!.browserReferences[0].url, 'https://example.com/callback');
+
+    const loaded = loadInvestigation(tmpDir, created.id);
+    assert.ok(loaded);
+    assert.strictEqual(loaded!.browserReferences[0].url, 'https://example.com/callback');
+  });
+
   test('collapses consecutive edit noise into one timeline entry', async () => {
     const workspace = '/workspace';
     const filePath = '/workspace/src/timeline.ts';
@@ -1056,7 +1197,7 @@ suite('Investigation Lifecycle', () => {
     assert.deepStrictEqual(service.listInvestigations(), []);
     assert.strictEqual(loadInvestigation(tmpDir, created.id), null);
     assert.deepStrictEqual(
-      stateStore.get<Record<string, string>>('repotrail.activeInvestigations'),
+      stateStore.get<Record<string, string>>('ariadne.activeInvestigations'),
       {},
     );
   });
@@ -1064,7 +1205,7 @@ suite('Investigation Lifecycle', () => {
   test('ignores malformed active-investigation state during restoration', async () => {
     const workspace = '/workspace';
     const stateStore = new FakeStateStore();
-    await stateStore.update('repotrail.activeInvestigations', 42);
+    await stateStore.update('ariadne.activeInvestigations', 42);
 
     const service = new InvestigationLifecycleService({
       storageDir: tmpDir,

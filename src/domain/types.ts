@@ -1,5 +1,5 @@
 /**
- * RepoTrail 0.0.1 — Core Domain Types
+ * Ariadne 0.0.1 — Core Domain Types
  *
  * All types are plain data objects suitable for JSON serialization.
  * No methods, no class hierarchies, no semantic scoring fields.

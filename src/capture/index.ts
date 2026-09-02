@@ -11,6 +11,6 @@ export type {
   WorkspaceEventBuffer,
 } from './eventBuffer';
 export type {
-  RepoTrailDebugApi,
+  AriadneDebugApi,
   VsCodeObservedEventCapture,
 } from './vscodeEventCapture';

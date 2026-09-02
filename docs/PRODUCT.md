@@ -1,12 +1,12 @@
-# RepoTrail — Product Specification (0.0.1)
+# Ariadne — Product Specification (0.0.1)
 
 ## Positioning
 
-RepoTrail helps developers pick up an interrupted code investigation where they left it.
+Ariadne helps developers pick up an interrupted code investigation where they left it.
 
 VS Code remembers workspace state.
 Git remembers source changes.
-RepoTrail remembers investigation context.
+Ariadne remembers investigation context.
 
 ## Problem
 
@@ -17,7 +17,7 @@ When developers return after interruption, they often still have code and Git hi
 - what evidence they gathered
 - where they should continue
 
-RepoTrail exists to reduce re-orientation time with factual, local investigation memory.
+Ariadne exists to reduce re-orientation time with factual, local investigation memory.
 
 ## Product Principle
 
@@ -52,7 +52,7 @@ A bounded unit of work with:
 
 Developer-authored intent statement.
 
-RepoTrail does not invent this.
+Ariadne does not invent this.
 
 ### Snapshot
 
@@ -65,7 +65,7 @@ The resume package that answers:
 
 ## Current Capability Summary
 
-RepoTrail 0.0.1 currently provides:
+Ariadne 0.0.1 currently provides:
 
 - explicit investigation start
 - retroactive save from rolling in-memory activity
@@ -110,7 +110,7 @@ Requirements met:
 
 ## What Success Means
 
-RepoTrail is successful when developers continue interrupted investigations in minutes instead of reconstructing from scratch.
+Ariadne is successful when developers continue interrupted investigations in minutes instead of reconstructing from scratch.
 
 Primary metric direction:
 

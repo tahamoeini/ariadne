@@ -1,4 +1,4 @@
-# RepoTrail — Agent Handoff
+# Ariadne — Agent Handoff
 
 ## Current Milestone
 
@@ -20,7 +20,7 @@
 
 - Added a persisted `browserReferences` list to each Investigation for deliberate external page attachment.
 - Kept references minimal: URL, optional title, and attach timestamp only.
-- Added the `RepoTrail: Attach Current Page to RepoTrail` command, which prefers explicit selection from open HTTP(S) page candidates in VS Code tabs and falls back to manual URL entry.
+- Added the `Ariadne: Attach Current Page to Ariadne` command, which prefers explicit selection from open HTTP(S) page candidates in VS Code tabs and falls back to manual URL entry.
 - Rendered attached references textually inside the existing Resume Snapshot instead of creating a browser panel or dashboard.
 - Kept references re-entry-only: they do not drive automatic reopening, do not capture page contents, and do not import browser history.
 - Bumped storage schema to version 6 while keeping older saved investigations loadable; schema version 5 investigations load with an empty browser-reference list.
@@ -53,7 +53,7 @@
 ## Important Implementation Details
 
 1. Browser references are persisted only inside one Investigation and only to improve re-entry.
-2. Browser references are deliberately manual. RepoTrail never imports browser history or page contents.
+2. Browser references are deliberately manual. Ariadne never imports browser history or page contents.
 3. The command can show temporary open-page candidates only when VS Code exposes HTTP(S) tab URIs locally; otherwise it falls back to manual URL entry.
 4. Attached references are not used for reopen planning. They exist only to improve human re-entry in the Resume Snapshot.
 5. Duplicate attachments by URL are collapsed to one saved reference, refreshing the timestamp and preserving the existing title when a later attachment omits one.

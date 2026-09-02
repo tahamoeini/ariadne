@@ -1,4 +1,4 @@
-# RepoTrail 0.0.1 — Architecture
+# Ariadne 0.0.1 — Architecture
 
 ## Technical Assumptions
 
@@ -138,7 +138,7 @@ Modules communicate through domain types. No module directly imports another mod
 
 ObservedEventType: `editor.active`, `editor.selection`, `file.edit`, `navigation.definition`, `navigation.reference`.
 
-The runtime model is intentionally richer than the persisted schema. RepoTrail rehydrates a small runtime `recentEvents` trail from saved path history for reopen logic, but persistence now keeps a separate condensed `timeline` for factual sequence reconstruction. RepoTrail still does not persist full observed-event objects once an Investigation is written to disk.
+The runtime model is intentionally richer than the persisted schema. Ariadne rehydrates a small runtime `recentEvents` trail from saved path history for reopen logic, but persistence now keeps a separate condensed `timeline` for factual sequence reconstruction. Ariadne still does not persist full observed-event objects once an Investigation is written to disk.
 
 ## Storage Mechanism
 
@@ -192,7 +192,7 @@ The runtime model is intentionally richer than the persisted schema. RepoTrail r
 - selection history beyond the last saved location
 - duplicated `snapshot.git.repositoryRoot`
 
-When file paths are inside the saved workspace, RepoTrail stores them as workspace-relative paths on disk and expands them back to absolute paths only when loading the Investigation.
+When file paths are inside the saved workspace, Ariadne stores them as workspace-relative paths on disk and expands them back to absolute paths only when loading the Investigation.
 
 **Schema versioning:** The `schemaVersion` field is checked on load. Current saves use schema version 6. Legacy version 1 investigations are migrated to the explicit Git availability model. Legacy version 2 and 3 investigations are minimized on load into the current schema shape and receive a best-effort derived timeline and navigation graph when none were persisted. Legacy version 4 investigations derive the navigation graph from the persisted timeline when needed. Legacy version 5 investigations load with an empty browser-reference list. Unknown future versions are rejected (returns null).
 
@@ -202,17 +202,17 @@ When file paths are inside the saved workspace, RepoTrail stores them as workspa
 - Survives extension restarts and VS Code reloads (files on disk).
 - No external database.
 - Plain local JSON by design; no custom encryption is added.
-- Best-effort private filesystem permissions are applied to RepoTrail directories/files where the platform supports them.
+- Best-effort private filesystem permissions are applied to Ariadne directories/files where the platform supports them.
 - Saves use temp-file replacement and a retained `.bak` copy of the previous save so interrupted or malformed primary files can fall back safely.
 - Malformed files and malformed `workspaceState` entries are skipped so extension activation continues.
 - Active Investigation pointers are stored separately in `ExtensionContext.workspaceState` so a workspace can recover its current Investigation after extension restart without expanding the on-disk Investigation schema.
 
 ## Security / Privacy Model
 
-- RepoTrail requires no account and makes no network, cloud, analytics, or repository-upload requests.
+- Ariadne requires no account and makes no network, cloud, analytics, or repository-upload requests.
 - The rolling event buffer stays in memory only; saving an Investigation persists only the reduced re-entry subset above.
-- RepoTrail does not store keystrokes, clipboard data, screenshots, terminal content, or full source-code contents.
-- RepoTrail does not import browser history or capture page contents; deliberate browser references persist only minimal page metadata.
+- Ariadne does not store keystrokes, clipboard data, screenshots, terminal content, or full source-code contents.
+- Ariadne does not import browser history or capture page contents; deliberate browser references persist only minimal page metadata.
 - Checkpoint text is persisted as plain local text because it is the user-authored re-entry note; it should not contain secrets.
 - The persisted timeline is condensed and investigation-scoped; it is not a general telemetry stream or cross-investigation history.
 - The persisted navigation graph is also investigation-scoped and factual; it is not a repository dependency graph or architectural map.
@@ -233,7 +233,7 @@ Definition/reference navigation is intentionally deferred unless it becomes reli
 Observed events are stored in a bounded, time-limited rolling buffer rather than an unbounded log.
 
 - Default retention window is 20 minutes and is internally configurable.
-- The extension activates on `onStartupFinished` so the rolling buffer can begin collecting activity before the first RepoTrail command.
+- The extension activates on `onStartupFinished` so the rolling buffer can begin collecting activity before the first Ariadne command.
 - Events older than the retention window are discarded on read/write.
 - Buffer is kept in memory only and resets on extension restart.
 - Buffer is per-workspace, with a safety max-event cap to avoid unbounded growth during noisy sessions.
@@ -269,8 +269,8 @@ Minimal command surface for 0.0.1:
 - Show Resume Snapshot for a saved Investigation.
 - Resume a saved Investigation by reopening a conservative set of files.
 - Delete an Investigation.
-- Delete all RepoTrail data.
-- Show the local RepoTrail storage location.
+- Delete all Ariadne data.
+- Show the local Ariadne storage location.
 
 The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confirmation messages, OS reveal behavior for the storage folder, and a read-only virtual Markdown document for the Resume Snapshot. No custom webview or complex UI is introduced in this milestone.
 
@@ -293,7 +293,7 @@ The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confi
 
 ## Resume Actions (Implemented)
 
-- `RepoTrail: Resume Investigation` first opens the read-only Resume Snapshot (remember) and then reopens a conservative set of saved files (reopen).
+- `Ariadne: Resume Investigation` first opens the read-only Resume Snapshot (remember) and then reopens a conservative set of saved files (reopen).
 - Reopen planning is still based only on factual code-investigation evidence already captured in the Investigation: the last saved file/location, edited files, revisited-file counts, and graph relationships. External references help the developer remember context but do not drive automatic reopening.
 - The reopen limit is intentionally small (5 files by default) to avoid recreating a huge tab set.
 - If the last saved file still exists, the command reopens it last and moves the cursor to the saved line/column, clamped to the file's current bounds when the location is stale.

@@ -1,6 +1,6 @@
-# RepoTrail — AI Coding Agent Prompt Chain
+# Ariadne — AI Coding Agent Prompt Chain
 
-> **Purpose:** Build RepoTrail `0.0.1` incrementally with AI coding agents while preserving product scope, architectural decisions, implementation state, and validation intent across separate chats and different agents.
+> **Purpose:** Build Ariadne `0.0.1` incrementally with AI coding agents while preserving product scope, architectural decisions, implementation state, and validation intent across separate chats and different agents.
 
 This document is **not** the product specification itself.
 
@@ -10,7 +10,7 @@ The authoritative product definition must live separately in:
 docs/PRODUCT_BASELINE.md
 ```
 
-That file should contain the frozen RepoTrail product strategy and roadmap.
+That file should contain the frozen Ariadne product strategy and roadmap.
 
 This document tells an AI coding agent **how to implement that strategy safely, incrementally, and without losing context**.
 
@@ -48,7 +48,7 @@ The repository is the memory.
 
 # 2. Source-of-Truth Files
 
-RepoTrail should maintain these files:
+Ariadne should maintain these files:
 
 ```text
 docs/
@@ -67,7 +67,7 @@ It defines:
 
 * product thesis,
 * user problem,
-* RepoTrail job,
+* Ariadne job,
 * MVP scope,
 * non-goals,
 * core objects,
@@ -114,7 +114,7 @@ ADR-001
 Use bounded event buffer rather than permanent raw telemetry.
 
 Reason:
-RepoTrail is a context-recovery tool, not an exhaustive activity logger.
+Ariadne is a context-recovery tool, not an exhaustive activity logger.
 ```
 
 Agents should append important decisions rather than repeatedly reconsidering them.
@@ -178,7 +178,7 @@ Include these rules in every implementation prompt.
 
 ## Product discipline
 
-Do not add functionality outside the current RepoTrail `0.0.1` scope.
+Do not add functionality outside the current Ariadne `0.0.1` scope.
 
 Specifically do not introduce:
 
@@ -211,7 +211,7 @@ Do not implement it.
 
 ## Evidence over interpretation
 
-RepoTrail may record facts such as:
+Ariadne may record facts such as:
 
 ```text
 file visited 6 times
@@ -221,7 +221,7 @@ branch changed
 Git state changed
 ```
 
-RepoTrail must not convert these facts into unsupported claims such as:
+Ariadne must not convert these facts into unsupported claims such as:
 
 ```text
 important file
@@ -332,7 +332,7 @@ If you start a new chat, use the **New Chat Bootstrap Prompt** before the releva
 Use this at the beginning of **every new coding-agent conversation**.
 
 ```text
-You are continuing development of RepoTrail.
+You are continuing development of Ariadne.
 
 Do not assume previous chat history is available or authoritative.
 
@@ -359,11 +359,11 @@ Before doing any implementation work:
 
 5. Do not begin a new milestone if the previous milestone is incomplete.
 
-6. Do not expand RepoTrail beyond the scope defined in PRODUCT_BASELINE.md.
+6. Do not expand Ariadne beyond the scope defined in PRODUCT_BASELINE.md.
 
 7. Human intent must remain human-supplied. Observed activity must remain factual.
 
-8. RepoTrail is not an exhaustive developer activity logger. Its purpose is to preserve enough context to help resume an interrupted code investigation.
+8. Ariadne is not an exhaustive developer activity logger. Its purpose is to preserve enough context to help resume an interrupted code investigation.
 
 After inspecting everything, briefly state your understanding of the current project state and then perform only the task given in the next prompt.
 
@@ -385,7 +385,7 @@ Create the persistent documentation structure that allows future agents to conti
 ## Prompt
 
 ```text
-We are beginning implementation of RepoTrail 0.0.1.
+We are beginning implementation of Ariadne 0.0.1.
 
 First read docs/PRODUCT_BASELINE.md completely.
 
@@ -481,7 +481,7 @@ Produce the smallest working extension skeleton.
 ## Prompt
 
 ```text
-Continue RepoTrail development.
+Continue Ariadne development.
 
 First follow the project bootstrap process:
 
@@ -494,7 +494,7 @@ First follow the project bootstrap process:
 
 Current milestone:
 
-Create the minimal RepoTrail VS Code extension scaffold.
+Create the minimal Ariadne VS Code extension scaffold.
 
 Requirements:
 
@@ -508,7 +508,7 @@ Requirements:
 
 5. The extension must:
    - load successfully,
-   - expose a simple RepoTrail command,
+   - expose a simple Ariadne command,
    - allow verification that activation works,
    - have a basic test setup.
 
@@ -574,13 +574,13 @@ Create Investigation, Checkpoint, Snapshot, and persistence concepts without yet
 ## Prompt
 
 ```text
-Continue RepoTrail development from the current handoff.
+Continue Ariadne development from the current handoff.
 
 Read all project memory files and inspect repository state first.
 
 Current milestone:
 
-Implement the core RepoTrail domain model and local persistence.
+Implement the core Ariadne domain model and local persistence.
 
 Implement only the minimum models needed for 0.0.1.
 
@@ -692,7 +692,7 @@ Capture recent factual VS Code activity without permanently logging everything.
 ## Prompt
 
 ```text
-Continue RepoTrail from the documented repository state.
+Continue Ariadne from the documented repository state.
 
 Read all project memory files first.
 
@@ -702,7 +702,7 @@ Implement the bounded rolling event buffer.
 
 Product principle:
 
-RepoTrail is NOT a historical record of everything a developer did.
+Ariadne is NOT a historical record of everything a developer did.
 
 The buffer exists only to preserve enough recent context to create or enrich an Investigation.
 
@@ -773,12 +773,12 @@ Recent VS Code activity is captured accurately enough and bounded to the intende
 
 ## Goal
 
-Capture Git state at a point in time without turning RepoTrail into a Git client.
+Capture Git state at a point in time without turning Ariadne into a Git client.
 
 ## Prompt
 
 ```text
-Continue RepoTrail development.
+Continue Ariadne development.
 
 Read all source-of-truth files and current handoff before changing code.
 
@@ -786,7 +786,7 @@ Current milestone:
 
 Implement lightweight local Git Snapshot support.
 
-RepoTrail should capture factual Git context only.
+Ariadne should capture factual Git context only.
 
 For a repository, capture where available:
 
@@ -800,7 +800,7 @@ For a repository, capture where available:
 
 If no Git repository exists:
 
-- RepoTrail must continue functioning,
+- Ariadne must continue functioning,
 - return a clear no-Git state,
 - do not fail the entire Investigation workflow.
 
@@ -853,7 +853,7 @@ Do not build historical Git analytics.
 
 ## Exit condition
 
-RepoTrail can reliably produce a lightweight Git Snapshot or a valid no-Git state.
+Ariadne can reliably produce a lightweight Git Snapshot or a valid no-Git state.
 
 ---
 
@@ -866,7 +866,7 @@ Make explicit and retroactive Investigation creation functional.
 ## Prompt
 
 ```text
-Continue RepoTrail.
+Continue Ariadne.
 
 Read all project documentation and inspect the existing implementation first.
 
@@ -950,12 +950,12 @@ A developer can create, save, list, and delete Investigations, including from re
 
 ## Goal
 
-Create RepoTrail's first real user-facing value surface.
+Create Ariadne's first real user-facing value surface.
 
 ## Prompt
 
 ```text
-Continue RepoTrail from the current handoff.
+Continue Ariadne from the current handoff.
 
 Read all project-memory files and inspect the repository first.
 
@@ -963,7 +963,7 @@ Current milestone:
 
 Build the Resume Snapshot.
 
-This is the primary RepoTrail 0.0.1 product surface.
+This is the primary Ariadne 0.0.1 product surface.
 
 The Resume Snapshot should prioritize re-entry context, not telemetry volume.
 
@@ -1059,7 +1059,7 @@ Help the developer continue rather than merely inspect historical data.
 ## Prompt
 
 ```text
-Continue RepoTrail development.
+Continue Ariadne development.
 
 Read the full project context and current handoff first.
 
@@ -1067,7 +1067,7 @@ Current milestone:
 
 Implement conservative Resume actions.
 
-RepoTrail should distinguish:
+Ariadne should distinguish:
 
 REMEMBER
 display previously observed state
@@ -1078,7 +1078,7 @@ open resources where VS Code reliably supports it
 RESTORE
 only use this term where exact state restoration is genuinely supported
 
-For RepoTrail 0.0.1, implement only reliable reopen behavior.
+For Ariadne 0.0.1, implement only reliable reopen behavior.
 
 Potential actions:
 
@@ -1133,12 +1133,12 @@ The user can reopen a preserved Investigation context using supported VS Code me
 
 ## Goal
 
-Ensure RepoTrail deserves the "local-first" claim.
+Ensure Ariadne deserves the "local-first" claim.
 
 ## Prompt
 
 ```text
-Continue RepoTrail.
+Continue Ariadne.
 
 Read PRODUCT_BASELINE.md and all implementation documentation first.
 
@@ -1146,7 +1146,7 @@ Current milestone:
 
 Harden privacy, local data control, and failure handling.
 
-Verify that RepoTrail 0.0.1:
+Verify that Ariadne 0.0.1:
 
 - requires no account,
 - makes no cloud requests,
@@ -1161,7 +1161,7 @@ Verify that RepoTrail 0.0.1:
 Implement appropriate user controls for:
 
 - deleting one Investigation,
-- deleting all RepoTrail data,
+- deleting all Ariadne data,
 - viewing where local data is stored or otherwise clearly documenting it.
 
 Review every persisted field and answer:
@@ -1200,7 +1200,7 @@ Stop after privacy review and hardening are complete.
 
 ## Exit condition
 
-RepoTrail's actual implementation matches its local-first/minimal-data promise.
+Ariadne's actual implementation matches its local-first/minimal-data promise.
 
 ---
 
@@ -1213,13 +1213,13 @@ Turn the prototype into a coherent `0.0.1` test build without adding features.
 ## Prompt
 
 ```text
-Continue RepoTrail from the current repository state.
+Continue Ariadne from the current repository state.
 
 Read all source-of-truth documentation and handoff first.
 
 Current milestone:
 
-Perform the RepoTrail 0.0.1 quality pass.
+Perform the Ariadne 0.0.1 quality pass.
 
 This milestone is NOT for adding features.
 
@@ -1235,7 +1235,7 @@ optional checkpoint
 ↓
 leave
 ↓
-open RepoTrail later
+open Ariadne later
 ↓
 Resume Snapshot
 ↓
@@ -1297,7 +1297,7 @@ Stop after quality verification.
 
 ## Exit condition
 
-RepoTrail `0.0.1` is stable enough for real-user validation.
+Ariadne `0.0.1` is stable enough for real-user validation.
 
 ---
 
@@ -1310,7 +1310,7 @@ Prepare the software and materials needed to test the actual product hypothesis.
 ## Prompt
 
 ```text
-Continue RepoTrail.
+Continue Ariadne.
 
 Do not add product features.
 
@@ -1322,13 +1322,13 @@ AGENT_HANDOFF.md
 
 Current milestone:
 
-Prepare RepoTrail 0.0.1 for controlled and natural-use validation.
+Prepare Ariadne 0.0.1 for controlled and natural-use validation.
 
 Create concise tester documentation explaining:
 
-What RepoTrail does:
+What Ariadne does:
 
-"RepoTrail helps you resume an interrupted code investigation."
+"Ariadne helps you resume an interrupted code investigation."
 
 What it captures:
 
@@ -1346,7 +1346,7 @@ What it does not capture:
 
 Create a simple tester workflow:
 
-1. install RepoTrail,
+1. install Ariadne,
 2. work on a real investigation,
 3. save explicitly or retroactively,
 4. optionally add checkpoint,
@@ -1371,7 +1371,7 @@ If variants require configuration, implement the simplest safe mechanism.
 
 Document which metrics must be collected manually versus automatically.
 
-RepoTrail should not quietly become an analytics tracker.
+Ariadne should not quietly become an analytics tracker.
 
 Prefer manual study recording for early tests.
 
@@ -1392,7 +1392,7 @@ Stop after preparing the testable build and experiment documentation.
 
 ## Exit condition
 
-A developer who was not part of implementation can install RepoTrail and participate in the intended experiment.
+A developer who was not part of implementation can install Ariadne and participate in the intended experiment.
 
 ---
 
@@ -1429,7 +1429,7 @@ The next implementation prompt must be selected from evidence.
 Run only after real usage data exists.
 
 ```text
-We have completed RepoTrail 0.0.1 and collected validation evidence.
+We have completed Ariadne 0.0.1 and collected validation evidence.
 
 Before proposing any new feature:
 
@@ -1448,7 +1448,7 @@ Before proposing any new feature:
    - hypotheses.
 
 4. Evaluate H1:
-   Did RepoTrail improve re-entry?
+   Did Ariadne improve re-entry?
 
 5. Evaluate H2:
    Did passive VS Code/Git context add value beyond checkpoint and ordinary editor/Git restoration?
@@ -1463,7 +1463,7 @@ Before proposing any new feature:
 Potential outcomes include:
 
 - continue current product,
-- simplify RepoTrail,
+- simplify Ariadne,
 - remove passive tracking,
 - improve checkpoint workflow,
 - improve Resume Snapshot,
@@ -1488,7 +1488,7 @@ Update VALIDATION.md and AGENT_HANDOFF.md with the evidence-based decision.
 Run only if user evidence demonstrates that developers struggle to reconstruct the sequence of investigation.
 
 ```text
-Evidence from RepoTrail validation indicates that developers need better reconstruction of the sequence of an Investigation.
+Evidence from Ariadne validation indicates that developers need better reconstruction of the sequence of an Investigation.
 
 Implement the smallest investigation-scoped timeline that addresses that need.
 
@@ -1564,7 +1564,7 @@ Do not automatically import browsing history.
 
 Prefer deliberate capture:
 
-Attach current page to RepoTrail
+Attach current page to Ariadne
 
 or
 
@@ -1583,7 +1583,7 @@ Do not introduce cloud synchronization.
 
 Do not turn the browser extension into DriftMap.
 
-The feature exists only to improve RepoTrail Investigation re-entry.
+The feature exists only to improve Ariadne Investigation re-entry.
 
 Update product/architecture decisions and handoff.
 ```
@@ -1595,7 +1595,7 @@ Update product/architecture decisions and handoff.
 Every coding agent must leave `docs/AGENT_HANDOFF.md` approximately like this:
 
 ```markdown
-# RepoTrail Agent Handoff
+# Ariadne Agent Handoff
 
 ## Current Milestone
 
@@ -1743,9 +1743,9 @@ If an agent over-engineers or introduces unwanted scope, use:
 ```text
 Stop implementation.
 
-Read docs/PRODUCT_BASELINE.md and compare the current changes against the RepoTrail 0.0.1 scope.
+Read docs/PRODUCT_BASELINE.md and compare the current changes against the Ariadne 0.0.1 scope.
 
-RepoTrail currently exists only to help resume interrupted code Investigations using:
+Ariadne currently exists only to help resume interrupted code Investigations using:
 
 VS Code
 +
@@ -1845,7 +1845,7 @@ Update AGENT_HANDOFF.md with:
 Use after a meaningful milestone or before testing externally.
 
 ```text
-Review the current RepoTrail implementation as a senior VS Code extension engineer and skeptical product engineer.
+Review the current Ariadne implementation as a senior VS Code extension engineer and skeptical product engineer.
 
 Read:
 
@@ -1923,7 +1923,7 @@ Do not implement changes during this review.
 # 17. Implementation-Fix Prompt After Review
 
 ```text
-Use the latest RepoTrail code-review findings.
+Use the latest Ariadne code-review findings.
 
 Read the repository and all project-memory documents first.
 
@@ -1962,7 +1962,7 @@ Stop after the remediation pass.
 Use only after `0.0.1` is validation-ready.
 
 ```text
-Prepare RepoTrail 0.0.1 for limited public/testing distribution.
+Prepare Ariadne 0.0.1 for limited public/testing distribution.
 
 Do not add features.
 
@@ -1983,7 +1983,7 @@ Review:
 
 README messaging must remain:
 
-RepoTrail helps developers resume interrupted code Investigations.
+Ariadne helps developers resume interrupted code Investigations.
 
 Avoid claims such as:
 
@@ -2088,7 +2088,7 @@ monetization
 
 Those ideas can remain in product-strategy history.
 
-They are irrelevant to implementing RepoTrail 0.0.1.
+They are irrelevant to implementing Ariadne 0.0.1.
 
 Giving them to a coding agent creates a predictable failure mode:
 
@@ -2103,7 +2103,7 @@ No.
 If context is ever uncertain, give the agent this:
 
 ```text
-RepoTrail is a local-first VS Code extension whose only current job is to help a developer resume an interrupted code investigation. It observes lightweight factual VS Code activity, enriches it with local Git state, allows an optional human checkpoint, and produces a saved Investigation Snapshot that helps the developer return later. It does not use AI, cloud services, browser tracking, semantic interpretation, productivity scoring, repository-wide graphs, or team functionality. The product should preserve enough context for re-entry, not record everything the developer does.
+Ariadne is a local-first VS Code extension whose only current job is to help a developer resume an interrupted code investigation. It observes lightweight factual VS Code activity, enriches it with local Git state, allows an optional human checkpoint, and produces a saved Investigation Snapshot that helps the developer return later. It does not use AI, cloud services, browser tracking, semantic interpretation, productivity scoring, repository-wide graphs, or team functionality. The product should preserve enough context for re-entry, not record everything the developer does.
 ```
 
 ---
@@ -2130,4 +2130,4 @@ updated documentation
 updated AGENT_HANDOFF.md
 ```
 
-That is how RepoTrail can survive not only interrupted developer investigations, but interrupted AI coding-agent conversations as well.
+That is how Ariadne can survive not only interrupted developer investigations, but interrupted AI coding-agent conversations as well.

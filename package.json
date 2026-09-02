@@ -1,13 +1,13 @@
 {
-  "name": "repotrail",
-  "displayName": "RepoTrail",
+  "name": "ariadne",
+  "displayName": "Ariadne",
   "description": "Capture and recover context from code investigations.",
   "version": "0.0.1",
-  "publisher": "repotrail",
+  "publisher": "ariadne",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tahamoeini/repotrail.git"
+    "url": "https://github.com/tahamoeini/ariadne.git"
   },
   "engines": {
     "vscode": "^1.100.0"
@@ -21,23 +21,23 @@
   "main": "./out/extension.js",
   "contributes": {
     "configuration": {
-      "title": "RepoTrail",
+      "title": "Ariadne",
       "properties": {
-        "repotrail.capture.retentionMinutes": {
+        "ariadne.capture.retentionMinutes": {
           "type": "number",
           "default": 20,
           "minimum": 1,
           "maximum": 240,
-          "description": "How long RepoTrail keeps rolling observed activity in memory before it can be saved retroactively."
+          "description": "How long Ariadne keeps rolling observed activity in memory before it can be saved retroactively."
         },
-        "repotrail.capture.maxEvents": {
+        "ariadne.capture.maxEvents": {
           "type": "number",
           "default": 1000,
           "minimum": 100,
           "maximum": 20000,
           "description": "Maximum observed events retained per workspace in the rolling in-memory buffer."
         },
-        "repotrail.lifecycle.autoSaveSeconds": {
+        "ariadne.lifecycle.autoSaveSeconds": {
           "type": "number",
           "default": 15,
           "minimum": 0,
@@ -48,59 +48,59 @@
     },
     "commands": [
       {
-        "command": "repotrail.startInvestigation",
+        "command": "ariadne.startInvestigation",
         "title": "Start Investigation",
-        "category": "RepoTrail"
+        "category": "Ariadne"
       },
       {
-        "command": "repotrail.saveRecentActivityAsInvestigation",
+        "command": "ariadne.saveRecentActivityAsInvestigation",
         "title": "Save Recent Activity as Investigation",
-        "category": "RepoTrail"
+        "category": "Ariadne"
       },
       {
-        "command": "repotrail.updateCheckpoint",
+        "command": "ariadne.updateCheckpoint",
         "title": "Add or Update Checkpoint",
-        "category": "RepoTrail"
+        "category": "Ariadne"
       },
       {
-        "command": "repotrail.attachBrowserReference",
-        "title": "Attach Current Page to RepoTrail",
-        "category": "RepoTrail"
+        "command": "ariadne.attachBrowserReference",
+        "title": "Attach Current Page to Ariadne",
+        "category": "Ariadne"
       },
       {
-        "command": "repotrail.saveAndStopInvestigation",
+        "command": "ariadne.saveAndStopInvestigation",
         "title": "Save and Stop Investigation",
-        "category": "RepoTrail"
+        "category": "Ariadne"
       },
       {
-        "command": "repotrail.listInvestigations",
+        "command": "ariadne.listInvestigations",
         "title": "List Saved Investigations",
-        "category": "RepoTrail"
+        "category": "Ariadne"
       },
       {
-        "command": "repotrail.openResumeSnapshot",
+        "command": "ariadne.openResumeSnapshot",
         "title": "Show Resume Snapshot",
-        "category": "RepoTrail"
+        "category": "Ariadne"
       },
       {
-        "command": "repotrail.resumeInvestigation",
+        "command": "ariadne.resumeInvestigation",
         "title": "Resume Investigation",
-        "category": "RepoTrail"
+        "category": "Ariadne"
       },
       {
-        "command": "repotrail.deleteInvestigation",
+        "command": "ariadne.deleteInvestigation",
         "title": "Delete Investigation",
-        "category": "RepoTrail"
+        "category": "Ariadne"
       },
       {
-        "command": "repotrail.deleteAllData",
-        "title": "Delete All RepoTrail Data",
-        "category": "RepoTrail"
+        "command": "ariadne.deleteAllData",
+        "title": "Delete All Ariadne Data",
+        "category": "Ariadne"
       },
       {
-        "command": "repotrail.showStorageLocation",
+        "command": "ariadne.showStorageLocation",
         "title": "Show Local Storage Location",
-        "category": "RepoTrail"
+        "category": "Ariadne"
       }
     ]
   },

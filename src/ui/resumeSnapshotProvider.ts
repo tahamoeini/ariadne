@@ -18,7 +18,7 @@ export interface ResumeSnapshotProviderOptions {
   fileExists?: (filePath: string) => boolean;
 }
 
-const RESUME_SNAPSHOT_SCHEME = 'repotrail-snapshot';
+const RESUME_SNAPSHOT_SCHEME = 'ariadne-snapshot';
 
 function parseInvestigationId(query: string): string | null {
   const params = new URLSearchParams(query);

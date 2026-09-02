@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import { ResumeExecutionResult } from '../commands/resumePlan';
 import { Investigation } from '../domain';
 
-suite('RepoTrail Extension', () => {
+suite('Ariadne Extension', () => {
   let activationResult: unknown;
   let workspaceRoot: string;
   let tempDir: string;
@@ -16,7 +16,7 @@ suite('RepoTrail Extension', () => {
 
   async function listSavedInvestigations(): Promise<Investigation[]> {
     return (
-      (await vscode.commands.executeCommand<Investigation[]>('repotrail.listInvestigations', {
+      (await vscode.commands.executeCommand<Investigation[]>('ariadne.listInvestigations', {
         quiet: true,
       })) ?? []
     );
@@ -29,7 +29,7 @@ suite('RepoTrail Extension', () => {
   }
 
   suiteSetup(async () => {
-    const ext = vscode.extensions.getExtension('repotrail.repotrail');
+    const ext = vscode.extensions.getExtension('ariadne.ariadne');
     assert.ok(ext, 'Extension not found');
     activationResult = await ext!.activate();
 
@@ -41,7 +41,7 @@ suite('RepoTrail Extension', () => {
   });
 
   setup(async () => {
-    await vscode.commands.executeCommand<number>('repotrail.deleteAllData', {
+    await vscode.commands.executeCommand<number>('ariadne.deleteAllData', {
       skipConfirmation: true,
     });
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
@@ -54,12 +54,12 @@ suite('RepoTrail Extension', () => {
   });
 
   test('Extension should be present', () => {
-    const ext = vscode.extensions.getExtension('repotrail.repotrail');
+    const ext = vscode.extensions.getExtension('ariadne.ariadne');
     assert.ok(ext, 'Extension not found');
   });
 
   test('activates on startup so recent activity can be captured before commands run', () => {
-    const ext = vscode.extensions.getExtension('repotrail.repotrail');
+    const ext = vscode.extensions.getExtension('ariadne.ariadne');
     assert.ok(ext, 'Extension not found');
     const activationEvents = ext!.packageJSON.activationEvents as string[] | undefined;
     assert.ok(Array.isArray(activationEvents), 'activationEvents must be declared');
@@ -69,37 +69,37 @@ suite('RepoTrail Extension', () => {
     );
   });
 
-  test('RepoTrail commands should be registered', async () => {
+  test('Ariadne commands should be registered', async () => {
     const commands = await vscode.commands.getCommands(true);
-    assert.ok(!commands.includes('repotrail.hello'), 'Unexpected placeholder hello command found');
-    assert.ok(commands.includes('repotrail.startInvestigation'), 'Command repotrail.startInvestigation not found');
+    assert.ok(!commands.includes('ariadne.hello'), 'Unexpected placeholder hello command found');
+    assert.ok(commands.includes('ariadne.startInvestigation'), 'Command ariadne.startInvestigation not found');
     assert.ok(
-      commands.includes('repotrail.saveRecentActivityAsInvestigation'),
-      'Command repotrail.saveRecentActivityAsInvestigation not found',
+      commands.includes('ariadne.saveRecentActivityAsInvestigation'),
+      'Command ariadne.saveRecentActivityAsInvestigation not found',
     );
-    assert.ok(commands.includes('repotrail.updateCheckpoint'), 'Command repotrail.updateCheckpoint not found');
+    assert.ok(commands.includes('ariadne.updateCheckpoint'), 'Command ariadne.updateCheckpoint not found');
     assert.ok(
-      commands.includes('repotrail.attachBrowserReference'),
-      'Command repotrail.attachBrowserReference not found',
-    );
-    assert.ok(
-      commands.includes('repotrail.saveAndStopInvestigation'),
-      'Command repotrail.saveAndStopInvestigation not found',
-    );
-    assert.ok(commands.includes('repotrail.listInvestigations'), 'Command repotrail.listInvestigations not found');
-    assert.ok(
-      commands.includes('repotrail.openResumeSnapshot'),
-      'Command repotrail.openResumeSnapshot not found',
+      commands.includes('ariadne.attachBrowserReference'),
+      'Command ariadne.attachBrowserReference not found',
     );
     assert.ok(
-      commands.includes('repotrail.resumeInvestigation'),
-      'Command repotrail.resumeInvestigation not found',
+      commands.includes('ariadne.saveAndStopInvestigation'),
+      'Command ariadne.saveAndStopInvestigation not found',
     );
-    assert.ok(commands.includes('repotrail.deleteInvestigation'), 'Command repotrail.deleteInvestigation not found');
-    assert.ok(commands.includes('repotrail.deleteAllData'), 'Command repotrail.deleteAllData not found');
+    assert.ok(commands.includes('ariadne.listInvestigations'), 'Command ariadne.listInvestigations not found');
     assert.ok(
-      commands.includes('repotrail.showStorageLocation'),
-      'Command repotrail.showStorageLocation not found',
+      commands.includes('ariadne.openResumeSnapshot'),
+      'Command ariadne.openResumeSnapshot not found',
+    );
+    assert.ok(
+      commands.includes('ariadne.resumeInvestigation'),
+      'Command ariadne.resumeInvestigation not found',
+    );
+    assert.ok(commands.includes('ariadne.deleteInvestigation'), 'Command ariadne.deleteInvestigation not found');
+    assert.ok(commands.includes('ariadne.deleteAllData'), 'Command ariadne.deleteAllData not found');
+    assert.ok(
+      commands.includes('ariadne.showStorageLocation'),
+      'Command ariadne.showStorageLocation not found',
     );
   });
 
@@ -122,7 +122,7 @@ suite('RepoTrail Extension', () => {
     await pause();
 
     const investigation = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.saveRecentActivityAsInvestigation',
+      'ariadne.saveRecentActivityAsInvestigation',
       {
         workspacePath: workspaceRoot,
         name: 'Captured recent editor activity',
@@ -167,7 +167,7 @@ suite('RepoTrail Extension', () => {
     await pause();
 
     const investigation = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.saveRecentActivityAsInvestigation',
+      'ariadne.saveRecentActivityAsInvestigation',
       {
         workspacePath: workspaceRoot,
         name: 'Rapid transitions',
@@ -204,7 +204,7 @@ suite('RepoTrail Extension', () => {
     await pause();
 
     const investigation = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.saveRecentActivityAsInvestigation',
+      'ariadne.saveRecentActivityAsInvestigation',
       {
         workspacePath: workspaceRoot,
         name: 'Cross-file selections',
@@ -223,6 +223,42 @@ suite('RepoTrail Extension', () => {
     );
   });
 
+  test('reduces noisy selection events while keeping meaningful location updates', async () => {
+    const uri = await createTempFile('selection-noise.ts', 'alpha\nbeta\ngamma\n');
+    const editor = await vscode.window.showTextDocument(
+      await vscode.workspace.openTextDocument(uri),
+    );
+    await pause();
+
+    editor.selection = new vscode.Selection(new vscode.Position(0, 0), new vscode.Position(0, 0));
+    await pause();
+    editor.selection = new vscode.Selection(new vscode.Position(0, 1), new vscode.Position(0, 1));
+    await pause();
+    editor.selection = new vscode.Selection(new vscode.Position(0, 2), new vscode.Position(0, 2));
+    await pause();
+    editor.selection = new vscode.Selection(new vscode.Position(2, 0), new vscode.Position(2, 0));
+    await pause();
+
+    const investigation = await vscode.commands.executeCommand<Investigation>(
+      'ariadne.saveRecentActivityAsInvestigation',
+      {
+        workspacePath: workspaceRoot,
+        name: 'Selection noise guard',
+        checkpointText: null,
+      },
+    );
+
+    assert.ok(investigation);
+    const selectionEvents = investigation!.snapshot.recentEvents.filter(
+      (event) => event.type === 'editor.selection' && event.filePath === uri.fsPath,
+    );
+
+    // Rapid nearby movements are collapsed; larger jumps still persist.
+    assert.ok(selectionEvents.length <= 2, `Expected <= 2 selection events, got ${selectionEvents.length}`);
+    assert.strictEqual(investigation!.snapshot.lastLocation?.filePath, uri.fsPath);
+    assert.strictEqual(investigation!.snapshot.lastLocation?.line, 3);
+  });
+
   test('supports the investigation lifecycle through commands', async () => {
     const uri = await createTempFile('lifecycle-fixture.ts', 'export const value = 1;\n');
     const document = await vscode.workspace.openTextDocument(uri);
@@ -235,7 +271,7 @@ suite('RepoTrail Extension', () => {
     await pause();
 
     const created = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.startInvestigation',
+      'ariadne.startInvestigation',
       {
         workspacePath: workspaceRoot,
         name: 'Integration investigation',
@@ -247,7 +283,7 @@ suite('RepoTrail Extension', () => {
     assert.strictEqual(created!.name, 'Integration investigation');
 
     const checkpointed = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.updateCheckpoint',
+      'ariadne.updateCheckpoint',
       {
         workspacePath: workspaceRoot,
         checkpointText: 'Need to inspect the new export.',
@@ -258,14 +294,14 @@ suite('RepoTrail Extension', () => {
     assert.strictEqual(checkpointed!.checkpoint?.text, 'Need to inspect the new export.');
 
     const saved = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.saveAndStopInvestigation',
+      'ariadne.saveAndStopInvestigation',
       { workspacePath: workspaceRoot },
     );
 
     assert.ok(saved);
 
     const afterStop = await vscode.commands.executeCommand<Investigation | null>(
-      'repotrail.updateCheckpoint',
+      'ariadne.updateCheckpoint',
       {
         workspacePath: workspaceRoot,
         checkpointText: 'Should not apply after stop.',
@@ -278,7 +314,7 @@ suite('RepoTrail Extension', () => {
     assert.ok(investigations?.some((investigation) => investigation.id === created!.id));
 
     const deleted = await vscode.commands.executeCommand<boolean>(
-      'repotrail.deleteInvestigation',
+      'ariadne.deleteInvestigation',
       {
         id: created!.id,
         skipConfirmation: true,
@@ -291,13 +327,13 @@ suite('RepoTrail Extension', () => {
     );
   });
 
-  test('shows the local storage location and deletes all RepoTrail data', async () => {
+  test('shows the local storage location and deletes all Ariadne data', async () => {
     const uri = await createTempFile('delete-all-fixture.ts', 'export const value = 1;\n');
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
     await pause();
 
     const created = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.startInvestigation',
+      'ariadne.startInvestigation',
       {
         workspacePath: workspaceRoot,
         name: 'Delete all integration investigation',
@@ -308,7 +344,7 @@ suite('RepoTrail Extension', () => {
     assert.ok(created);
 
     const storageLocation = await vscode.commands.executeCommand<string>(
-      'repotrail.showStorageLocation',
+      'ariadne.showStorageLocation',
       {
         revealInOs: false,
       },
@@ -318,7 +354,7 @@ suite('RepoTrail Extension', () => {
     assert.ok(path.isAbsolute(storageLocation!));
 
     const deletedCount = await vscode.commands.executeCommand<number>(
-      'repotrail.deleteAllData',
+      'ariadne.deleteAllData',
       {
         skipConfirmation: true,
       },
@@ -328,7 +364,7 @@ suite('RepoTrail Extension', () => {
     assert.deepStrictEqual(await listSavedInvestigations(), []);
 
     const recreated = await vscode.commands.executeCommand<Investigation | null>(
-      'repotrail.saveRecentActivityAsInvestigation',
+      'ariadne.saveRecentActivityAsInvestigation',
       {
         workspacePath: workspaceRoot,
         name: 'Should stay empty after delete all',
@@ -344,7 +380,7 @@ suite('RepoTrail Extension', () => {
     await pause();
 
     const created = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.startInvestigation',
+      'ariadne.startInvestigation',
       {
         workspacePath: workspaceRoot,
         name: 'Snapshot investigation',
@@ -355,7 +391,7 @@ suite('RepoTrail Extension', () => {
     assert.ok(created);
 
     const referenced = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.attachBrowserReference',
+      'ariadne.attachBrowserReference',
       {
         workspacePath: workspaceRoot,
         url: 'https://developer.mozilla.org/docs/Web/API/URL',
@@ -367,19 +403,19 @@ suite('RepoTrail Extension', () => {
     assert.strictEqual(referenced!.browserReferences.length, 1);
     assert.strictEqual(referenced!.browserReferences[0].title, 'MDN URL');
 
-    await vscode.commands.executeCommand<Investigation>('repotrail.saveAndStopInvestigation', {
+    await vscode.commands.executeCommand<Investigation>('ariadne.saveAndStopInvestigation', {
       workspacePath: workspaceRoot,
     });
 
     const opened = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.openResumeSnapshot',
+      'ariadne.openResumeSnapshot',
       {
         id: created!.id,
       },
     );
 
     assert.strictEqual(opened?.id, created!.id);
-    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, 'repotrail-snapshot');
+    assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, 'ariadne-snapshot');
     const text = vscode.window.activeTextEditor?.document.getText() ?? '';
     assert.ok(text.includes('# Snapshot investigation'));
     assert.ok(text.includes('## Checkpoint'));
@@ -394,7 +430,7 @@ suite('RepoTrail Extension', () => {
     await pause();
 
     const created = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.startInvestigation',
+      'ariadne.startInvestigation',
       {
         workspacePath: workspaceRoot,
         name: 'Snapshot refresh investigation',
@@ -404,11 +440,11 @@ suite('RepoTrail Extension', () => {
 
     assert.ok(created);
 
-    await vscode.commands.executeCommand<Investigation>('repotrail.saveAndStopInvestigation', {
+    await vscode.commands.executeCommand<Investigation>('ariadne.saveAndStopInvestigation', {
       workspacePath: workspaceRoot,
     });
 
-    await vscode.commands.executeCommand<Investigation>('repotrail.openResumeSnapshot', {
+    await vscode.commands.executeCommand<Investigation>('ariadne.openResumeSnapshot', {
       id: created!.id,
     });
     await pause();
@@ -419,7 +455,7 @@ suite('RepoTrail Extension', () => {
     const firstUri = firstDocument!.uri.toString();
 
     const storageLocation = await vscode.commands.executeCommand<string>(
-      'repotrail.showStorageLocation',
+      'ariadne.showStorageLocation',
       {
         revealInOs: false,
       },
@@ -445,7 +481,7 @@ suite('RepoTrail Extension', () => {
     }
     fs.writeFileSync(investigationPath, JSON.stringify(envelope, null, 2), 'utf-8');
 
-    await vscode.commands.executeCommand<Investigation>('repotrail.openResumeSnapshot', {
+    await vscode.commands.executeCommand<Investigation>('ariadne.openResumeSnapshot', {
       id: created!.id,
     });
     await pause();
@@ -464,7 +500,7 @@ suite('RepoTrail Extension', () => {
     );
 
     const created = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.startInvestigation',
+      'ariadne.startInvestigation',
       {
         workspacePath: workspaceRoot,
         name: 'Resume flow investigation',
@@ -490,7 +526,7 @@ suite('RepoTrail Extension', () => {
     lastEditor.selection = new vscode.Selection(new vscode.Position(2, 1), new vscode.Position(2, 1));
     await pause();
 
-    await vscode.commands.executeCommand<Investigation>('repotrail.saveAndStopInvestigation', {
+    await vscode.commands.executeCommand<Investigation>('ariadne.saveAndStopInvestigation', {
       workspacePath: workspaceRoot,
     });
 
@@ -498,7 +534,7 @@ suite('RepoTrail Extension', () => {
     await pause();
 
     const result = await vscode.commands.executeCommand<ResumeExecutionResult>(
-      'repotrail.resumeInvestigation',
+      'ariadne.resumeInvestigation',
       {
         id: created!.id,
       },
@@ -522,7 +558,7 @@ suite('RepoTrail Extension', () => {
     const keepUri = await createTempFile('resume-keep.ts', 'export const keep = true;\n');
 
     const created = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.startInvestigation',
+      'ariadne.startInvestigation',
       {
         workspacePath: workspaceRoot,
         name: 'Resume missing file investigation',
@@ -548,7 +584,7 @@ suite('RepoTrail Extension', () => {
     keepEditor.selection = new vscode.Selection(new vscode.Position(0, 7), new vscode.Position(0, 7));
     await pause();
 
-    await vscode.commands.executeCommand<Investigation>('repotrail.saveAndStopInvestigation', {
+    await vscode.commands.executeCommand<Investigation>('ariadne.saveAndStopInvestigation', {
       workspacePath: workspaceRoot,
     });
 
@@ -557,7 +593,7 @@ suite('RepoTrail Extension', () => {
     await pause();
 
     const result = await vscode.commands.executeCommand<ResumeExecutionResult>(
-      'repotrail.resumeInvestigation',
+      'ariadne.resumeInvestigation',
       {
         id: created!.id,
       },
@@ -576,7 +612,7 @@ suite('RepoTrail Extension', () => {
     );
 
     const created = await vscode.commands.executeCommand<Investigation>(
-      'repotrail.startInvestigation',
+      'ariadne.startInvestigation',
       {
         workspacePath: workspaceRoot,
         name: 'Resume stale location investigation',
@@ -593,7 +629,7 @@ suite('RepoTrail Extension', () => {
     staleEditor.selection = new vscode.Selection(new vscode.Position(2, 20), new vscode.Position(2, 20));
     await pause();
 
-    await vscode.commands.executeCommand<Investigation>('repotrail.saveAndStopInvestigation', {
+    await vscode.commands.executeCommand<Investigation>('ariadne.saveAndStopInvestigation', {
       workspacePath: workspaceRoot,
     });
 
@@ -602,7 +638,7 @@ suite('RepoTrail Extension', () => {
     await pause();
 
     const result = await vscode.commands.executeCommand<ResumeExecutionResult>(
-      'repotrail.resumeInvestigation',
+      'ariadne.resumeInvestigation',
       {
         id: created!.id,
       },

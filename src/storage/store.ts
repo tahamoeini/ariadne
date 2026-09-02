@@ -1,5 +1,5 @@
 /**
- * RepoTrail — Local JSON file persistence.
+ * Ariadne — Local JSON file persistence.
  *
  * Storage location: a directory passed in by the caller (typically
  * `ExtensionContext.globalStorageUri.fsPath`).
@@ -1465,7 +1465,7 @@ export function deleteInvestigation(storageDir: string, id: string): boolean {
   return deleteInvestigationArtifacts(storageDir, id);
 }
 
-/** Delete all RepoTrail storage artifacts and return the number of saved investigation ids removed. */
+/** Delete all Ariadne storage artifacts and return the number of saved investigation ids removed. */
 export function deleteAllInvestigations(storageDir: string): number {
   const deletedCount = listStoredInvestigationIds(storageDir).length;
   fs.rmSync(storageDir, { recursive: true, force: true });

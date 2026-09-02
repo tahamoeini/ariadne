@@ -1,12 +1,12 @@
-# RepoTrail
+# Ariadne
 
 > Pick up a code investigation where you left it.
 
-RepoTrail is a local-first VS Code extension that preserves factual investigation context so a developer can reopen interrupted work later without reconstructing it from memory, tabs, and Git state alone.
+Ariadne is a local-first VS Code extension that preserves factual investigation context so a developer can reopen interrupted work later without reconstructing it from memory, tabs, and Git state alone.
 
-## RepoTrail 0.0.1
+## Ariadne 0.0.1
 
-RepoTrail 0.0.1:
+Ariadne 0.0.1:
 
 - activates on VS Code startup and keeps a per-workspace rolling buffer of the last 20 minutes of observed activity
 - lets you save the current investigation explicitly or retroactively save recent activity as an investigation
@@ -20,21 +20,21 @@ RepoTrail 0.0.1:
 
 | Command | What it does |
 |---|---|
-| `RepoTrail: Start Investigation` | Saves the current workspace context and keeps the investigation active. |
-| `RepoTrail: Save Recent Activity as Investigation` | Saves the recent rolling-buffer activity and keeps the investigation active. |
-| `RepoTrail: Add or Update Checkpoint` | Saves or clears the checkpoint on the active investigation. |
-| `RepoTrail: Attach Current Page to RepoTrail` | Deliberately attaches a minimal external page reference to the active investigation. |
-| `RepoTrail: Save and Stop Investigation` | Persists the latest active state and clears the active investigation for that workspace. |
-| `RepoTrail: List Saved Investigations` | Lists saved investigations and opens the selected Resume Snapshot. |
-| `RepoTrail: Show Resume Snapshot` | Opens the saved Resume Snapshot without reopening files. |
-| `RepoTrail: Resume Investigation` | Opens the Resume Snapshot and reopens a conservative set of saved files. |
-| `RepoTrail: Delete Investigation` | Deletes one saved investigation. |
-| `RepoTrail: Delete All RepoTrail Data` | Deletes all saved investigations and clears in-memory activity for the current session. |
-| `RepoTrail: Show Local Storage Location` | Reveals the local storage directory and shows its path. |
+| `Ariadne: Start Investigation` | Saves the current workspace context and keeps the investigation active. |
+| `Ariadne: Save Recent Activity as Investigation` | Saves the recent rolling-buffer activity and keeps the investigation active. |
+| `Ariadne: Add or Update Checkpoint` | Saves or clears the checkpoint on the active investigation. |
+| `Ariadne: Attach Current Page to Ariadne` | Deliberately attaches a minimal external page reference to the active investigation. |
+| `Ariadne: Save and Stop Investigation` | Persists the latest active state and clears the active investigation for that workspace. |
+| `Ariadne: List Saved Investigations` | Lists saved investigations and opens the selected Resume Snapshot. |
+| `Ariadne: Show Resume Snapshot` | Opens the saved Resume Snapshot without reopening files. |
+| `Ariadne: Resume Investigation` | Opens the Resume Snapshot and reopens a conservative set of saved files. |
+| `Ariadne: Delete Investigation` | Deletes one saved investigation. |
+| `Ariadne: Delete All Ariadne Data` | Deletes all saved investigations and clears in-memory activity for the current session. |
+| `Ariadne: Show Local Storage Location` | Reveals the local storage directory and shows its path. |
 
 ## What 0.0.1 captures
 
-RepoTrail 0.0.1 records only the factual data needed for re-entry:
+Ariadne 0.0.1 records only the factual data needed for re-entry:
 
 - active editor/file changes
 - selection changes used for the last saved location
@@ -55,11 +55,11 @@ RepoTrail 0.0.1 records only the factual data needed for re-entry:
 - a condensed investigation-scoped factual timeline of file transitions, collapsed edit events, checkpoint changes, Git snapshots, and save/resume points
 - an optional developer-authored checkpoint
 
-RepoTrail 0.0.1 does not currently emit definition/reference navigation events. Those remain deferred until they can be detected reliably through supported VS Code APIs.
+Ariadne 0.0.1 does not currently emit definition/reference navigation events. Those remain deferred until they can be detected reliably through supported VS Code APIs.
 
 ## What 0.0.1 does not do
 
-RepoTrail 0.0.1 does not include:
+Ariadne 0.0.1 does not include:
 
 - AI
 - graph visualizations, repository-wide dependency graphs, or general activity dashboards
@@ -74,11 +74,11 @@ RepoTrail 0.0.1 does not include:
 
 - Saved investigations live under VS Code `globalStorageUri`.
 - Each investigation is stored as a schema-versioned JSON envelope.
-- RepoTrail retains a `.bak` copy of the previous save for recovery.
+- Ariadne retains a `.bak` copy of the previous save for recovery.
 - Workspace file paths are stored relatively when possible and re-expanded on load.
 - The rolling event buffer remains in memory only and is not persisted as full raw events.
 - Saved investigations persist a condensed investigation timeline and a collapsed Investigation navigation graph for re-entry; they do not persist an exhaustive activity log or a repository architecture model.
-- Attached browser references remain minimal and deliberate; RepoTrail does not import browser history or capture page contents.
+- Attached browser references remain minimal and deliberate; Ariadne does not import browser history or capture page contents.
 
 ## Source-of-truth docs
 
@@ -117,7 +117,7 @@ npm install
 
 1. Open this folder in VS Code.
 2. Press **F5** to launch the Extension Development Host.
-3. Use the RepoTrail commands from the Command Palette.
+3. Use the Ariadne commands from the Command Palette.
 
 ### Verification
 

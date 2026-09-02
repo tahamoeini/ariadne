@@ -11,7 +11,7 @@ import {
 
 let activeLifecycleService: InvestigationLifecycleService | null = null;
 
-interface RepoTrailRuntimeConfiguration {
+interface AriadneRuntimeConfiguration {
   retentionMs: number;
   maxEvents: number;
   autoSaveDebounceMs: number;
@@ -26,8 +26,8 @@ function normalizeInteger(value: number, fallback: number, minimum: number, maxi
   return Math.min(maximum, Math.max(minimum, normalized));
 }
 
-function readRuntimeConfiguration(): RepoTrailRuntimeConfiguration {
-  const configuration = vscode.workspace.getConfiguration('repotrail');
+function readRuntimeConfiguration(): AriadneRuntimeConfiguration {
+  const configuration = vscode.workspace.getConfiguration('ariadne');
   const retentionMinutes = normalizeInteger(
     configuration.get<number>('capture.retentionMinutes', 20),
     20,
@@ -55,6 +55,7 @@ function readRuntimeConfiguration(): RepoTrailRuntimeConfiguration {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  const warnedAutoSaveWorkspaces = new Set<string>();
   const runtimeConfiguration = readRuntimeConfiguration();
   const eventCapture: VsCodeObservedEventCapture = createVsCodeObservedEventCapture({
     retentionMs: runtimeConfiguration.retentionMs,
@@ -65,6 +66,28 @@ export function activate(context: vscode.ExtensionContext): void {
     capture: eventCapture,
     stateStore: context.workspaceState,
     autoSaveDebounceMs: runtimeConfiguration.autoSaveDebounceMs,
+    onAutoSaveStatusChanged: (status) => {
+      if (status.status === 'error') {
+        if (warnedAutoSaveWorkspaces.has(status.workspace)) {
+          return;
+        }
+
+        warnedAutoSaveWorkspaces.add(status.workspace);
+        void vscode.window.showWarningMessage(
+          'Ariadne: Autosave failed for an active investigation. Tracking continues, but recent progress may be lost until save recovers.',
+        );
+        return;
+      }
+
+      if (!warnedAutoSaveWorkspaces.has(status.workspace)) {
+        return;
+      }
+
+      warnedAutoSaveWorkspaces.delete(status.workspace);
+      void vscode.window.showInformationMessage(
+        'Ariadne: Autosave recovered for the active investigation.',
+      );
+    },
   });
   activeLifecycleService = lifecycle;
   const { opener: snapshotOpener, disposable: snapshotProvider } = createResumeSnapshotOpener({

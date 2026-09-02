@@ -284,5 +284,5 @@ export function buildResumeResultMessage(result: ResumeExecutionResult): string 
 
   const [first, ...rest] = details;
   const sentence = [first.charAt(0).toUpperCase() + first.slice(1), ...rest].join('; ');
-  return `RepoTrail: ${sentence}.`;
+  return `Ariadne: ${sentence}.`;
 }

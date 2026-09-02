@@ -11,13 +11,16 @@ interface DocumentContext {
   languageId: string;
 }
 
-export interface RepoTrailDebugApi {
+const SELECTION_EVENT_MIN_INTERVAL_MS = 500;
+const SELECTION_EVENT_MIN_MOVEMENT = 2;
+
+export interface AriadneDebugApi {
   getRecentEvents(workspace?: string): ObservedEvent[];
   clearRecentEvents(workspace?: string): void;
 }
 
 export interface VsCodeObservedEventCapture extends vscode.Disposable {
-  debug: RepoTrailDebugApi;
+  debug: AriadneDebugApi;
   getRecentEvents(workspace?: string): ObservedEvent[];
   getLastLocation(workspace?: string): FileLocation | null;
   clearRecentEvents(workspace?: string): void;
@@ -113,8 +116,10 @@ export function createVsCodeObservedEventCapture(
   const buffer = createWorkspaceEventBuffer(options);
   const repositoryCache = new Map<string, string | null>();
   const selectionKeys = new Map<string, string>();
+  const selectionTimestamps = new Map<string, number>();
   const disposables: vscode.Disposable[] = [];
   const observedEventEmitter = new vscode.EventEmitter<ObservedEvent>();
+  const now = options.now ?? Date.now;
 
   function addEvent(event: Omit<ObservedEvent, 'timestamp'>): void {
     const observedEvent: ObservedEvent = {
@@ -154,12 +159,34 @@ export function createVsCodeObservedEventCapture(
     const location = toFileLocation(context.filePath, editor.selection.active);
     const selectionScope = `${context.workspace}:${context.filePath}`;
     const selectionKey = [location.line, location.column].join(':');
+    const previousSelectionKey = selectionKeys.get(selectionScope);
 
-    if (selectionKeys.get(selectionScope) === selectionKey) {
+    if (previousSelectionKey === selectionKey) {
       return;
     }
 
+    const previousTimestamp = selectionTimestamps.get(selectionScope) ?? Number.NEGATIVE_INFINITY;
+    const currentTimestamp = now();
+    if (previousSelectionKey) {
+      const [previousLineRaw, previousColumnRaw] = previousSelectionKey.split(':');
+      const previousLine = Number(previousLineRaw);
+      const previousColumn = Number(previousColumnRaw);
+      const rowMovement = Math.abs(location.line - previousLine);
+      const columnMovement = Math.abs(location.column - previousColumn);
+      const withinMinInterval = currentTimestamp - previousTimestamp < SELECTION_EVENT_MIN_INTERVAL_MS;
+      const belowMovementThreshold =
+        rowMovement < SELECTION_EVENT_MIN_MOVEMENT &&
+        columnMovement < SELECTION_EVENT_MIN_MOVEMENT;
+
+      if (withinMinInterval && belowMovementThreshold) {
+        selectionKeys.set(selectionScope, selectionKey);
+        selectionTimestamps.set(selectionScope, currentTimestamp);
+        return;
+      }
+    }
+
     selectionKeys.set(selectionScope, selectionKey);
+    selectionTimestamps.set(selectionScope, currentTimestamp);
     addEvent({
       type: 'editor.selection',
       workspace: context.workspace,
@@ -215,10 +242,12 @@ export function createVsCodeObservedEventCapture(
       clearRecentEvents(workspace?: string): void {
         if (!workspace) {
           selectionKeys.clear();
+          selectionTimestamps.clear();
         } else {
           for (const key of Array.from(selectionKeys.keys())) {
             if (key.startsWith(`${workspace}:`)) {
               selectionKeys.delete(key);
+              selectionTimestamps.delete(key);
             }
           }
         }
@@ -234,10 +263,12 @@ export function createVsCodeObservedEventCapture(
     clearRecentEvents(workspace?: string): void {
       if (!workspace) {
         selectionKeys.clear();
+        selectionTimestamps.clear();
       } else {
         for (const key of Array.from(selectionKeys.keys())) {
           if (key.startsWith(`${workspace}:`)) {
             selectionKeys.delete(key);
+            selectionTimestamps.delete(key);
           }
         }
       }

@@ -14,7 +14,7 @@ import {
 
 /** Create a temp directory for each test. */
 function makeTmpDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'repotrail-test-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-test-'));
 }
 
 /** Remove a temp directory after test. */

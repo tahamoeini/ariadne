@@ -11,7 +11,7 @@ import {
 } from '../git';
 
 function makeTmpDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'repotrail-git-test-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'ariadne-git-test-'));
 }
 
 function rmDir(dir: string): void {

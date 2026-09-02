@@ -17,17 +17,17 @@ import {
 } from './resumePlan';
 import { ResumeSnapshotOpener } from '../ui';
 
-export const COMMAND_START_INVESTIGATION = 'repotrail.startInvestigation';
-export const COMMAND_SAVE_RECENT_ACTIVITY = 'repotrail.saveRecentActivityAsInvestigation';
-export const COMMAND_UPDATE_CHECKPOINT = 'repotrail.updateCheckpoint';
-export const COMMAND_ATTACH_BROWSER_REFERENCE = 'repotrail.attachBrowserReference';
-export const COMMAND_SAVE_AND_STOP = 'repotrail.saveAndStopInvestigation';
-export const COMMAND_LIST_INVESTIGATIONS = 'repotrail.listInvestigations';
-export const COMMAND_DELETE_INVESTIGATION = 'repotrail.deleteInvestigation';
-export const COMMAND_DELETE_ALL_DATA = 'repotrail.deleteAllData';
-export const COMMAND_OPEN_RESUME_SNAPSHOT = 'repotrail.openResumeSnapshot';
-export const COMMAND_RESUME_INVESTIGATION = 'repotrail.resumeInvestigation';
-export const COMMAND_SHOW_STORAGE_LOCATION = 'repotrail.showStorageLocation';
+export const COMMAND_START_INVESTIGATION = 'ariadne.startInvestigation';
+export const COMMAND_SAVE_RECENT_ACTIVITY = 'ariadne.saveRecentActivityAsInvestigation';
+export const COMMAND_UPDATE_CHECKPOINT = 'ariadne.updateCheckpoint';
+export const COMMAND_ATTACH_BROWSER_REFERENCE = 'ariadne.attachBrowserReference';
+export const COMMAND_SAVE_AND_STOP = 'ariadne.saveAndStopInvestigation';
+export const COMMAND_LIST_INVESTIGATIONS = 'ariadne.listInvestigations';
+export const COMMAND_DELETE_INVESTIGATION = 'ariadne.deleteInvestigation';
+export const COMMAND_DELETE_ALL_DATA = 'ariadne.deleteAllData';
+export const COMMAND_OPEN_RESUME_SNAPSHOT = 'ariadne.openResumeSnapshot';
+export const COMMAND_RESUME_INVESTIGATION = 'ariadne.resumeInvestigation';
+export const COMMAND_SHOW_STORAGE_LOCATION = 'ariadne.showStorageLocation';
 
 interface CreateInvestigationCommandOptions {
   workspacePath?: string;
@@ -95,11 +95,11 @@ function toErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return 'Unexpected RepoTrail error.';
+  return 'Unexpected Ariadne error.';
 }
 
 function showCommandError(action: string, error: unknown): void {
-  void vscode.window.showErrorMessage(`RepoTrail: Failed to ${action}: ${toErrorMessage(error)}`);
+  void vscode.window.showErrorMessage(`Ariadne: Failed to ${action}: ${toErrorMessage(error)}`);
 }
 
 function trimToNull(value: string | null | undefined): string | null {
@@ -221,8 +221,8 @@ function suggestReferenceTitle(url: string): string {
 
 async function promptForManualBrowserReference(): Promise<AttachBrowserReferenceInput | undefined> {
   const url = await vscode.window.showInputBox({
-    title: 'RepoTrail: Browser Reference URL',
-    prompt: `Paste the current page URL. RepoTrail saves only the URL, optional title, and timestamp locally (${MAX_BROWSER_REFERENCE_URL_LENGTH} characters max).`,
+    title: 'Ariadne: Browser Reference URL',
+    prompt: `Paste the current page URL. Ariadne saves only the URL, optional title, and timestamp locally (${MAX_BROWSER_REFERENCE_URL_LENGTH} characters max).`,
     placeHolder: 'https://example.com/docs/investigation-context',
     ignoreFocusOut: true,
     validateInput(value) {
@@ -236,8 +236,8 @@ async function promptForManualBrowserReference(): Promise<AttachBrowserReference
 
   const normalizedUrl = url.trim();
   const title = await vscode.window.showInputBox({
-    title: 'RepoTrail: Browser Reference Title',
-    prompt: `Optional page title saved locally in plain text. RepoTrail does not capture page contents (${MAX_BROWSER_REFERENCE_TITLE_LENGTH} characters max).`,
+    title: 'Ariadne: Browser Reference Title',
+    prompt: `Optional page title saved locally in plain text. Ariadne does not capture page contents (${MAX_BROWSER_REFERENCE_TITLE_LENGTH} characters max).`,
     placeHolder: suggestReferenceTitle(normalizedUrl) || 'Reference title (optional)',
     ignoreFocusOut: true,
     validateInput(value) {
@@ -282,7 +282,7 @@ async function promptForBrowserReference(): Promise<AttachBrowserReferenceInput 
       },
     ],
     {
-      title: 'RepoTrail: Attach Browser Reference',
+      title: 'Ariadne: Attach Browser Reference',
       matchOnDescription: true,
       matchOnDetail: true,
       placeHolder: 'Choose an open page candidate or enter a URL manually',
@@ -336,7 +336,7 @@ async function resolveWorkspacePath(explicitPath?: string): Promise<string | nul
       workspacePath: workspaceFolder.uri.fsPath,
     })),
     {
-      title: 'RepoTrail: Select Workspace',
+      title: 'Ariadne: Select Workspace',
       matchOnDescription: true,
     },
   );
@@ -347,7 +347,7 @@ async function resolveWorkspacePath(explicitPath?: string): Promise<string | nul
 async function promptForInvestigationName(title: string): Promise<string | undefined> {
   const name = await vscode.window.showInputBox({
     title,
-    prompt: `Name the investigation. RepoTrail saves this locally in plain text (${MAX_INVESTIGATION_NAME_LENGTH} characters max).`,
+    prompt: `Name the investigation. Ariadne saves this locally in plain text (${MAX_INVESTIGATION_NAME_LENGTH} characters max).`,
     placeHolder: 'Fix refresh-token race',
     ignoreFocusOut: true,
     validateInput(value) {
@@ -361,7 +361,7 @@ async function promptForInvestigationName(title: string): Promise<string | undef
 
 async function promptForCheckpoint(currentValue = ''): Promise<string | null | undefined> {
   const checkpoint = await vscode.window.showInputBox({
-    title: 'RepoTrail: Checkpoint',
+    title: 'Ariadne: Checkpoint',
     prompt: `Optional checkpoint saved locally in plain text. Avoid secrets or large source excerpts (${MAX_CHECKPOINT_LENGTH} characters max).`,
     value: currentValue,
     placeHolder: 'Current hypothesis, unresolved question, or next step',
@@ -479,7 +479,7 @@ async function collectCreateOptions(
 ): Promise<CreateInvestigationOptions | null> {
   const workspace = await resolveWorkspacePath(options.workspacePath);
   if (!workspace) {
-    vscode.window.showInformationMessage('RepoTrail: Open a workspace or file first.');
+    vscode.window.showInformationMessage('Ariadne: Open a workspace or file first.');
     return null;
   }
 
@@ -514,7 +514,7 @@ export function registerInvestigationCommands(
     vscode.commands.registerCommand(
       COMMAND_START_INVESTIGATION,
       async (options: CreateInvestigationCommandOptions = {}) => {
-        const createOptions = await collectCreateOptions('RepoTrail: Start Investigation', options);
+        const createOptions = await collectCreateOptions('Ariadne: Start Investigation', options);
         if (!createOptions) {
           return undefined;
         }
@@ -522,7 +522,7 @@ export function registerInvestigationCommands(
         try {
           const investigation = await lifecycle.startInvestigation(createOptions);
           vscode.window.showInformationMessage(
-            `RepoTrail: Saved and started "${investigation.name}".`,
+            `Ariadne: Saved and started "${investigation.name}".`,
           );
           return investigation;
         } catch (error) {
@@ -535,7 +535,7 @@ export function registerInvestigationCommands(
       COMMAND_SAVE_RECENT_ACTIVITY,
       async (options: CreateInvestigationCommandOptions = {}) => {
         const createOptions = await collectCreateOptions(
-          'RepoTrail: Save Recent Activity as Investigation',
+          'Ariadne: Save Recent Activity as Investigation',
           options,
         );
         if (!createOptions) {
@@ -545,12 +545,12 @@ export function registerInvestigationCommands(
         try {
           const investigation = await lifecycle.saveRecentActivityAsInvestigation(createOptions);
           if (!investigation) {
-            vscode.window.showInformationMessage('RepoTrail: No recent activity is available to save.');
+            vscode.window.showInformationMessage('Ariadne: No recent activity is available to save.');
             return null;
           }
 
           vscode.window.showInformationMessage(
-            `RepoTrail: Saved recent activity as "${investigation.name}" and continued tracking.`,
+            `Ariadne: Saved recent activity as "${investigation.name}" and continued tracking.`,
           );
           return investigation;
         } catch (error) {
@@ -564,14 +564,14 @@ export function registerInvestigationCommands(
       async (options: CreateInvestigationCommandOptions = {}) => {
         const workspace = await resolveWorkspacePath(options.workspacePath);
         if (!workspace) {
-          vscode.window.showInformationMessage('RepoTrail: Open a workspace or file first.');
+          vscode.window.showInformationMessage('Ariadne: Open a workspace or file first.');
           return undefined;
         }
 
         const activeInvestigation = lifecycle.getActiveInvestigation(workspace);
         if (!activeInvestigation) {
           vscode.window.showInformationMessage(
-            'RepoTrail: No active investigation was found for this workspace.',
+            'Ariadne: No active investigation was found for this workspace.',
           );
           return null;
         }
@@ -588,15 +588,15 @@ export function registerInvestigationCommands(
           const updated = await lifecycle.updateCheckpoint(workspace, trimToNull(checkpointText));
           if (!updated) {
             vscode.window.showInformationMessage(
-              'RepoTrail: No active investigation was found for this workspace.',
+              'Ariadne: No active investigation was found for this workspace.',
             );
             return null;
           }
 
           vscode.window.showInformationMessage(
             updated.checkpoint
-              ? `RepoTrail: Updated checkpoint for "${updated.name}".`
-              : `RepoTrail: Cleared checkpoint for "${updated.name}".`,
+              ? `Ariadne: Updated checkpoint for "${updated.name}".`
+              : `Ariadne: Cleared checkpoint for "${updated.name}".`,
           );
           return updated;
         } catch (error) {
@@ -610,14 +610,14 @@ export function registerInvestigationCommands(
       async (options: AttachBrowserReferenceCommandOptions = {}) => {
         const workspace = await resolveWorkspacePath(options.workspacePath);
         if (!workspace) {
-          vscode.window.showInformationMessage('RepoTrail: Open a workspace or file first.');
+          vscode.window.showInformationMessage('Ariadne: Open a workspace or file first.');
           return undefined;
         }
 
         const activeInvestigation = lifecycle.getActiveInvestigation(workspace);
         if (!activeInvestigation) {
           vscode.window.showInformationMessage(
-            'RepoTrail: Start or resume an investigation before attaching a browser reference.',
+            'Ariadne: Start or resume an investigation before attaching a browser reference.',
           );
           return null;
         }
@@ -636,13 +636,13 @@ export function registerInvestigationCommands(
           const updated = await lifecycle.attachBrowserReference(workspace, reference);
           if (!updated) {
             vscode.window.showInformationMessage(
-              'RepoTrail: No active investigation was found for this workspace.',
+              'Ariadne: No active investigation was found for this workspace.',
             );
             return null;
           }
 
           vscode.window.showInformationMessage(
-            `RepoTrail: Attached browser reference to "${updated.name}".`,
+            `Ariadne: Attached browser reference to "${updated.name}".`,
           );
           return updated;
         } catch (error) {
@@ -656,7 +656,7 @@ export function registerInvestigationCommands(
       async (options: SaveAndStopCommandOptions = {}) => {
         const workspace = await resolveWorkspacePath(options.workspacePath);
         if (!workspace) {
-          vscode.window.showInformationMessage('RepoTrail: Open a workspace or file first.');
+          vscode.window.showInformationMessage('Ariadne: Open a workspace or file first.');
           return undefined;
         }
 
@@ -664,13 +664,13 @@ export function registerInvestigationCommands(
           const investigation = await lifecycle.saveAndStopInvestigation(workspace);
           if (!investigation) {
             vscode.window.showInformationMessage(
-              'RepoTrail: No active investigation was found for this workspace.',
+              'Ariadne: No active investigation was found for this workspace.',
             );
             return null;
           }
 
           vscode.window.showInformationMessage(
-            `RepoTrail: Saved and stopped tracking "${investigation.name}".`,
+            `Ariadne: Saved and stopped tracking "${investigation.name}".`,
           );
           return investigation;
         } catch (error) {
@@ -684,13 +684,13 @@ export function registerInvestigationCommands(
       async (options: OpenResumeSnapshotCommandOptions = {}) => {
         const investigations = lifecycle.listInvestigations();
         if (investigations.length === 0) {
-          vscode.window.showInformationMessage('RepoTrail: No saved investigations were found.');
+          vscode.window.showInformationMessage('Ariadne: No saved investigations were found.');
           return null;
         }
 
         const investigation =
           investigations.find((candidate) => candidate.id === options.id) ??
-          (await pickInvestigation(investigations, 'RepoTrail: Show Resume Snapshot'));
+          (await pickInvestigation(investigations, 'Ariadne: Show Resume Snapshot'));
 
         if (!investigation) {
           return null;
@@ -714,7 +714,7 @@ export function registerInvestigationCommands(
           await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(storageDir));
         }
 
-        void vscode.window.showInformationMessage(`RepoTrail: Local data directory: ${storageDir}`);
+        void vscode.window.showInformationMessage(`Ariadne: Local data directory: ${storageDir}`);
         return storageDir;
       },
     ),
@@ -723,13 +723,13 @@ export function registerInvestigationCommands(
       async (options: ResumeInvestigationCommandOptions = {}) => {
         const investigations = lifecycle.listInvestigations();
         if (investigations.length === 0) {
-          vscode.window.showInformationMessage('RepoTrail: No saved investigations were found.');
+          vscode.window.showInformationMessage('Ariadne: No saved investigations were found.');
           return null;
         }
 
         const investigation =
           investigations.find((candidate) => candidate.id === options.id) ??
-          (await pickInvestigation(investigations, 'RepoTrail: Resume Investigation'));
+          (await pickInvestigation(investigations, 'Ariadne: Resume Investigation'));
 
         if (!investigation) {
           return null;
@@ -753,14 +753,14 @@ export function registerInvestigationCommands(
       async (options: ListInvestigationsCommandOptions = {}) => {
         const investigations = lifecycle.listInvestigations();
         if (investigations.length === 0) {
-          vscode.window.showInformationMessage('RepoTrail: No saved investigations were found.');
+          vscode.window.showInformationMessage('Ariadne: No saved investigations were found.');
           return [];
         }
 
         if (!options.quiet) {
           const investigation = await pickInvestigation(
             investigations,
-            'RepoTrail: Saved Investigations',
+            'Ariadne: Saved Investigations',
           );
           if (investigation) {
             try {
@@ -779,13 +779,13 @@ export function registerInvestigationCommands(
       async (options: DeleteInvestigationCommandOptions = {}) => {
         const investigations = lifecycle.listInvestigations();
         if (investigations.length === 0) {
-          vscode.window.showInformationMessage('RepoTrail: No saved investigations were found.');
+          vscode.window.showInformationMessage('Ariadne: No saved investigations were found.');
           return false;
         }
 
         const investigation =
           investigations.find((candidate) => candidate.id === options.id) ??
-          (await pickInvestigation(investigations, 'RepoTrail: Delete Investigation'));
+          (await pickInvestigation(investigations, 'Ariadne: Delete Investigation'));
 
         if (!investigation) {
           return false;
@@ -808,7 +808,7 @@ export function registerInvestigationCommands(
           if (deleted) {
             snapshotOpener.forgetInvestigation(investigation.id);
             vscode.window.showInformationMessage(
-              `RepoTrail: Deleted investigation "${investigation.name}".`,
+              `Ariadne: Deleted investigation "${investigation.name}".`,
             );
           }
           return deleted;
@@ -823,7 +823,7 @@ export function registerInvestigationCommands(
       async (commandOptions: DeleteAllDataCommandOptions = {}) => {
         if (!commandOptions.skipConfirmation) {
           const confirmed = await vscode.window.showWarningMessage(
-            'Delete all RepoTrail local data? This removes saved Investigations and clears in-memory activity for the current session.',
+            'Delete all Ariadne local data? This removes saved Investigations and clears in-memory activity for the current session.',
             { modal: true },
             'Delete All',
           );
@@ -838,7 +838,7 @@ export function registerInvestigationCommands(
           options.clearRecentActivity?.();
           snapshotOpener.forgetAllInvestigations();
           vscode.window.showInformationMessage(
-            `RepoTrail: Deleted all local data (${deletedCount} saved investigation(s)) and cleared in-memory activity.`,
+            `Ariadne: Deleted all local data (${deletedCount} saved investigation(s)) and cleared in-memory activity.`,
           );
           return deletedCount;
         } catch (error) {
