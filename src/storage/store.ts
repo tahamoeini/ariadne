@@ -207,6 +207,16 @@ export interface StorageEnvelope {
   investigation: PersistedInvestigation;
 }
 
+type InflateEnvelopeResult =
+  | {
+      status: 'valid';
+      investigation: Investigation;
+    }
+  | {
+      status: 'invalid' | 'unsupported-schema';
+      investigation: null;
+    };
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -252,8 +262,18 @@ function tempFilePath(storageDir: string, id: string): string | null {
 }
 
 function isWithinRoot(filePath: string, rootPath: string): boolean {
-  const relativePath = path.relative(rootPath, filePath);
-  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+  if (usesPosixPathStyle(rootPath)) {
+    const normalizedRootPath = normalizeStoredPathSeparators(rootPath);
+    const normalizedFilePath = normalizeStoredPathSeparators(filePath);
+    const relativePath = path.posix.relative(normalizedRootPath, normalizedFilePath);
+    return (
+      relativePath === '' ||
+      (!relativePath.startsWith('..') && !path.posix.isAbsolute(relativePath))
+    );
+  }
+
+  const relativePath = path.win32.relative(rootPath, filePath);
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.win32.isAbsolute(relativePath));
 }
 
 function normalizeStoredPathSeparators(filePath: string): string {
@@ -283,6 +303,34 @@ function fromStoredPath(filePath: string, workspacePath: string): string {
   }
 
   return path.resolve(workspacePath, filePath);
+}
+
+function isWindowsAbsolutePath(filePath: string): boolean {
+  const normalizedPath = filePath.replace(/\//g, '\\');
+  return /^[A-Za-z]:\\/.test(normalizedPath) || normalizedPath.startsWith('\\\\');
+}
+
+function isPosixAbsolutePath(filePath: string): boolean {
+  return normalizeStoredPathSeparators(filePath).startsWith('/');
+}
+
+function resolveWorkspaceScopedPath(filePath: string, workspacePath: string): string | null {
+  if (usesPosixPathStyle(workspacePath)) {
+    if (isWindowsAbsolutePath(filePath)) {
+      return null;
+    }
+
+    const normalizedPath = normalizeStoredPathSeparators(filePath);
+    const resolvedPath = isPosixAbsolutePath(normalizedPath)
+      ? path.posix.normalize(normalizedPath)
+      : path.posix.resolve(workspacePath, normalizedPath);
+    return isWithinRoot(resolvedPath, workspacePath) ? resolvedPath : null;
+  }
+
+  const resolvedPath = isWindowsAbsolutePath(filePath) || isPosixAbsolutePath(filePath)
+    ? path.win32.normalize(filePath)
+    : path.win32.resolve(workspacePath, filePath);
+  return isWithinRoot(resolvedPath, workspacePath) ? resolvedPath : null;
 }
 
 function dedupePaths(paths: string[]): string[] {
@@ -316,6 +364,15 @@ function normalizeString(value: unknown): string | null {
 function timestampValue(value: string): number {
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+}
+
+function normalizeTimestamp(value: unknown): string | null {
+  const normalizedValue = normalizeString(value);
+  if (!normalizedValue) {
+    return null;
+  }
+
+  return Number.isFinite(Date.parse(normalizedValue)) ? normalizedValue : null;
 }
 
 function normalizeNullableString(value: unknown): string | null {
@@ -371,7 +428,9 @@ function normalizeWorkspaceFileList(
   workspacePath: string,
 ): string[] {
   return dedupePaths(
-    normalizeStringArray(value).map((filePath) => fromStoredPath(filePath, workspacePath)),
+    normalizeStringArray(value)
+      .map((filePath) => resolveWorkspaceScopedPath(filePath, workspacePath))
+      .filter((filePath): filePath is string => Boolean(filePath)),
   );
 }
 
@@ -398,7 +457,12 @@ function normalizeVisitedFileCounts(
       continue;
     }
 
-    visitedFileCounts[fromStoredPath(filePath, workspacePath)] = normalizedCount;
+    const resolvedPath = resolveWorkspaceScopedPath(filePath, workspacePath);
+    if (!resolvedPath) {
+      continue;
+    }
+
+    visitedFileCounts[resolvedPath] = normalizedCount;
   }
 
   return visitedFileCounts;
@@ -417,8 +481,13 @@ function normalizeLocation(
     return null;
   }
 
+  const resolvedPath = resolveWorkspaceScopedPath(filePath, workspacePath);
+  if (!resolvedPath) {
+    return null;
+  }
+
   return {
-    filePath: fromStoredPath(filePath, workspacePath),
+    filePath: resolvedPath,
     line: normalizeNumber(value.line, 1, 1),
     column: normalizeNumber(value.column, 1, 1),
   };
@@ -483,9 +552,12 @@ function normalizeRecentPathEntries(
       continue;
     }
 
-    const normalizedPath = path.isAbsolute(filePath)
-      ? toStoredPath(filePath, workspacePath)
-      : filePath;
+    const resolvedPath = resolveWorkspaceScopedPath(filePath, workspacePath);
+    if (!resolvedPath) {
+      continue;
+    }
+
+    const normalizedPath = toStoredPath(resolvedPath, workspacePath);
     if (recentPath[recentPath.length - 1] !== normalizedPath) {
       recentPath.push(normalizedPath);
     }
@@ -508,7 +580,7 @@ function normalizeTimelineEntries(
       continue;
     }
 
-    const timestamp = normalizeString(entry.timestamp);
+    const timestamp = normalizeTimestamp(entry.timestamp);
     const type = normalizeString(entry.type);
     if (!timestamp || !type) {
       continue;
@@ -520,10 +592,15 @@ function normalizeTimelineEntries(
         continue;
       }
 
+      const resolvedPath = resolveWorkspaceScopedPath(filePath, workspacePath);
+      if (!resolvedPath) {
+        continue;
+      }
+
       timeline.push({
         timestamp,
         type,
-        filePath: fromStoredPath(filePath, workspacePath),
+        filePath: resolvedPath,
       });
       continue;
     }
@@ -534,10 +611,15 @@ function normalizeTimelineEntries(
         continue;
       }
 
+      const resolvedPath = resolveWorkspaceScopedPath(filePath, workspacePath);
+      if (!resolvedPath) {
+        continue;
+      }
+
       timeline.push({
         timestamp,
         type,
-        filePath: fromStoredPath(filePath, workspacePath),
+        filePath: resolvedPath,
         count: normalizeNumber(entry.count, 1, 1),
       });
       continue;
@@ -603,14 +685,19 @@ function normalizeNavigationNodes(
     }
 
     const filePath = normalizeString(entry.filePath);
-    const lastObservedAt = normalizeString(entry.lastObservedAt);
+    const lastObservedAt = normalizeTimestamp(entry.lastObservedAt);
     if (entry.kind !== 'file' || !filePath || !lastObservedAt) {
+      continue;
+    }
+
+    const resolvedPath = resolveWorkspaceScopedPath(filePath, workspacePath);
+    if (!resolvedPath) {
       continue;
     }
 
     nodes.push({
       kind: 'file',
-      filePath: fromStoredPath(filePath, workspacePath),
+      filePath: resolvedPath,
       visitCount: normalizeNumber(entry.visitCount, 0, 0),
       editCount: normalizeNumber(entry.editCount, 0, 0),
       lastObservedAt,
@@ -636,7 +723,7 @@ function normalizeNavigationEdges(
 
     const fromFilePath = normalizeString(entry.fromFilePath);
     const toFilePath = normalizeString(entry.toFilePath);
-    const lastObservedAt = normalizeString(entry.lastObservedAt);
+    const lastObservedAt = normalizeTimestamp(entry.lastObservedAt);
     if (
       !fromFilePath ||
       !toFilePath ||
@@ -646,9 +733,15 @@ function normalizeNavigationEdges(
       continue;
     }
 
+    const resolvedFromFilePath = resolveWorkspaceScopedPath(fromFilePath, workspacePath);
+    const resolvedToFilePath = resolveWorkspaceScopedPath(toFilePath, workspacePath);
+    if (!resolvedFromFilePath || !resolvedToFilePath) {
+      continue;
+    }
+
     edges.push({
-      fromFilePath: fromStoredPath(fromFilePath, workspacePath),
-      toFilePath: fromStoredPath(toFilePath, workspacePath),
+      fromFilePath: resolvedFromFilePath,
+      toFilePath: resolvedToFilePath,
       relationship: entry.relationship,
       count: normalizeNumber(entry.count, 1, 1),
       lastObservedAt,
@@ -681,13 +774,23 @@ function inflateRecentEvents(
   workspacePath: string,
   repositoryPath: string | null,
 ): ObservedEvent[] {
-  return recentPath.map((filePath) => ({
-    timestamp: savedAt,
-    type: 'editor.active',
-    workspace: workspacePath,
-    repository: repositoryPath,
-    filePath: fromStoredPath(filePath, workspacePath),
-  }));
+  const events: ObservedEvent[] = [];
+  for (const filePath of recentPath) {
+    const resolvedPath = resolveWorkspaceScopedPath(filePath, workspacePath);
+    if (!resolvedPath) {
+      continue;
+    }
+
+    events.push({
+      timestamp: savedAt,
+      type: 'editor.active',
+      workspace: workspacePath,
+      repository: repositoryPath,
+      filePath: resolvedPath,
+    });
+  }
+
+  return events;
 }
 
 function normalizeCheckpoint(
@@ -939,34 +1042,52 @@ function migrateInvestigationV1(investigation: LegacyInvestigation): Investigati
   };
 }
 
-function inflateEnvelope(envelope: unknown): Investigation | null {
+function validEnvelope(investigation: Investigation): InflateEnvelopeResult {
+  return {
+    status: 'valid',
+    investigation,
+  };
+}
+
+function invalidEnvelope(
+  status: Exclude<InflateEnvelopeResult['status'], 'valid'>,
+): InflateEnvelopeResult {
+  return {
+    status,
+    investigation: null,
+  };
+}
+
+function inflateEnvelope(envelope: unknown): InflateEnvelopeResult {
   if (!isRecord(envelope) || typeof envelope.schemaVersion !== 'number') {
-    return null;
+    return invalidEnvelope('invalid');
   }
 
   if (envelope.schemaVersion === 1) {
     if (!isRecord(envelope.investigation)) {
-      return null;
+      return invalidEnvelope('invalid');
     }
 
     const migrated = migrateInvestigationV1(envelope.investigation as unknown as LegacyInvestigation);
-    return buildRuntimeInvestigation(
+    const investigation = buildRuntimeInvestigation(
       migrated as unknown as Record<string, unknown>,
       migrated.snapshot.recentEvents,
     );
+    return investigation ? validEnvelope(investigation) : invalidEnvelope('invalid');
   }
 
   if (envelope.schemaVersion === 2) {
     if (!isRecord(envelope.investigation)) {
-      return null;
+      return invalidEnvelope('invalid');
     }
 
-    return buildRuntimeInvestigation(
+    const investigation = buildRuntimeInvestigation(
       envelope.investigation,
       isRecord(envelope.investigation.snapshot)
         ? envelope.investigation.snapshot.recentEvents
         : undefined,
     );
+    return investigation ? validEnvelope(investigation) : invalidEnvelope('invalid');
   }
 
   if (
@@ -975,19 +1096,20 @@ function inflateEnvelope(envelope: unknown): Investigation | null {
     envelope.schemaVersion !== 5 &&
     envelope.schemaVersion !== SCHEMA_VERSION
   ) {
-    return null;
+    return invalidEnvelope('unsupported-schema');
   }
 
   if (!isRecord(envelope.investigation)) {
-    return null;
+    return invalidEnvelope('invalid');
   }
 
-  return buildRuntimeInvestigation(
+  const investigation = buildRuntimeInvestigation(
     envelope.investigation,
     isRecord(envelope.investigation.snapshot)
       ? envelope.investigation.snapshot.recentPath
       : undefined,
   );
+  return investigation ? validEnvelope(investigation) : invalidEnvelope('invalid');
 }
 
 function toPersistedGitSnapshot(git: GitSnapshot): PersistedGitSnapshot {
@@ -1313,18 +1435,22 @@ export function loadInvestigation(
 ): Investigation | null {
   const primary = primaryFilePath(storageDir, id);
   const backup = backupFilePath(storageDir, id);
-  const primaryInvestigation = inflateEnvelope(readEnvelope(primary));
-  if (primaryInvestigation) {
-    return primaryInvestigation;
+  const primaryResult = inflateEnvelope(readEnvelope(primary));
+  if (primaryResult.status === 'valid') {
+    return primaryResult.investigation;
   }
 
-  const backupInvestigation = inflateEnvelope(readEnvelope(backup));
-  if (!backupInvestigation) {
+  if (primaryResult.status === 'unsupported-schema') {
+    return null;
+  }
+
+  const backupResult = inflateEnvelope(readEnvelope(backup));
+  if (backupResult.status !== 'valid') {
     return null;
   }
 
   restoreBackup(primary, backup);
-  return backupInvestigation;
+  return backupResult.investigation;
 }
 
 /** List all persisted investigations. Skips files that fail to parse. */

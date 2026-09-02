@@ -58,7 +58,7 @@ export interface InvestigationLifecycleOptions {
   storageDir: string;
   capture: InvestigationLifecycleCapture;
   stateStore: InvestigationLifecycleStateStore;
-  captureGitSnapshot?: (targetPath: string) => GitSnapshot;
+  captureGitSnapshot?: (targetPath: string) => GitSnapshot | PromiseLike<GitSnapshot>;
 }
 
 export interface CreateInvestigationOptions {
@@ -341,7 +341,9 @@ export function applyObservedEventToSnapshot(
 
 export class InvestigationLifecycleService implements InvestigationLifecycleDebugApi {
   private readonly activeInvestigations = new Map<string, Investigation>();
-  private readonly captureGitSnapshotForTarget: (targetPath: string) => GitSnapshot;
+  private readonly captureGitSnapshotForTarget: (
+    targetPath: string,
+  ) => GitSnapshot | PromiseLike<GitSnapshot>;
 
   constructor(private readonly options: InvestigationLifecycleOptions) {
     this.captureGitSnapshotForTarget = options.captureGitSnapshot ?? captureGitSnapshot;
@@ -530,6 +532,11 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
       return null;
     }
 
+    const activeForWorkspace = this.activeInvestigations.get(source.workspace);
+    if (activeForWorkspace && activeForWorkspace.id !== source.id) {
+      throw new Error('Another investigation is already active in this workspace.');
+    }
+
     const resumedAt = new Date().toISOString();
     const updated: Investigation = {
       ...cloneInvestigation(source),
@@ -542,9 +549,8 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
       { savedAt: source.savedAt },
     );
 
-    if (this.activeInvestigations.get(saved.workspace)?.id === saved.id) {
-      this.activeInvestigations.set(saved.workspace, cloneInvestigation(saved));
-    }
+    this.activeInvestigations.set(saved.workspace, cloneInvestigation(saved));
+    await this.persistActiveInvestigationIds();
 
     return cloneInvestigation(saved);
   }
@@ -564,7 +570,7 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
       MAX_INVESTIGATION_NAME_LENGTH,
     );
 
-    const snapshot = this.buildSeedSnapshot(workspace);
+    const snapshot = await this.buildSeedSnapshot(workspace);
     if (requireRecentActivity && snapshot.recentEvents.length === 0) {
       return null;
     }
@@ -596,17 +602,17 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
     );
   }
 
-  private buildSeedSnapshot(workspace: string): Snapshot {
+  private async buildSeedSnapshot(workspace: string): Promise<Snapshot> {
     const recentEvents = this.options.capture.getRecentEvents(workspace);
     const lastLocation = this.options.capture.getLastLocation(workspace);
-    const git = this.captureGitSnapshotForTarget(lastLocation?.filePath ?? workspace);
+    const git = await this.captureGitSnapshotForTarget(lastLocation?.filePath ?? workspace);
     return buildSnapshotFromObservedEvents(recentEvents, git, lastLocation);
   }
 
-  private refreshSnapshot(investigation: Investigation): Snapshot {
+  private async refreshSnapshot(investigation: Investigation): Promise<Snapshot> {
     const currentLastLocation =
       this.options.capture.getLastLocation(investigation.workspace) ?? investigation.snapshot.lastLocation;
-    const git = this.captureGitSnapshotForTarget(
+    const git = await this.captureGitSnapshotForTarget(
       currentLastLocation?.filePath ?? investigation.workspace,
     );
 
@@ -639,7 +645,7 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
   ): Promise<Investigation> {
     const snapshot = snapshotOverride
       ? cloneSnapshot(snapshotOverride)
-      : this.refreshSnapshot(investigation);
+      : await this.refreshSnapshot(investigation);
     const savedAt = new Date().toISOString();
     let timeline = appendGitSnapshotToTimeline(investigation.timeline, snapshot.git);
     if (savePointReason) {

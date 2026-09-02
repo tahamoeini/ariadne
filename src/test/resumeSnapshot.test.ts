@@ -140,6 +140,8 @@ suite('Resume Snapshot', () => {
     assert.ok(content.includes('Saved timestamp: 2026-06-01T12:34:56.000Z'));
     assert.ok(content.includes('- Workspace: /workspace'));
     assert.ok(content.includes('- Branch: feature/resume-snapshot'));
+    assert.ok(content.includes('## Current Git state at open time'));
+    assert.ok(content.includes('## Saved vs current differences at open time'));
     assert.ok(content.includes('- HEAD changed: abc123 → def456'));
     assert.ok(content.includes('- Now modified: src/package.json'));
     assert.ok(content.includes('- No longer untracked: notes.txt'));

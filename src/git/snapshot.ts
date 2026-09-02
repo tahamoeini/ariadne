@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawnSync } from 'child_process';
+import { execFile } from 'child_process';
 import { GitSnapshot } from '../domain';
 
 const GIT_OUTPUT_MAX_BUFFER = 20 * 1024 * 1024;
@@ -12,7 +12,10 @@ export interface GitCommandResult {
   error?: NodeJS.ErrnoException;
 }
 
-export type GitCommandRunner = (workingDirectory: string, args: string[]) => GitCommandResult;
+export type GitCommandRunner = (
+  workingDirectory: string,
+  args: string[],
+) => GitCommandResult | PromiseLike<GitCommandResult>;
 
 export interface CaptureGitSnapshotOptions {
   now?: () => number;
@@ -55,18 +58,34 @@ function createUnavailableSnapshot(
   };
 }
 
-function defaultRunGit(workingDirectory: string, args: string[]): GitCommandResult {
-  const result = spawnSync('git', ['-C', workingDirectory, ...args], {
-    encoding: 'utf8',
-    maxBuffer: GIT_OUTPUT_MAX_BUFFER,
-  });
+function defaultRunGit(workingDirectory: string, args: string[]): Promise<GitCommandResult> {
+  return new Promise((resolve) => {
+    execFile(
+      'git',
+      ['-C', workingDirectory, ...args],
+      {
+        encoding: 'utf8',
+        maxBuffer: GIT_OUTPUT_MAX_BUFFER,
+      },
+      (error, stdout, stderr) => {
+        if (!error) {
+          resolve({
+            exitCode: 0,
+            stdout: stdout ?? '',
+            stderr: stderr ?? '',
+          });
+          return;
+        }
 
-  return {
-    exitCode: result.status,
-    stdout: result.stdout ?? '',
-    stderr: result.stderr ?? '',
-    error: result.error,
-  };
+        resolve({
+          exitCode: typeof error.code === 'number' ? error.code : null,
+          stdout: stdout ?? '',
+          stderr: stderr ?? '',
+          error: error as NodeJS.ErrnoException,
+        });
+      },
+    );
+  });
 }
 
 function resolveSearchDirectory(targetPath: string): string {
@@ -176,12 +195,12 @@ export function parseGitStatus(output: string): ParsedGitStatus {
   };
 }
 
-function readHeadCommit(
+async function readHeadCommit(
   repositoryRoot: string,
   noCommits: boolean,
   runGit: GitCommandRunner,
-): string | null | 'git-error' | 'git-missing' {
-  const result = runGit(repositoryRoot, ['rev-parse', '--verify', 'HEAD']);
+): Promise<string | null | 'git-error' | 'git-missing'> {
+  const result = await runGit(repositoryRoot, ['rev-parse', '--verify', 'HEAD']);
   if (isGitMissing(result)) {
     return 'git-missing';
   }
@@ -193,11 +212,11 @@ function readHeadCommit(
   return noCommits ? null : 'git-error';
 }
 
-function readTrackedDiffStats(
+async function readTrackedDiffStats(
   repositoryRoot: string,
   runGit: GitCommandRunner,
-): GitSnapshot['diffStats'] | 'git-error' | 'git-missing' {
-  const result = runGit(repositoryRoot, ['diff', '--shortstat', '--no-ext-diff', 'HEAD', '--']);
+): Promise<GitSnapshot['diffStats'] | 'git-error' | 'git-missing'> {
+  const result = await runGit(repositoryRoot, ['diff', '--shortstat', '--no-ext-diff', 'HEAD', '--']);
   if (isGitMissing(result)) {
     return 'git-missing';
   }
@@ -209,12 +228,12 @@ function readTrackedDiffStats(
   return parseGitDiffStats(result.stdout);
 }
 
-function readInitialDiffStats(
+async function readInitialDiffStats(
   repositoryRoot: string,
   modifiedFileCount: number,
   runGit: GitCommandRunner,
-): GitSnapshot['diffStats'] | 'git-error' | 'git-missing' {
-  const staged = runGit(repositoryRoot, ['diff', '--shortstat', '--no-ext-diff', '--cached', '--root', '--']);
+): Promise<GitSnapshot['diffStats'] | 'git-error' | 'git-missing'> {
+  const staged = await runGit(repositoryRoot, ['diff', '--shortstat', '--no-ext-diff', '--cached', '--root', '--']);
   if (isGitMissing(staged)) {
     return 'git-missing';
   }
@@ -222,7 +241,7 @@ function readInitialDiffStats(
     return 'git-error';
   }
 
-  const unstaged = runGit(repositoryRoot, ['diff', '--shortstat', '--no-ext-diff', '--']);
+  const unstaged = await runGit(repositoryRoot, ['diff', '--shortstat', '--no-ext-diff', '--']);
   if (isGitMissing(unstaged)) {
     return 'git-missing';
   }
@@ -237,10 +256,10 @@ function readInitialDiffStats(
   );
 }
 
-export function captureGitSnapshot(
+export async function captureGitSnapshot(
   targetPath: string,
   options: CaptureGitSnapshotOptions = {},
-): GitSnapshot {
+): Promise<GitSnapshot> {
   const timestamp = new Date((options.now ?? Date.now)()).toISOString();
   const repositoryRoot = findGitRepositoryRoot(targetPath);
   if (!repositoryRoot) {
@@ -248,7 +267,7 @@ export function captureGitSnapshot(
   }
 
   const runGit = options.runGit ?? defaultRunGit;
-  const statusResult = runGit(repositoryRoot, [
+  const statusResult = await runGit(repositoryRoot, [
     'status',
     '--porcelain=v1',
     '--branch',
@@ -265,7 +284,7 @@ export function captureGitSnapshot(
   }
 
   const status = parseGitStatus(statusResult.stdout);
-  const head = readHeadCommit(repositoryRoot, status.noCommits, runGit);
+  const head = await readHeadCommit(repositoryRoot, status.noCommits, runGit);
   if (head === 'git-missing') {
     return createUnavailableSnapshot(timestamp, 'git-missing', repositoryRoot);
   }
@@ -274,8 +293,8 @@ export function captureGitSnapshot(
   }
 
   const diffStats = head === null
-    ? readInitialDiffStats(repositoryRoot, status.modifiedFiles.length, runGit)
-    : readTrackedDiffStats(repositoryRoot, runGit);
+    ? await readInitialDiffStats(repositoryRoot, status.modifiedFiles.length, runGit)
+    : await readTrackedDiffStats(repositoryRoot, runGit);
   if (diffStats === 'git-missing') {
     return createUnavailableSnapshot(timestamp, 'git-missing', repositoryRoot);
   }

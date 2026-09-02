@@ -714,7 +714,7 @@ export function registerInvestigationCommands(
           await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(storageDir));
         }
 
-        await vscode.window.showInformationMessage(`RepoTrail: Local data directory: ${storageDir}`);
+        void vscode.window.showInformationMessage(`RepoTrail: Local data directory: ${storageDir}`);
         return storageDir;
       },
     ),

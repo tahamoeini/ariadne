@@ -722,11 +722,151 @@ suite('Investigation Lifecycle', () => {
     assert.ok(resumed);
     assert.strictEqual(resumed!.savedAt, stopped!.savedAt);
     assert.strictEqual(resumed!.timeline.at(-1)?.type, 'resume.point');
+    assert.strictEqual(service.getActiveInvestigation(workspace)?.id, created.id);
 
     const loaded = loadInvestigation(tmpDir, created.id);
     assert.ok(loaded);
     assert.strictEqual(loaded!.savedAt, stopped!.savedAt);
     assert.strictEqual(loaded!.timeline.at(-1)?.type, 'resume.point');
+  });
+
+  test('resumes a stopped investigation into active tracking and accepts follow-up updates', async () => {
+    const workspace = '/workspace';
+    const firstFile = '/workspace/src/first.ts';
+    const secondFile = '/workspace/src/second.ts';
+    const capture = new FakeCapture();
+    const stateStore = new FakeStateStore();
+
+    capture.setEvents(workspace, [
+      makeEvent(
+        'editor.active',
+        workspace,
+        firstFile,
+        '2026-05-01T17:00:00.000Z',
+        5,
+        2,
+      ),
+      makeEvent(
+        'file.edit',
+        workspace,
+        firstFile,
+        '2026-05-01T17:00:30.000Z',
+        5,
+        2,
+      ),
+    ]);
+
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore,
+      captureGitSnapshot: () => makeGitSnapshot(),
+    });
+
+    const created = await service.startInvestigation({
+      workspace,
+      name: 'Resume into active tracking',
+      checkpointText: null,
+    });
+
+    const stopped = await service.saveAndStopInvestigation(workspace);
+    assert.ok(stopped);
+    assert.strictEqual(service.getActiveInvestigation(workspace), null);
+
+    const resumed = await service.markInvestigationResumed(created.id);
+    assert.ok(resumed);
+    assert.strictEqual(resumed!.id, created.id);
+    assert.strictEqual(resumed!.savedAt, stopped!.savedAt);
+    assert.strictEqual(service.getActiveInvestigation(workspace)?.id, created.id);
+
+    const updatedCheckpoint = await service.updateCheckpoint(
+      workspace,
+      'Continue from the resumed state.',
+    );
+    assert.strictEqual(updatedCheckpoint?.checkpoint?.text, 'Continue from the resumed state.');
+
+    const attached = await service.attachBrowserReference(workspace, {
+      url: 'https://example.com/resume-context',
+      title: 'Resume context',
+    });
+    assert.ok(attached);
+    assert.strictEqual(attached!.browserReferences.length, 1);
+
+    const resumedEdit = makeEvent(
+      'file.edit',
+      workspace,
+      secondFile,
+      '2026-05-01T17:02:00.000Z',
+      8,
+      1,
+    );
+    capture.addEvent(resumedEdit);
+    service.recordObservedEvent(resumedEdit);
+
+    const active = service.getActiveInvestigation(workspace);
+    assert.ok(active);
+    assert.deepStrictEqual(active!.snapshot.editedFiles, [firstFile, secondFile]);
+    assert.strictEqual(active!.snapshot.lastLocation?.filePath, secondFile);
+    assert.ok(active!.timeline.some((entry) => entry.type === 'resume.point'));
+    assert.strictEqual(active!.timeline.at(-1)?.type, 'file.edit');
+  });
+
+  test('rejects resuming a saved investigation when another investigation is active in the workspace', async () => {
+    const workspace = '/workspace';
+    const firstFile = '/workspace/src/one.ts';
+    const secondFile = '/workspace/src/two.ts';
+    const capture = new FakeCapture();
+
+    capture.setEvents(workspace, [
+      makeEvent(
+        'editor.active',
+        workspace,
+        firstFile,
+        '2026-05-01T18:00:00.000Z',
+        1,
+        1,
+      ),
+    ]);
+
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore: new FakeStateStore(),
+      captureGitSnapshot: () => makeGitSnapshot(),
+    });
+
+    const saved = await service.startInvestigation({
+      workspace,
+      name: 'Saved investigation',
+      checkpointText: null,
+    });
+    await service.saveAndStopInvestigation(workspace);
+
+    capture.setEvents(workspace, [
+      makeEvent(
+        'editor.active',
+        workspace,
+        secondFile,
+        '2026-05-01T18:05:00.000Z',
+        2,
+        1,
+      ),
+    ]);
+
+    const active = await service.startInvestigation({
+      workspace,
+      name: 'Current active investigation',
+      checkpointText: null,
+    });
+
+    await assert.rejects(
+      async () => {
+        await service.markInvestigationResumed(saved.id);
+      },
+      /already active in this workspace/,
+    );
+
+    assert.strictEqual(service.getActiveInvestigation(workspace)?.id, active.id);
   });
 
   test('keeps an investigation active if workspace-state persistence fails while stopping', async () => {

@@ -320,6 +320,61 @@ suite('Storage', () => {
       assert.strictEqual(loaded, null);
     });
 
+    test('does not restore an older backup over a future-schema primary', () => {
+      const dir = path.join(tmpDir, 'investigations');
+      fs.mkdirSync(dir, { recursive: true });
+      const primaryPath = path.join(dir, 'future-with-backup.json');
+      const backupPath = `${primaryPath}.bak`;
+
+      fs.writeFileSync(
+        primaryPath,
+        JSON.stringify({
+          schemaVersion: 999,
+          investigation: {
+            id: 'future-with-backup',
+            name: 'Future version',
+          },
+        }),
+        'utf-8',
+      );
+      fs.writeFileSync(
+        backupPath,
+        JSON.stringify({
+          schemaVersion: SCHEMA_VERSION,
+          investigation: {
+            id: 'future-with-backup',
+            name: 'Older backup',
+            workspace: '/ws',
+            repository: null,
+            savedAt: '2026-01-01T00:00:00.000Z',
+            checkpoint: null,
+            browserReferences: [],
+            navigationGraph: { nodes: [], edges: [] },
+            timeline: [],
+            snapshot: {
+              editedFiles: [],
+              visitedFileCounts: {},
+              lastLocation: null,
+              recentPath: [],
+              git: null,
+            },
+          },
+        }),
+        'utf-8',
+      );
+
+      const primaryBefore = fs.readFileSync(primaryPath, 'utf-8');
+      const loaded = loadInvestigation(tmpDir, 'future-with-backup');
+
+      assert.strictEqual(loaded, null);
+      assert.strictEqual(fs.readFileSync(primaryPath, 'utf-8'), primaryBefore);
+      assert.strictEqual(
+        JSON.parse(fs.readFileSync(primaryPath, 'utf-8')).schemaVersion,
+        999,
+      );
+      assert.ok(fs.existsSync(backupPath));
+    });
+
     test('migrates legacy schema version 1 git snapshots', () => {
       const dir = path.join(tmpDir, 'investigations');
       fs.mkdirSync(dir, { recursive: true });
@@ -379,6 +434,323 @@ suite('Storage', () => {
       );
       const loaded = loadInvestigation(tmpDir, 'noinv');
       assert.strictEqual(loaded, null);
+    });
+
+    test('drops workspace-scoped absolute paths outside the saved workspace while preserving valid paths', () => {
+      const dir = path.join(tmpDir, 'investigations');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'outside.json'),
+        JSON.stringify({
+          schemaVersion: SCHEMA_VERSION,
+          investigation: {
+            id: 'outside',
+            name: 'Outside paths',
+            workspace: '/ws',
+            repository: '/repo',
+            savedAt: '2026-01-01T00:00:00.000Z',
+            checkpoint: null,
+            browserReferences: [],
+            navigationGraph: {
+              nodes: [
+                {
+                  kind: 'file',
+                  filePath: 'src/keep.ts',
+                  visitCount: 1,
+                  editCount: 0,
+                  lastObservedAt: '2026-01-01T00:00:00.000Z',
+                },
+                {
+                  kind: 'file',
+                  filePath: '/outside/secret.ts',
+                  visitCount: 1,
+                  editCount: 1,
+                  lastObservedAt: '2026-01-01T00:00:01.000Z',
+                },
+                {
+                  kind: 'file',
+                  filePath: 'C:/outside/win-secret.ts',
+                  visitCount: 1,
+                  editCount: 1,
+                  lastObservedAt: '2026-01-01T00:00:02.000Z',
+                },
+              ],
+              edges: [
+                {
+                  fromFilePath: 'src/keep.ts',
+                  toFilePath: '/outside/secret.ts',
+                  relationship: 'transition',
+                  count: 1,
+                  lastObservedAt: '2026-01-01T00:00:01.000Z',
+                },
+              ],
+            },
+            timeline: [
+              {
+                timestamp: '2026-01-01T00:00:00.000Z',
+                type: 'file.transition',
+                filePath: 'src/keep.ts',
+              },
+              {
+                timestamp: '2026-01-01T00:00:01.000Z',
+                type: 'file.edit',
+                filePath: '/outside/secret.ts',
+                count: 1,
+              },
+              {
+                timestamp: '2026-01-01T00:00:02.000Z',
+                type: 'file.edit',
+                filePath: 'C:/outside/win-secret.ts',
+                count: 1,
+              },
+            ],
+            snapshot: {
+              editedFiles: ['src/keep.ts', '/outside/secret.ts', 'C:/outside/win-secret.ts'],
+              visitedFileCounts: {
+                'src/keep.ts': 3,
+                '/outside/secret.ts': 2,
+                'C:/outside/win-secret.ts': 4,
+              },
+              lastLocation: {
+                filePath: '/outside/secret.ts',
+                line: 8,
+                column: 2,
+              },
+              recentPath: ['src/keep.ts', '/outside/secret.ts', 'C:/outside/win-secret.ts'],
+              git: null,
+            },
+          },
+        }),
+        'utf-8',
+      );
+
+      const loaded = loadInvestigation(tmpDir, 'outside');
+      assert.ok(loaded);
+      assert.deepStrictEqual(loaded!.snapshot.editedFiles, ['/ws/src/keep.ts']);
+      assert.deepStrictEqual(loaded!.snapshot.visitedFileCounts, {
+        '/ws/src/keep.ts': 3,
+      });
+      assert.strictEqual(loaded!.snapshot.lastLocation, null);
+      assert.deepStrictEqual(
+        loaded!.snapshot.recentEvents.map((event) => event.filePath),
+        ['/ws/src/keep.ts'],
+      );
+      assert.deepStrictEqual(loaded!.timeline, [
+        {
+          timestamp: '2026-01-01T00:00:00.000Z',
+          type: 'file.transition',
+          filePath: '/ws/src/keep.ts',
+        },
+      ]);
+      assert.deepStrictEqual(loaded!.navigationGraph, {
+        nodes: [
+          {
+            kind: 'file',
+            filePath: '/ws/src/keep.ts',
+            visitCount: 1,
+            editCount: 0,
+            lastObservedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        edges: [],
+      });
+    });
+
+    test('drops parent-traversal workspace paths while preserving valid paths', () => {
+      const dir = path.join(tmpDir, 'investigations');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'traversal.json'),
+        JSON.stringify({
+          schemaVersion: SCHEMA_VERSION,
+          investigation: {
+            id: 'traversal',
+            name: 'Traversal paths',
+            workspace: '/ws',
+            repository: null,
+            savedAt: '2026-01-01T00:00:00.000Z',
+            checkpoint: null,
+            browserReferences: [],
+            navigationGraph: {
+              nodes: [
+                {
+                  kind: 'file',
+                  filePath: '../secret.ts',
+                  visitCount: 1,
+                  editCount: 1,
+                  lastObservedAt: '2026-01-01T00:00:01.000Z',
+                },
+                {
+                  kind: 'file',
+                  filePath: 'src/keep.ts',
+                  visitCount: 2,
+                  editCount: 1,
+                  lastObservedAt: '2026-01-01T00:00:02.000Z',
+                },
+              ],
+              edges: [
+                {
+                  fromFilePath: '../secret.ts',
+                  toFilePath: 'src/keep.ts',
+                  relationship: 'transition',
+                  count: 1,
+                  lastObservedAt: '2026-01-01T00:00:02.000Z',
+                },
+              ],
+            },
+            timeline: [
+              {
+                timestamp: '2026-01-01T00:00:01.000Z',
+                type: 'file.transition',
+                filePath: '../secret.ts',
+              },
+              {
+                timestamp: '2026-01-01T00:00:02.000Z',
+                type: 'file.edit',
+                filePath: 'src/keep.ts',
+                count: 1,
+              },
+            ],
+            snapshot: {
+              editedFiles: ['../secret.ts', 'src/keep.ts'],
+              visitedFileCounts: {
+                '../secret.ts': 2,
+                'src/keep.ts': 1,
+              },
+              lastLocation: {
+                filePath: '../secret.ts',
+                line: 2,
+                column: 3,
+              },
+              recentPath: ['../secret.ts', 'src/keep.ts'],
+              git: null,
+            },
+          },
+        }),
+        'utf-8',
+      );
+
+      const loaded = loadInvestigation(tmpDir, 'traversal');
+      assert.ok(loaded);
+      assert.deepStrictEqual(loaded!.snapshot.editedFiles, ['/ws/src/keep.ts']);
+      assert.deepStrictEqual(loaded!.snapshot.visitedFileCounts, {
+        '/ws/src/keep.ts': 1,
+      });
+      assert.strictEqual(loaded!.snapshot.lastLocation, null);
+      assert.deepStrictEqual(
+        loaded!.snapshot.recentEvents.map((event) => event.filePath),
+        ['/ws/src/keep.ts'],
+      );
+      assert.deepStrictEqual(loaded!.timeline, [
+        {
+          timestamp: '2026-01-01T00:00:02.000Z',
+          type: 'file.edit',
+          filePath: '/ws/src/keep.ts',
+          count: 1,
+        },
+      ]);
+      assert.deepStrictEqual(loaded!.navigationGraph, {
+        nodes: [
+          {
+            kind: 'file',
+            filePath: '/ws/src/keep.ts',
+            visitCount: 2,
+            editCount: 1,
+            lastObservedAt: '2026-01-01T00:00:02.000Z',
+          },
+        ],
+        edges: [],
+      });
+    });
+
+    test('drops timeline and navigation entries with invalid timestamps', () => {
+      const dir = path.join(tmpDir, 'investigations');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'bad-timestamps.json'),
+        JSON.stringify({
+          schemaVersion: SCHEMA_VERSION,
+          investigation: {
+            id: 'bad-timestamps',
+            name: 'Bad timestamps',
+            workspace: '/ws',
+            repository: null,
+            savedAt: '2026-01-01T00:00:00.000Z',
+            checkpoint: null,
+            browserReferences: [],
+            navigationGraph: {
+              nodes: [
+                {
+                  kind: 'file',
+                  filePath: 'src/good.ts',
+                  visitCount: 1,
+                  editCount: 0,
+                  lastObservedAt: '2026-01-01T00:00:00.000Z',
+                },
+                {
+                  kind: 'file',
+                  filePath: 'src/bad.ts',
+                  visitCount: 2,
+                  editCount: 1,
+                  lastObservedAt: 'not-a-date',
+                },
+              ],
+              edges: [
+                {
+                  fromFilePath: 'src/good.ts',
+                  toFilePath: 'src/bad.ts',
+                  relationship: 'transition',
+                  count: 1,
+                  lastObservedAt: 'still-not-a-date',
+                },
+              ],
+            },
+            timeline: [
+              {
+                timestamp: '2026-01-01T00:00:00.000Z',
+                type: 'file.transition',
+                filePath: 'src/good.ts',
+              },
+              {
+                timestamp: 'not-a-date',
+                type: 'file.edit',
+                filePath: 'src/bad.ts',
+                count: 1,
+              },
+            ],
+            snapshot: {
+              editedFiles: ['src/good.ts'],
+              visitedFileCounts: { 'src/good.ts': 1 },
+              lastLocation: { filePath: 'src/good.ts', line: 2, column: 1 },
+              recentPath: ['src/good.ts'],
+              git: null,
+            },
+          },
+        }),
+        'utf-8',
+      );
+
+      const loaded = loadInvestigation(tmpDir, 'bad-timestamps');
+      assert.ok(loaded);
+      assert.deepStrictEqual(loaded!.timeline, [
+        {
+          timestamp: '2026-01-01T00:00:00.000Z',
+          type: 'file.transition',
+          filePath: '/ws/src/good.ts',
+        },
+      ]);
+      assert.deepStrictEqual(loaded!.navigationGraph, {
+        nodes: [
+          {
+            kind: 'file',
+            filePath: '/ws/src/good.ts',
+            visitCount: 1,
+            editCount: 0,
+            lastObservedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        edges: [],
+      });
     });
 
     test('reconstructs runtime paths from schema version 3 storage', () => {

@@ -4,15 +4,22 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { ResumeExecutionResult } from '../commands/resumePlan';
 import { Investigation } from '../domain';
-import { RepoTrailExtensionApi } from '../extension';
 
 suite('RepoTrail Extension', () => {
-  let api: RepoTrailExtensionApi;
+  let activationResult: unknown;
   let workspaceRoot: string;
   let tempDir: string;
 
   async function pause(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  async function listSavedInvestigations(): Promise<Investigation[]> {
+    return (
+      (await vscode.commands.executeCommand<Investigation[]>('repotrail.listInvestigations', {
+        quiet: true,
+      })) ?? []
+    );
   }
 
   async function createTempFile(name: string, content: string): Promise<vscode.Uri> {
@@ -24,7 +31,7 @@ suite('RepoTrail Extension', () => {
   suiteSetup(async () => {
     const ext = vscode.extensions.getExtension('repotrail.repotrail');
     assert.ok(ext, 'Extension not found');
-    api = (await ext!.activate()) as RepoTrailExtensionApi;
+    activationResult = await ext!.activate();
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     assert.ok(workspaceFolder, 'Workspace folder not found');
@@ -34,8 +41,9 @@ suite('RepoTrail Extension', () => {
   });
 
   setup(async () => {
-    api.debug.clearRecentEvents();
-    await api.debug.clearInvestigations();
+    await vscode.commands.executeCommand<number>('repotrail.deleteAllData', {
+      skipConfirmation: true,
+    });
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
     await pause();
   });
@@ -95,8 +103,8 @@ suite('RepoTrail Extension', () => {
     );
   });
 
-  test('debug api exposes an empty buffer after clearing', () => {
-    assert.deepStrictEqual(api.debug.getRecentEvents(), []);
+  test('does not expose captured data through the production extension API', () => {
+    assert.strictEqual(activationResult, undefined);
   });
 
   test('captures active editor, selection, and edit events with context', async () => {
@@ -113,8 +121,19 @@ suite('RepoTrail Extension', () => {
     });
     await pause();
 
-    const events = api.debug.getRecentEvents(workspaceRoot);
-    const matchingEvents = events.filter((event) => event.filePath === uri.fsPath);
+    const investigation = await vscode.commands.executeCommand<Investigation>(
+      'repotrail.saveRecentActivityAsInvestigation',
+      {
+        workspacePath: workspaceRoot,
+        name: 'Captured recent editor activity',
+        checkpointText: null,
+      },
+    );
+
+    assert.ok(investigation);
+    const matchingEvents = investigation!.snapshot.recentEvents.filter(
+      (event) => event.filePath === uri.fsPath,
+    );
     const eventTypes = matchingEvents.map((event) => event.type);
 
     assert.ok(eventTypes.includes('editor.active'));
@@ -147,14 +166,61 @@ suite('RepoTrail Extension', () => {
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(firstUri));
     await pause();
 
-    const activeTransitions = api.debug
-      .getRecentEvents(workspaceRoot)
+    const investigation = await vscode.commands.executeCommand<Investigation>(
+      'repotrail.saveRecentActivityAsInvestigation',
+      {
+        workspacePath: workspaceRoot,
+        name: 'Rapid transitions',
+        checkpointText: null,
+      },
+    );
+
+    assert.ok(investigation);
+    const activeTransitions = investigation!.snapshot.recentEvents
       .filter((event) => event.type === 'editor.active')
       .map((event) => event.filePath)
       .filter((filePath): filePath is string => Boolean(filePath))
       .slice(-3);
 
     assert.deepStrictEqual(activeTransitions, [firstUri.fsPath, secondUri.fsPath, firstUri.fsPath]);
+  });
+
+  test('records selection events independently across files in the same workspace', async () => {
+    const firstUri = await createTempFile('selection-a.ts', 'alpha\n');
+    const secondUri = await createTempFile('selection-b.ts', 'beta\n');
+
+    const firstEditor = await vscode.window.showTextDocument(
+      await vscode.workspace.openTextDocument(firstUri),
+    );
+    await pause();
+    firstEditor.selection = new vscode.Selection(new vscode.Position(0, 1), new vscode.Position(0, 1));
+    await pause();
+
+    const secondEditor = await vscode.window.showTextDocument(
+      await vscode.workspace.openTextDocument(secondUri),
+    );
+    await pause();
+    secondEditor.selection = new vscode.Selection(new vscode.Position(0, 1), new vscode.Position(0, 1));
+    await pause();
+
+    const investigation = await vscode.commands.executeCommand<Investigation>(
+      'repotrail.saveRecentActivityAsInvestigation',
+      {
+        workspacePath: workspaceRoot,
+        name: 'Cross-file selections',
+        checkpointText: null,
+      },
+    );
+
+    assert.ok(investigation);
+    const selectionEvents = investigation!.snapshot.recentEvents.filter(
+      (event) => event.type === 'editor.selection',
+    );
+
+    assert.deepStrictEqual(
+      selectionEvents.map((event) => event.filePath),
+      [firstUri.fsPath, secondUri.fsPath],
+    );
   });
 
   test('supports the investigation lifecycle through commands', async () => {
@@ -179,7 +245,6 @@ suite('RepoTrail Extension', () => {
 
     assert.ok(created);
     assert.strictEqual(created!.name, 'Integration investigation');
-    assert.strictEqual(api.debug.getActiveInvestigation(workspaceRoot)?.id, created!.id);
 
     const checkpointed = await vscode.commands.executeCommand<Investigation>(
       'repotrail.updateCheckpoint',
@@ -198,12 +263,17 @@ suite('RepoTrail Extension', () => {
     );
 
     assert.ok(saved);
-    assert.strictEqual(api.debug.getActiveInvestigation(workspaceRoot), null);
 
-    const investigations = await vscode.commands.executeCommand<Investigation[]>(
-      'repotrail.listInvestigations',
-      { quiet: true },
+    const afterStop = await vscode.commands.executeCommand<Investigation | null>(
+      'repotrail.updateCheckpoint',
+      {
+        workspacePath: workspaceRoot,
+        checkpointText: 'Should not apply after stop.',
+      },
     );
+    assert.strictEqual(afterStop, null);
+
+    const investigations = await listSavedInvestigations();
 
     assert.ok(investigations?.some((investigation) => investigation.id === created!.id));
 
@@ -216,7 +286,9 @@ suite('RepoTrail Extension', () => {
     );
 
     assert.strictEqual(deleted, true);
-    assert.ok(!api.debug.listInvestigations().some((investigation) => investigation.id === created!.id));
+    assert.ok(
+      !(await listSavedInvestigations()).some((investigation) => investigation.id === created!.id),
+    );
   });
 
   test('shows the local storage location and deletes all RepoTrail data', async () => {
@@ -234,7 +306,6 @@ suite('RepoTrail Extension', () => {
     );
 
     assert.ok(created);
-    assert.ok(api.debug.getRecentEvents().length > 0);
 
     const storageLocation = await vscode.commands.executeCommand<string>(
       'repotrail.showStorageLocation',
@@ -254,8 +325,17 @@ suite('RepoTrail Extension', () => {
     );
 
     assert.strictEqual(deletedCount, 1);
-    assert.deepStrictEqual(api.debug.getRecentEvents(), []);
-    assert.deepStrictEqual(api.debug.listInvestigations(), []);
+    assert.deepStrictEqual(await listSavedInvestigations(), []);
+
+    const recreated = await vscode.commands.executeCommand<Investigation | null>(
+      'repotrail.saveRecentActivityAsInvestigation',
+      {
+        workspacePath: workspaceRoot,
+        name: 'Should stay empty after delete all',
+        checkpointText: null,
+      },
+    );
+    assert.strictEqual(recreated, null);
   });
 
   test('opens a resume snapshot for a saved investigation', async () => {
@@ -305,7 +385,7 @@ suite('RepoTrail Extension', () => {
     assert.ok(text.includes('## Checkpoint'));
     assert.ok(text.includes('## External references'));
     assert.ok(text.includes('https://developer.mozilla.org/docs/Web/API/URL'));
-    assert.ok(text.includes('## Current Git state'));
+    assert.ok(text.includes('## Current Git state at open time'));
   });
 
   test('reuses the same resume snapshot document after saved data changes', async () => {
@@ -531,11 +611,11 @@ suite('RepoTrail Extension', () => {
     assert.ok(result);
     assert.deepStrictEqual(result!.revealedLocation, {
       filePath: staleUri.fsPath,
-      line: 1,
-      column: 5,
+      line: 2,
+      column: 1,
     });
     assert.strictEqual(vscode.window.activeTextEditor?.document.uri.fsPath, staleUri.fsPath);
-    assert.strictEqual(vscode.window.activeTextEditor?.selection.active.line, 0);
-    assert.strictEqual(vscode.window.activeTextEditor?.selection.active.character, 4);
+    assert.strictEqual(vscode.window.activeTextEditor?.selection.active.line, 1);
+    assert.strictEqual(vscode.window.activeTextEditor?.selection.active.character, 0);
   });
 });

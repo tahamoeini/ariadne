@@ -1,27 +1,17 @@
 import * as vscode from 'vscode';
 import {
   createVsCodeObservedEventCapture,
-  RepoTrailDebugApi as CaptureDebugApi,
   VsCodeObservedEventCapture,
 } from './capture/vscodeEventCapture';
 import { createResumeSnapshotOpener } from './ui';
 import {
-  InvestigationLifecycleDebugApi,
   InvestigationLifecycleService,
   registerInvestigationCommands,
 } from './commands';
 
 let activeLifecycleService: InvestigationLifecycleService | null = null;
 
-export interface RepoTrailExtensionDebugApi
-  extends CaptureDebugApi, InvestigationLifecycleDebugApi {}
-
-/** @internal Testing-only debug surface; exposes raw captured metadata. */
-export interface RepoTrailExtensionApi {
-  debug: RepoTrailExtensionDebugApi;
-}
-
-export function activate(context: vscode.ExtensionContext): RepoTrailExtensionApi {
+export function activate(context: vscode.ExtensionContext): void {
   const eventCapture: VsCodeObservedEventCapture = createVsCodeObservedEventCapture();
   const lifecycle = new InvestigationLifecycleService({
     storageDir: context.globalStorageUri.fsPath,
@@ -47,21 +37,6 @@ export function activate(context: vscode.ExtensionContext): RepoTrailExtensionAp
     eventCapture,
     snapshotProvider,
   );
-
-  return {
-    debug: {
-      ...eventCapture.debug,
-      getActiveInvestigation(workspace?: string) {
-        return lifecycle.getActiveInvestigation(workspace);
-      },
-      listInvestigations() {
-        return lifecycle.listInvestigations();
-      },
-      clearInvestigations() {
-        return lifecycle.clearInvestigations();
-      },
-    },
-  };
 }
 
 export async function deactivate(): Promise<void> {

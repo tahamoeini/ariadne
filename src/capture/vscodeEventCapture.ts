@@ -152,18 +152,14 @@ export function createVsCodeObservedEventCapture(
     }
 
     const location = toFileLocation(context.filePath, editor.selection.active);
-    const selectionKey = [
-      context.workspace,
-      context.filePath,
-      location.line,
-      location.column,
-    ].join(':');
+    const selectionScope = `${context.workspace}:${context.filePath}`;
+    const selectionKey = [location.line, location.column].join(':');
 
-    if (selectionKeys.get(context.workspace) === selectionKey) {
+    if (selectionKeys.get(selectionScope) === selectionKey) {
       return;
     }
 
-    selectionKeys.set(context.workspace, selectionKey);
+    selectionKeys.set(selectionScope, selectionKey);
     addEvent({
       type: 'editor.selection',
       workspace: context.workspace,
@@ -220,7 +216,11 @@ export function createVsCodeObservedEventCapture(
         if (!workspace) {
           selectionKeys.clear();
         } else {
-          selectionKeys.delete(workspace);
+          for (const key of Array.from(selectionKeys.keys())) {
+            if (key.startsWith(`${workspace}:`)) {
+              selectionKeys.delete(key);
+            }
+          }
         }
         buffer.clear(workspace);
       },
@@ -235,7 +235,11 @@ export function createVsCodeObservedEventCapture(
       if (!workspace) {
         selectionKeys.clear();
       } else {
-        selectionKeys.delete(workspace);
+        for (const key of Array.from(selectionKeys.keys())) {
+          if (key.startsWith(`${workspace}:`)) {
+            selectionKeys.delete(key);
+          }
+        }
       }
       buffer.clear(workspace);
     },

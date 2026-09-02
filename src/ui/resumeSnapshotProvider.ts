@@ -12,7 +12,9 @@ export interface ResumeSnapshotOpener {
 
 export interface ResumeSnapshotProviderOptions {
   storageDir: string;
-  captureCurrentGitSnapshot?: (targetPath: string) => GitSnapshot | null;
+  captureCurrentGitSnapshot?: (
+    targetPath: string,
+  ) => GitSnapshot | null | PromiseLike<GitSnapshot | null>;
   fileExists?: (filePath: string) => boolean;
 }
 
@@ -39,6 +41,37 @@ class ResumeSnapshotContentProvider
   readonly onDidChange = this.onDidChangeEmitter.event;
 
   constructor(private readonly options: ResumeSnapshotProviderOptions) {}
+
+  async buildContent(
+    uri: vscode.Uri,
+    investigation?: Investigation | null,
+  ): Promise<string> {
+    const investigationId = parseInvestigationId(uri.query);
+    if (!investigationId) {
+      const content = buildMissingInvestigationContent('unknown');
+      this.cacheContent(uri, content);
+      return content;
+    }
+
+    const resolvedInvestigation = investigation ?? loadInvestigation(this.options.storageDir, investigationId);
+    if (!resolvedInvestigation) {
+      const content = buildMissingInvestigationContent(investigationId);
+      this.cacheContent(uri, content);
+      return content;
+    }
+
+    const currentGitSnapshot = await (this.options.captureCurrentGitSnapshot ?? captureGitSnapshot)(
+      resolvedInvestigation.snapshot.lastLocation?.filePath ??
+        resolvedInvestigation.repository ??
+        resolvedInvestigation.workspace,
+    );
+
+    const content = buildResumeSnapshotContent(resolvedInvestigation, currentGitSnapshot, {
+      fileExists: this.options.fileExists,
+    });
+    this.cacheContent(uri, content);
+    return content;
+  }
 
   cacheContent(uri: vscode.Uri, content: string): void {
     const key = uri.toString();
@@ -69,35 +102,13 @@ class ResumeSnapshotContentProvider
     }
   }
 
-  provideTextDocumentContent(uri: vscode.Uri): string {
+  provideTextDocumentContent(uri: vscode.Uri): string | Thenable<string> {
     const cached = this.contentCache.get(uri.toString());
     if (cached) {
       return cached;
     }
 
-    const investigationId = parseInvestigationId(uri.query);
-    if (!investigationId) {
-      const content = buildMissingInvestigationContent('unknown');
-      this.cacheContent(uri, content);
-      return content;
-    }
-
-    const investigation = loadInvestigation(this.options.storageDir, investigationId);
-    if (!investigation) {
-      const content = buildMissingInvestigationContent(investigationId);
-      this.cacheContent(uri, content);
-      return content;
-    }
-
-    const currentGitSnapshot = (this.options.captureCurrentGitSnapshot ?? captureGitSnapshot)(
-      investigation.snapshot.lastLocation?.filePath ?? investigation.repository ?? investigation.workspace,
-    );
-
-    const content = buildResumeSnapshotContent(investigation, currentGitSnapshot, {
-      fileExists: this.options.fileExists,
-    });
-    this.cacheContent(uri, content);
-    return content;
+    return this.buildContent(uri);
   }
 
   dispose(): void {
@@ -126,21 +137,7 @@ export function createResumeSnapshotOpener(
             id: investigation.id,
           }).toString(),
         });
-        if (fullInvestigation) {
-          const currentGitSnapshot = (options.captureCurrentGitSnapshot ?? captureGitSnapshot)(
-            fullInvestigation.snapshot.lastLocation?.filePath ??
-              fullInvestigation.repository ??
-              fullInvestigation.workspace,
-          );
-          provider.cacheContent(
-            uri,
-            buildResumeSnapshotContent(fullInvestigation, currentGitSnapshot, {
-              fileExists: options.fileExists,
-            }),
-          );
-        } else {
-          provider.cacheContent(uri, buildMissingInvestigationContent(investigation.id));
-        }
+        await provider.buildContent(uri, fullInvestigation);
         const document = await vscode.workspace.openTextDocument(uri);
         await vscode.window.showTextDocument(document, { preview: false });
       },

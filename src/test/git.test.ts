@@ -102,7 +102,7 @@ suite('Git Snapshot', () => {
       rmDir(tmpDir);
     });
 
-    test('captures repository state for a file path inside a repository', () => {
+    test('captures repository state for a file path inside a repository', async () => {
       const commands: Array<{ cwd: string; args: string[] }> = [];
       const outputs = new Map<string, GitCommandResult>([
         [
@@ -120,7 +120,7 @@ suite('Git Snapshot', () => {
         return outputs.get(args.join(' ')) ?? makeResult({ exitCode: 1, stderr: 'unexpected command' });
       };
 
-      const snapshot = captureGitSnapshot(filePath, {
+      const snapshot = await captureGitSnapshot(filePath, {
         now: () => Date.parse('2026-02-03T04:05:06.000Z'),
         runGit,
       });
@@ -141,8 +141,8 @@ suite('Git Snapshot', () => {
       );
     });
 
-    test('returns a clear no-git state outside a repository', () => {
-      const snapshot = captureGitSnapshot(tmpDir, {
+    test('returns a clear no-git state outside a repository', async () => {
+      const snapshot = await captureGitSnapshot(tmpDir, {
         now: () => Date.parse('2026-02-03T04:05:06.000Z'),
       });
 
@@ -158,14 +158,14 @@ suite('Git Snapshot', () => {
       });
     });
 
-    test('returns a git-missing state when the executable is unavailable', () => {
+    test('returns a git-missing state when the executable is unavailable', async () => {
       const runGit: GitCommandRunner = () =>
         makeResult({
           exitCode: null,
           error: Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' }),
         });
 
-      const snapshot = captureGitSnapshot(repositoryRoot, {
+      const snapshot = await captureGitSnapshot(repositoryRoot, {
         now: () => Date.parse('2026-02-03T04:05:06.000Z'),
         runGit,
       });
@@ -182,7 +182,7 @@ suite('Git Snapshot', () => {
       });
     });
 
-    test('handles detached HEAD and no-commit repositories', () => {
+    test('handles detached HEAD and no-commit repositories', async () => {
       const detachedOutputs = new Map<string, GitCommandResult>([
         [
           'status --porcelain=v1 --branch -z --untracked-files=all',
@@ -191,7 +191,7 @@ suite('Git Snapshot', () => {
         ['rev-parse --verify HEAD', makeResult({ stdout: 'deadbeef\n' })],
         ['diff --shortstat --no-ext-diff HEAD --', makeResult({ stdout: ' 1 file changed, 1 insertion(+)\n' })],
       ]);
-      const detachedSnapshot = captureGitSnapshot(repositoryRoot, {
+      const detachedSnapshot = await captureGitSnapshot(repositoryRoot, {
         now: () => Date.parse('2026-02-03T04:05:06.000Z'),
         runGit: (_cwd, args) => detachedOutputs.get(args.join(' ')) ?? makeResult({ exitCode: 1 }),
       });
@@ -212,7 +212,7 @@ suite('Git Snapshot', () => {
         ['diff --shortstat --no-ext-diff --', makeResult({ stdout: ' 1 file changed, 1 deletion(-)\n' })],
       ]);
 
-      const unbornSnapshot = captureGitSnapshot(repositoryRoot, {
+      const unbornSnapshot = await captureGitSnapshot(repositoryRoot, {
         now: () => Date.parse('2026-02-03T04:05:06.000Z'),
         runGit: (_cwd, args) => unbornOutputs.get(args.join(' ')) ?? makeResult({ exitCode: 1 }),
       });
@@ -229,7 +229,7 @@ suite('Git Snapshot', () => {
       });
     });
 
-    test('returns a git-error state when repository commands fail unexpectedly', () => {
+    test('returns a git-error state when repository commands fail unexpectedly', async () => {
       const outputs = new Map<string, GitCommandResult>([
         [
           'status --porcelain=v1 --branch -z --untracked-files=all',
@@ -238,7 +238,7 @@ suite('Git Snapshot', () => {
         ['rev-parse --verify HEAD', makeResult({ exitCode: 128, stderr: 'fatal: bad object HEAD\n' })],
       ]);
 
-      const snapshot = captureGitSnapshot(repositoryRoot, {
+      const snapshot = await captureGitSnapshot(repositoryRoot, {
         now: () => Date.parse('2026-02-03T04:05:06.000Z'),
         runGit: (_cwd, args) => outputs.get(args.join(' ')) ?? makeResult({ exitCode: 1 }),
       });
