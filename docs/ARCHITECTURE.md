@@ -16,7 +16,7 @@
 src/
 ├── extension.ts    # VS Code entry point (activate / deactivate)
 ├── domain/         # Core types and factory functions
-│   ├── types.ts    # Investigation, Checkpoint, Snapshot, GitSnapshot, ObservedEvent
+│   ├── types.ts    # Investigation, Checkpoint, Snapshot, GitSnapshot, ObservedEvent, TimelineEntry
 │   ├── investigation.ts  # Factory functions (createInvestigation, etc.)
 │   └── index.ts    # Public re-exports
 ├── capture/        # Rolling buffer + VS Code event listeners
@@ -53,6 +53,7 @@ Modules communicate through domain types. No module directly imports another mod
 | lastResumedAt | string \| null | Last resumed timestamp |
 | checkpoint | Checkpoint \| null | Optional developer note |
 | snapshot | Snapshot | Current state capture |
+| timeline | InvestigationTimelineEntry[] | Condensed factual sequence retained for re-entry |
 
 ### Checkpoint
 | Field | Type | Description |
@@ -81,6 +82,16 @@ Modules communicate through domain types. No module directly imports another mod
 | untrackedFiles | string[] | Repository-relative untracked files |
 | diffStats | { filesChanged, insertions, deletions } | Summary diff stats |
 
+### InvestigationTimelineEntry
+| Variant | Fields | Description |
+|-------|------|-------------|
+| `file.transition` | `timestamp`, `filePath` | Factual move into a file within the Investigation |
+| `file.edit` | `timestamp`, `filePath`, `count` | One or more collapsed consecutive edit observations for a file |
+| `checkpoint` | `timestamp`, `text` | Checkpoint set or cleared (`text: null`) |
+| `git.snapshot` | `timestamp`, `availability`, `branch`, `head`, `modifiedCount`, `untrackedCount`, `filesChanged`, `insertions`, `deletions` | Condensed Git capture facts |
+| `save.point` | `timestamp`, `reason` | Investigation persisted because it started, saved recent activity, saved/stopped, or was otherwise saved |
+| `resume.point` | `timestamp` | Investigation resume event captured at re-entry |
+
 ### ObservedEvent
 | Field | Type | Description |
 |-------|------|-------------|
@@ -94,7 +105,7 @@ Modules communicate through domain types. No module directly imports another mod
 
 ObservedEventType: `editor.active`, `editor.selection`, `file.edit`, `navigation.definition`, `navigation.reference`.
 
-The runtime model is intentionally richer than the persisted schema. RepoTrail rehydrates a small runtime `recentEvents` trail from saved path history, but it does not persist full observed-event objects once an Investigation is written to disk.
+The runtime model is intentionally richer than the persisted schema. RepoTrail rehydrates a small runtime `recentEvents` trail from saved path history for reopen logic, but persistence now keeps a separate condensed `timeline` for factual sequence reconstruction. RepoTrail still does not persist full observed-event objects once an Investigation is written to disk.
 
 ## Storage Mechanism
 
@@ -114,7 +125,7 @@ The runtime model is intentionally richer than the persisted schema. RepoTrail r
 **Format:** Each file is a JSON envelope:
 ```json
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "investigation": { ... }
 }
 ```
@@ -129,6 +140,7 @@ The runtime model is intentionally richer than the persisted schema. RepoTrail r
 | `repository` | Kept only to preserve saved repository context when the workspace is nested |
 | `savedAt` | Required to sort and display recency |
 | `checkpoint.text` | Optional human-authored re-entry note |
+| `timeline` | Required to reconstruct factual investigation sequence during re-entry without keeping the full raw event log |
 | `snapshot.editedFiles` | Factual reopen evidence |
 | `snapshot.visitedFileCounts` | Factual revisit priority signal |
 | `snapshot.lastLocation` | Required to return to the last saved cursor location |
@@ -147,7 +159,7 @@ The runtime model is intentionally richer than the persisted schema. RepoTrail r
 
 When file paths are inside the saved workspace, RepoTrail stores them as workspace-relative paths on disk and expands them back to absolute paths only when loading the Investigation.
 
-**Schema versioning:** The `schemaVersion` field is checked on load. Current saves use schema version 3. Legacy version 1 investigations are migrated to the explicit Git availability model. Legacy version 2 investigations are minimized on load into the new schema shape. Unknown future versions are rejected (returns null).
+**Schema versioning:** The `schemaVersion` field is checked on load. Current saves use schema version 4. Legacy version 1 investigations are migrated to the explicit Git availability model. Legacy version 2 and 3 investigations are minimized on load into the current schema shape and receive a best-effort derived timeline when none was persisted. Unknown future versions are rejected (returns null).
 
 **Properties:**
 - Local-only, no cloud.
@@ -166,6 +178,7 @@ When file paths are inside the saved workspace, RepoTrail stores them as workspa
 - The rolling event buffer stays in memory only; saving an Investigation persists only the reduced re-entry subset above.
 - RepoTrail does not store keystrokes, clipboard data, screenshots, terminal content, or full source-code contents.
 - Checkpoint text is persisted as plain local text because it is the user-authored re-entry note; it should not contain secrets.
+- The persisted timeline is condensed and investigation-scoped; it is not a general telemetry stream or cross-investigation history.
 
 ## Event Capture Concept
 
@@ -234,9 +247,10 @@ The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confi
 ## Resume Snapshot (Implemented)
 
 - Saved Investigations can be opened into a read-only virtual Markdown document backed by a VS Code `TextDocumentContentProvider`.
-- The Snapshot shows factual re-entry context in a fixed order: investigation name, optional checkpoint, saved timestamp, workspace/repository, branch when saved, saved Git state, current Git state, factual saved-vs-current Git differences, edited files, revisited files with explicit visit counts, last location, and a short recent observed path.
+- The Snapshot shows factual re-entry context in a fixed order: investigation name, optional checkpoint, saved timestamp, workspace/repository, branch when saved, saved Git state, current Git state, factual saved-vs-current Git differences, edited files, revisited files with explicit visit counts, last location, and a condensed investigation timeline.
 - Missing or unavailable data is rendered explicitly instead of inferred, including absent checkpoints, missing Git state, deleted/moved saved paths, and missing/corrupted Investigation payloads.
 - Each Investigation reuses a stable virtual-document URI so reopening the Resume Snapshot refreshes the existing tab instead of creating duplicates for each save.
+- Timeline rendering collapses noise by deduplicating repeated file focus transitions and folding consecutive edit events on the same file into one counted entry.
 
 ## Resume Actions (Implemented)
 

@@ -1,2 +1,14 @@
 export * from './types';
-export { createInvestigation, createEmptySnapshot, createCheckpoint } from './investigation';
+export {
+	appendCheckpointToTimeline,
+	appendGitSnapshotToTimeline,
+	appendObservedEventToTimeline,
+	appendResumePointToTimeline,
+	appendSavePointToTimeline,
+	buildTimelineFromObservedEvents,
+	cloneTimelineEntry,
+	createInvestigation,
+	createEmptySnapshot,
+	createCheckpoint,
+	trimInvestigationTimeline,
+} from './investigation';

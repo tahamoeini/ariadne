@@ -23,6 +23,7 @@ suite('Domain Model', () => {
       assert.strictEqual(inv.snapshot.lastLocation, null);
       assert.deepStrictEqual(inv.snapshot.recentEvents, []);
       assert.strictEqual(inv.snapshot.git, null);
+      assert.deepStrictEqual(inv.timeline, []);
     });
 
     test('accepts optional repository path', () => {
@@ -91,6 +92,45 @@ suite('Domain Model', () => {
         untrackedFiles: ['new.txt'],
         diffStats: { filesChanged: 1, insertions: 10, deletions: 2 },
       };
+      inv.timeline = [
+        {
+          timestamp: '2026-01-01T00:00:00.000Z',
+          type: 'file.transition',
+          filePath: 'a.ts',
+        },
+        {
+          timestamp: '2026-01-01T00:00:01.000Z',
+          type: 'file.edit',
+          filePath: 'a.ts',
+          count: 2,
+        },
+        {
+          timestamp: '2026-01-01T00:00:02.000Z',
+          type: 'checkpoint',
+          text: 'note',
+        },
+        {
+          timestamp: '2026-01-01T00:00:03.000Z',
+          type: 'git.snapshot',
+          availability: 'available',
+          head: 'abc123',
+          branch: 'main',
+          modifiedCount: 1,
+          untrackedCount: 1,
+          filesChanged: 1,
+          insertions: 10,
+          deletions: 2,
+        },
+        {
+          timestamp: '2026-01-01T00:00:04.000Z',
+          type: 'save.point',
+          reason: 'save',
+        },
+        {
+          timestamp: '2026-01-01T00:00:05.000Z',
+          type: 'resume.point',
+        },
+      ];
 
       const json = JSON.stringify(inv);
       const restored: Investigation = JSON.parse(json);

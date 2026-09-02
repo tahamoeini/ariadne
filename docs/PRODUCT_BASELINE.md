@@ -57,7 +57,7 @@ RepoTrail 0.0.1 does not add:
 
 - AI
 - graph visualization
-- timeline dashboards
+- timeline dashboards or general activity dashboards
 - browser integration
 - cloud sync
 - accounts
@@ -94,7 +94,11 @@ RepoTrail records factual observations such as:
 
 - a file was edited
 - a file was revisited
+- the sequence of file transitions within one Investigation
 - the last saved location was `file:line:column`
+- a checkpoint was added or cleared
+- a Git snapshot was captured
+- the Investigation was saved or resumed
 - Git state changed between save time and resume time
 
 RepoTrail must not turn those facts into unsupported labels such as:
@@ -104,6 +108,16 @@ RepoTrail must not turn those facts into unsupported labels such as:
 - high-priority file
 
 Human meaning remains human-supplied through the investigation name and optional checkpoint.
+
+## Timeline boundary
+
+RepoTrail may retain a small factual timeline when that improves re-entry, but the boundary stays the Investigation itself.
+
+- The timeline exists only inside one saved Investigation.
+- Timeline entries remain factual: file transitions, edit events, checkpoint changes, Git snapshots, and save/resume points.
+- Noise is collapsed rather than logged exhaustively.
+- RepoTrail must not infer relevance, intent, priority, or architectural meaning from that sequence.
+- Graph visualization remains deferred until validation shows that the timeline alone is insufficient for re-entry.
 
 ## Privacy and local trust
 

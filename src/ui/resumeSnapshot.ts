@@ -1,14 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { GitSnapshot, Investigation, ObservedEvent } from '../domain';
+import {
+  GitSnapshot,
+  Investigation,
+  InvestigationTimelineEntry,
+  InvestigationTimelineSavePointReason,
+} from '../domain';
 
-const VISIT_EVENT_TYPES: ReadonlySet<ObservedEvent['type']> = new Set([
-  'editor.active',
-  'navigation.definition',
-  'navigation.reference',
-]);
-
-const NAVIGATION_PATH_LIMIT = 5;
 const MISSING_PATH_SUFFIX = ' — saved path missing (deleted or moved)';
 
 export interface ResumeSnapshotRenderOptions {
@@ -203,23 +201,75 @@ function describeLastLocation(
   return `- ${displayPath}:${location.line}:${location.column}${suffix}`;
 }
 
-function buildRecentPathLines(
+function describeTimelineSavePoint(reason: InvestigationTimelineSavePointReason): string {
+  switch (reason) {
+    case 'start':
+      return 'Started investigation';
+    case 'save-recent':
+      return 'Saved recent activity as investigation';
+    case 'save-stop':
+      return 'Saved and stopped investigation';
+    case 'save':
+      return 'Saved investigation';
+  }
+}
+
+function describeTimelineGit(entry: Extract<InvestigationTimelineEntry, { type: 'git.snapshot' }>): string {
+  if (entry.availability === 'not-repository') {
+    return 'Git snapshot: no repository detected';
+  }
+
+  if (entry.availability === 'git-missing') {
+    return 'Git snapshot: Git executable unavailable';
+  }
+
+  if (entry.availability === 'git-error') {
+    return 'Git snapshot: capture error';
+  }
+
+  return [
+    `Git snapshot: ${describeBranch(entry.branch)} @ ${describeHead(entry.head)}`,
+    `${entry.modifiedCount} modified`,
+    `${entry.untrackedCount} untracked`,
+    `+${entry.insertions} / -${entry.deletions} across ${entry.filesChanged} files`,
+  ].join('; ');
+}
+
+function buildTimelineLines(
   investigation: Investigation,
   fileExists: (filePath: string) => boolean,
 ): string[] {
-  const pathSteps = investigation.snapshot.recentEvents
-    .filter((event) => event.filePath && VISIT_EVENT_TYPES.has(event.type))
-    .map((event) => event.filePath as string)
-    .filter((filePath, index, allPaths) => index === 0 || allPaths[index - 1] !== filePath)
-    .slice(-NAVIGATION_PATH_LIMIT);
-
-  if (pathSteps.length === 0) {
-    return ['No recent navigation path was captured.'];
+  if (investigation.timeline.length === 0) {
+    return ['- No investigation timeline was captured.'];
   }
 
-  return pathSteps.map((filePath, index) => {
-    const prefix = index === 0 ? '' : '→ ';
-    return `${prefix}${describeSavedFile(filePath, investigation, fileExists)}`;
+  let currentFilePath: string | null = null;
+  return investigation.timeline.map((entry) => {
+    switch (entry.type) {
+      case 'file.transition': {
+        const nextFilePath = describeSavedFile(entry.filePath, investigation, fileExists);
+        const line = currentFilePath
+          ? `${describeSavedFile(currentFilePath, investigation, fileExists)} → ${nextFilePath}`
+          : `Focused ${nextFilePath}`;
+        currentFilePath = entry.filePath;
+        return `- ${entry.timestamp} — ${line}`;
+      }
+      case 'file.edit': {
+        currentFilePath = entry.filePath;
+        const countSuffix = entry.count > 1 ? ` (${entry.count} edit events)` : '';
+        return `- ${entry.timestamp} — Edited ${describeSavedFile(entry.filePath, investigation, fileExists)}${countSuffix}`;
+      }
+      case 'checkpoint':
+        return entry.text
+          ? `- ${entry.timestamp} — Checkpoint: ${entry.text}`
+          : `- ${entry.timestamp} — Checkpoint cleared`;
+      case 'git.snapshot':
+        return `- ${entry.timestamp} — ${describeTimelineGit(entry)}`;
+      case 'save.point':
+        return `- ${entry.timestamp} — ${describeTimelineSavePoint(entry.reason)}`;
+      case 'resume.point':
+        return `- ${entry.timestamp} — Resumed investigation`;
+    }
   });
 }
 
@@ -293,9 +343,9 @@ export function buildResumeSnapshotContent(
     '',
     describeLastLocation(investigation, fileExists),
     '',
-    '## Recent observed path',
+    '## Investigation timeline',
     '',
-    ...buildRecentPathLines(investigation, fileExists),
+    ...buildTimelineLines(investigation, fileExists),
   );
 
   return sections.join('\n');

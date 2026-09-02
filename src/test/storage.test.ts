@@ -81,7 +81,10 @@ suite('Storage', () => {
       const inv = createInvestigation('Minimize me', '/ws', '/repo');
       inv.createdAt = '2026-01-01T00:00:00.000Z';
       inv.lastResumedAt = '2026-01-01T00:10:00.000Z';
-      inv.checkpoint = createCheckpoint('local note');
+      inv.checkpoint = {
+        text: 'local note',
+        createdAt: '2026-01-01T00:03:30.000Z',
+      };
       inv.snapshot.editedFiles = ['/ws/src/token.ts'];
       inv.snapshot.visitedFileCounts = {
         '/ws/src/token.ts': 3,
@@ -117,17 +120,86 @@ suite('Storage', () => {
         untrackedFiles: ['notes.txt'],
         diffStats: { filesChanged: 1, insertions: 2, deletions: 1 },
       };
+      inv.timeline = [
+        {
+          timestamp: '2026-01-01T00:02:00.000Z',
+          type: 'file.transition',
+          filePath: '/ws/src/token.ts',
+        },
+        {
+          timestamp: '2026-01-01T00:03:00.000Z',
+          type: 'file.transition',
+          filePath: '/ws/src/helper.ts',
+        },
+        {
+          timestamp: '2026-01-01T00:03:30.000Z',
+          type: 'checkpoint',
+          text: 'local note',
+        },
+        {
+          timestamp: '2026-01-01T00:04:00.000Z',
+          type: 'git.snapshot',
+          availability: 'available',
+          head: 'abc123',
+          branch: 'main',
+          modifiedCount: 1,
+          untrackedCount: 1,
+          filesChanged: 1,
+          insertions: 2,
+          deletions: 1,
+        },
+        {
+          timestamp: '2026-01-01T00:04:01.000Z',
+          type: 'save.point',
+          reason: 'save',
+        },
+      ];
 
       saveInvestigation(tmpDir, inv);
       const savedJson = readSavedJson(tmpDir, inv.id);
       const investigation = savedJson.investigation as Record<string, unknown>;
       const snapshot = investigation.snapshot as Record<string, unknown>;
       const git = snapshot.git as Record<string, unknown>;
+      const timeline = investigation.timeline as Record<string, unknown>[];
 
       assert.strictEqual(savedJson.schemaVersion, SCHEMA_VERSION);
       assert.ok(!('createdAt' in investigation));
       assert.ok(!('lastResumedAt' in investigation));
       assert.deepStrictEqual(investigation.checkpoint, { text: 'local note' });
+      assert.deepStrictEqual(timeline, [
+        {
+          timestamp: '2026-01-01T00:02:00.000Z',
+          type: 'file.transition',
+          filePath: 'src/token.ts',
+        },
+        {
+          timestamp: '2026-01-01T00:03:00.000Z',
+          type: 'file.transition',
+          filePath: 'src/helper.ts',
+        },
+        {
+          timestamp: '2026-01-01T00:03:30.000Z',
+          type: 'checkpoint',
+          text: 'local note',
+        },
+        {
+          timestamp: '2026-01-01T00:04:00.000Z',
+          type: 'git.snapshot',
+          availability: 'available',
+          head: 'abc123',
+          branch: 'main',
+          modifiedCount: 1,
+          untrackedCount: 1,
+          filesChanged: 1,
+          insertions: 2,
+          deletions: 1,
+        },
+        {
+          timestamp: '2026-01-01T00:04:01.000Z',
+          type: 'save.point',
+          reason: 'save',
+        },
+      ]);
       assert.deepStrictEqual(snapshot.editedFiles, ['src/token.ts']);
       assert.deepStrictEqual(snapshot.visitedFileCounts, { 'src/token.ts': 3 });
       assert.deepStrictEqual(snapshot.lastLocation, {
@@ -289,6 +361,13 @@ suite('Storage', () => {
       );
       assert.strictEqual(loaded!.checkpoint?.createdAt, '2026-01-01T00:00:00.000Z');
       assert.strictEqual(loaded!.snapshot.git?.repositoryRoot, '/repo');
+      assert.deepStrictEqual(loaded!.timeline.map((entry) => entry.type), [
+        'file.transition',
+        'file.transition',
+        'checkpoint',
+        'git.snapshot',
+        'save.point',
+      ]);
     });
 
     test('recovers from a valid backup when the primary file is malformed', () => {

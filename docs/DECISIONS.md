@@ -229,3 +229,11 @@
 **Decision:** Resume Snapshot virtual documents use a stable per-investigation URI and refresh their content in place when the saved Investigation changes.
 
 **Reason:** Save/checkpoint flows can update the same Investigation multiple times. A stable URI avoids duplicate Resume Snapshot tabs and ensures repeated opens show the latest saved data and current Git comparison instead of stale cached content.
+
+---
+
+## ADR-030: Add a Condensed Investigation-Scoped Timeline Before Any Graph
+
+**Decision:** RepoTrail 0.0.1 persists and renders a small factual timeline inside each Investigation before considering any graph visualization.
+
+**Reason:** Validation evidence indicated that developers needed better reconstruction of sequence during re-entry. The smallest trustworthy response is a condensed timeline bounded to one Investigation and rendered in the existing Resume Snapshot. This preserves factual ordering of file transitions, edit events, checkpoint changes, Git snapshots, and save/resume points without creating a dashboard, inferring meaning, or introducing graph complexity before the timeline itself is validated.

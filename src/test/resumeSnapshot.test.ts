@@ -1,5 +1,13 @@
 import * as assert from 'assert';
-import { createInvestigation, GitSnapshot, Investigation } from '../domain';
+import {
+  appendCheckpointToTimeline,
+  appendGitSnapshotToTimeline,
+  appendSavePointToTimeline,
+  buildTimelineFromObservedEvents,
+  createInvestigation,
+  GitSnapshot,
+  Investigation,
+} from '../domain';
 import {
   buildMissingInvestigationContent,
   buildResumeSnapshotContent,
@@ -7,7 +15,7 @@ import {
 
 function makeGitSnapshot(overrides: Partial<GitSnapshot> = {}): GitSnapshot {
   return {
-    timestamp: '2026-06-01T12:00:00.000Z',
+    timestamp: '2026-06-01T12:34:30.000Z',
     availability: 'available',
     repositoryRoot: '/workspace',
     head: 'abc123',
@@ -78,6 +86,21 @@ function makeInvestigation(): Investigation {
     },
   ];
   investigation.snapshot.git = makeGitSnapshot();
+  investigation.timeline = buildTimelineFromObservedEvents(investigation.snapshot.recentEvents);
+  investigation.timeline = appendCheckpointToTimeline(
+    investigation.timeline,
+    investigation.checkpoint!.text,
+    investigation.checkpoint!.createdAt,
+  );
+  investigation.timeline = appendGitSnapshotToTimeline(
+    investigation.timeline,
+    investigation.snapshot.git,
+  );
+  investigation.timeline = appendSavePointToTimeline(
+    investigation.timeline,
+    investigation.savedAt,
+    'save-stop',
+  );
   return investigation;
 }
 
@@ -109,7 +132,16 @@ suite('Resume Snapshot', () => {
     assert.ok(content.includes('- src/tokenService.ts — 6 visits'));
     assert.ok(content.includes('- src/auth.test.ts — saved path missing (deleted or moved) — 2 visits'));
     assert.ok(content.includes('- src/tokenService.ts:183:7'));
-    assert.ok(content.includes('→ src/tokenService.ts'));
+    assert.ok(content.includes('## Investigation timeline'));
+    assert.ok(content.includes('- 2026-06-01T12:20:00.000Z — Focused src/authController.ts'));
+    assert.ok(content.includes('- 2026-06-01T12:21:00.000Z — src/authController.ts → src/tokenService.ts'));
+    assert.ok(
+      content.includes('- 2026-06-01T12:23:00.000Z — Edited src/auth.test.ts — saved path missing (deleted or moved)'),
+    );
+    assert.ok(
+      content.includes('- 2026-06-01T12:34:30.000Z — Git snapshot: feature/resume-snapshot @ abc123; 2 modified; 1 untracked; +10 / -3 across 2 files'),
+    );
+    assert.ok(content.includes('- 2026-06-01T12:34:56.000Z — Saved and stopped investigation'));
   });
 
   test('renders empty and unavailable states honestly', () => {
@@ -125,7 +157,7 @@ suite('Resume Snapshot', () => {
     assert.ok(content.includes('- No edited files were captured.'));
     assert.ok(content.includes('- No revisited files were captured.'));
     assert.ok(content.includes('- No last location was captured.'));
-    assert.ok(content.includes('No recent navigation path was captured.'));
+    assert.ok(content.includes('- No investigation timeline was captured.'));
   });
 
   test('renders missing investigation content', () => {

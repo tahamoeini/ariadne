@@ -16,10 +16,23 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { FileLocation, GitSnapshot, Investigation, ObservedEvent } from '../domain/types';
+import {
+  FileLocation,
+  GitSnapshot,
+  Investigation,
+  InvestigationTimelineEntry,
+  InvestigationTimelineSavePointReason,
+  ObservedEvent,
+  appendCheckpointToTimeline,
+  appendGitSnapshotToTimeline,
+  appendResumePointToTimeline,
+  appendSavePointToTimeline,
+  buildTimelineFromObservedEvents,
+  trimInvestigationTimeline,
+} from '../domain';
 
 /** Current schema version. Bump when the persisted shape changes. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 const INVESTIGATIONS_DIR_NAME = 'investigations';
 const BACKUP_SUFFIX = '.bak';
@@ -85,6 +98,57 @@ interface PersistedGitSnapshot {
   };
 }
 
+interface PersistedFileTransitionTimelineEntry {
+  timestamp: string;
+  type: 'file.transition';
+  filePath: string;
+}
+
+interface PersistedFileEditTimelineEntry {
+  timestamp: string;
+  type: 'file.edit';
+  filePath: string;
+  count: number;
+}
+
+interface PersistedCheckpointTimelineEntry {
+  timestamp: string;
+  type: 'checkpoint';
+  text: string | null;
+}
+
+interface PersistedGitSnapshotTimelineEntry {
+  timestamp: string;
+  type: 'git.snapshot';
+  availability: GitSnapshot['availability'];
+  head: string | null;
+  branch: string | null;
+  modifiedCount: number;
+  untrackedCount: number;
+  filesChanged: number;
+  insertions: number;
+  deletions: number;
+}
+
+interface PersistedSavePointTimelineEntry {
+  timestamp: string;
+  type: 'save.point';
+  reason: InvestigationTimelineSavePointReason;
+}
+
+interface PersistedResumePointTimelineEntry {
+  timestamp: string;
+  type: 'resume.point';
+}
+
+type PersistedTimelineEntry =
+  | PersistedFileTransitionTimelineEntry
+  | PersistedFileEditTimelineEntry
+  | PersistedCheckpointTimelineEntry
+  | PersistedGitSnapshotTimelineEntry
+  | PersistedSavePointTimelineEntry
+  | PersistedResumePointTimelineEntry;
+
 interface PersistedInvestigation {
   id: string;
   name: string;
@@ -92,6 +156,7 @@ interface PersistedInvestigation {
   repository: string | null;
   savedAt: string;
   checkpoint: PersistedCheckpoint | null;
+  timeline: PersistedTimelineEntry[];
   snapshot: {
     editedFiles: string[];
     visitedFileCounts: Record<string, number>;
@@ -156,17 +221,33 @@ function isWithinRoot(filePath: string, rootPath: string): boolean {
   return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
 }
 
+function normalizeStoredPathSeparators(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
+}
+
+function usesPosixPathStyle(rootPath: string): boolean {
+  return rootPath.startsWith('/') && !rootPath.includes('\\');
+}
+
 function toStoredPath(filePath: string, workspacePath: string): string {
   if (!isWithinRoot(filePath, workspacePath)) {
     return filePath;
   }
 
   const relativePath = path.relative(workspacePath, filePath);
-  return relativePath || '.';
+  return normalizeStoredPathSeparators(relativePath || '.');
 }
 
 function fromStoredPath(filePath: string, workspacePath: string): string {
-  return path.isAbsolute(filePath) ? filePath : path.resolve(workspacePath, filePath);
+  if (path.isAbsolute(filePath)) {
+    return filePath;
+  }
+
+  if (usesPosixPathStyle(workspacePath)) {
+    return path.posix.resolve(workspacePath, normalizeStoredPathSeparators(filePath));
+  }
+
+  return path.resolve(workspacePath, filePath);
 }
 
 function dedupePaths(paths: string[]): string[] {
@@ -208,6 +289,10 @@ function isGitAvailability(value: unknown): value is GitSnapshot['availability']
     value === 'git-missing' ||
     value === 'git-error'
   );
+}
+
+function isSavePointReason(value: unknown): value is InvestigationTimelineSavePointReason {
+  return value === 'start' || value === 'save-recent' || value === 'save-stop' || value === 'save';
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -346,6 +431,100 @@ function normalizeRecentPathEntries(
   return recentPath.slice(-RECENT_PATH_LIMIT);
 }
 
+function normalizeTimelineEntries(
+  value: unknown,
+  workspacePath: string,
+): InvestigationTimelineEntry[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const timeline: InvestigationTimelineEntry[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+
+    const timestamp = normalizeString(entry.timestamp);
+    const type = normalizeString(entry.type);
+    if (!timestamp || !type) {
+      continue;
+    }
+
+    if (type === 'file.transition') {
+      const filePath = normalizeString(entry.filePath);
+      if (!filePath) {
+        continue;
+      }
+
+      timeline.push({
+        timestamp,
+        type,
+        filePath: fromStoredPath(filePath, workspacePath),
+      });
+      continue;
+    }
+
+    if (type === 'file.edit') {
+      const filePath = normalizeString(entry.filePath);
+      if (!filePath) {
+        continue;
+      }
+
+      timeline.push({
+        timestamp,
+        type,
+        filePath: fromStoredPath(filePath, workspacePath),
+        count: normalizeNumber(entry.count, 1, 1),
+      });
+      continue;
+    }
+
+    if (type === 'checkpoint') {
+      timeline.push({
+        timestamp,
+        type,
+        text: entry.text === null ? null : normalizeString(entry.text) ?? null,
+      });
+      continue;
+    }
+
+    if (type === 'git.snapshot' && isGitAvailability(entry.availability)) {
+      timeline.push({
+        timestamp,
+        type,
+        availability: entry.availability,
+        head: normalizeNullableString(entry.head),
+        branch: normalizeNullableString(entry.branch),
+        modifiedCount: normalizeNumber(entry.modifiedCount, 0, 0),
+        untrackedCount: normalizeNumber(entry.untrackedCount, 0, 0),
+        filesChanged: normalizeNumber(entry.filesChanged, 0, 0),
+        insertions: normalizeNumber(entry.insertions, 0, 0),
+        deletions: normalizeNumber(entry.deletions, 0, 0),
+      });
+      continue;
+    }
+
+    if (type === 'save.point') {
+      timeline.push({
+        timestamp,
+        type,
+        reason: isSavePointReason(entry.reason) ? entry.reason : 'save',
+      });
+      continue;
+    }
+
+    if (type === 'resume.point') {
+      timeline.push({
+        timestamp,
+        type,
+      });
+    }
+  }
+
+  return trimInvestigationTimeline(timeline);
+}
+
 function inflateRecentEvents(
   recentPath: readonly string[],
   savedAt: string,
@@ -427,6 +606,53 @@ function normalizeGitSnapshot(
   };
 }
 
+function buildLegacyTimeline(investigation: Investigation): InvestigationTimelineEntry[] {
+  let timeline = buildTimelineFromObservedEvents(investigation.snapshot.recentEvents);
+
+  if (investigation.checkpoint) {
+    timeline = appendCheckpointToTimeline(
+      timeline,
+      investigation.checkpoint.text,
+      investigation.checkpoint.createdAt,
+    );
+  }
+
+  timeline = appendGitSnapshotToTimeline(timeline, investigation.snapshot.git);
+  timeline = appendSavePointToTimeline(timeline, investigation.savedAt, 'save');
+
+  if (investigation.lastResumedAt) {
+    timeline = appendResumePointToTimeline(timeline, investigation.lastResumedAt);
+  }
+
+  return timeline;
+}
+
+function inferLastResumedAtFromTimeline(
+  timeline: readonly InvestigationTimelineEntry[],
+): string | null {
+  for (let index = timeline.length - 1; index >= 0; index -= 1) {
+    const entry = timeline[index];
+    if (entry.type === 'resume.point') {
+      return entry.timestamp;
+    }
+  }
+
+  return null;
+}
+
+function inferCheckpointCreatedAtFromTimeline(
+  timeline: readonly InvestigationTimelineEntry[],
+): string | null {
+  for (let index = timeline.length - 1; index >= 0; index -= 1) {
+    const entry = timeline[index];
+    if (entry.type === 'checkpoint' && entry.text) {
+      return entry.timestamp;
+    }
+  }
+
+  return null;
+}
+
 function buildRuntimeInvestigation(
   value: Record<string, unknown>,
   recentPathEntries: unknown,
@@ -443,8 +669,9 @@ function buildRuntimeInvestigation(
   const repository = inferRepository(value.repository, snapshot);
   const recentPath = normalizeRecentPathEntries(recentPathEntries, workspace);
   const git = normalizeGitSnapshot(snapshot.git, repository, savedAt);
+  const persistedTimeline = normalizeTimelineEntries(value.timeline, workspace);
 
-  return {
+  const investigation: Investigation = {
     id,
     name,
     workspace,
@@ -452,7 +679,10 @@ function buildRuntimeInvestigation(
     createdAt: normalizeString(value.createdAt) ?? savedAt,
     savedAt,
     lastResumedAt: normalizeNullableString(value.lastResumedAt),
-    checkpoint: normalizeCheckpoint(value.checkpoint, savedAt),
+    checkpoint: normalizeCheckpoint(
+      value.checkpoint,
+      inferCheckpointCreatedAtFromTimeline(persistedTimeline) ?? savedAt,
+    ),
     snapshot: {
       editedFiles: normalizeWorkspaceFileList(snapshot.editedFiles, workspace),
       visitedFileCounts: normalizeVisitedFileCounts(snapshot.visitedFileCounts, workspace),
@@ -460,6 +690,15 @@ function buildRuntimeInvestigation(
       recentEvents: inflateRecentEvents(recentPath, savedAt, workspace, repository),
       git,
     },
+    timeline: [],
+  };
+
+  const timeline = persistedTimeline.length > 0 ? persistedTimeline : buildLegacyTimeline(investigation);
+  return {
+    ...investigation,
+    lastResumedAt:
+      normalizeNullableString(value.lastResumedAt) ?? inferLastResumedAtFromTimeline(timeline),
+    timeline,
   };
 }
 
@@ -490,6 +729,7 @@ function migrateInvestigationV1(investigation: LegacyInvestigation): Investigati
       ...investigation.snapshot,
       git: migrateGitSnapshot(investigation.snapshot.git, investigation.repository),
     },
+    timeline: [],
   };
 }
 
@@ -523,7 +763,14 @@ function inflateEnvelope(envelope: unknown): Investigation | null {
     );
   }
 
-  if (envelope.schemaVersion !== SCHEMA_VERSION || !isRecord(envelope.investigation)) {
+  if (
+    envelope.schemaVersion !== 3 &&
+    envelope.schemaVersion !== SCHEMA_VERSION
+  ) {
+    return null;
+  }
+
+  if (!isRecord(envelope.investigation)) {
     return null;
   }
 
@@ -557,6 +804,57 @@ function toPersistedGitSnapshot(git: GitSnapshot): PersistedGitSnapshot {
     untrackedFiles: [...git.untrackedFiles],
     diffStats: { ...git.diffStats },
   };
+}
+
+function toPersistedTimelineEntry(
+  entry: InvestigationTimelineEntry,
+  workspacePath: string,
+): PersistedTimelineEntry {
+  switch (entry.type) {
+    case 'file.transition':
+      return {
+        timestamp: entry.timestamp,
+        type: entry.type,
+        filePath: toStoredPath(entry.filePath, workspacePath),
+      };
+    case 'file.edit':
+      return {
+        timestamp: entry.timestamp,
+        type: entry.type,
+        filePath: toStoredPath(entry.filePath, workspacePath),
+        count: normalizeNumber(entry.count, 1, 1),
+      };
+    case 'checkpoint':
+      return {
+        timestamp: entry.timestamp,
+        type: entry.type,
+        text: entry.text,
+      };
+    case 'git.snapshot':
+      return {
+        timestamp: entry.timestamp,
+        type: entry.type,
+        availability: entry.availability,
+        head: entry.head,
+        branch: entry.branch,
+        modifiedCount: normalizeNumber(entry.modifiedCount, 0, 0),
+        untrackedCount: normalizeNumber(entry.untrackedCount, 0, 0),
+        filesChanged: normalizeNumber(entry.filesChanged, 0, 0),
+        insertions: normalizeNumber(entry.insertions, 0, 0),
+        deletions: normalizeNumber(entry.deletions, 0, 0),
+      };
+    case 'save.point':
+      return {
+        timestamp: entry.timestamp,
+        type: entry.type,
+        reason: entry.reason,
+      };
+    case 'resume.point':
+      return {
+        timestamp: entry.timestamp,
+        type: entry.type,
+      };
+  }
 }
 
 function buildRecentPathFromInvestigation(investigation: Investigation): string[] {
@@ -593,6 +891,9 @@ function toPersistedInvestigation(investigation: Investigation): PersistedInvest
     repository: investigation.repository,
     savedAt: investigation.savedAt,
     checkpoint: investigation.checkpoint ? { text: investigation.checkpoint.text } : null,
+    timeline: investigation.timeline.map((entry) =>
+      toPersistedTimelineEntry(entry, investigation.workspace),
+    ),
     snapshot: {
       editedFiles: dedupePaths(
         investigation.snapshot.editedFiles.map((filePath) =>
@@ -698,10 +999,15 @@ function deleteInvestigationArtifacts(storageDir: string, id: string): boolean {
   return deleted;
 }
 
+interface SaveInvestigationOptions {
+  savedAt?: string;
+}
+
 /** Save (create or update) an investigation to disk. */
 export function saveInvestigation(
   storageDir: string,
   investigation: Investigation,
+  options: SaveInvestigationOptions = {},
 ): Investigation {
   const primary = primaryFilePath(storageDir, investigation.id);
   const backup = backupFilePath(storageDir, investigation.id);
@@ -713,9 +1019,10 @@ export function saveInvestigation(
   ensureDir(storageDir);
   ensureDir(investigationsDir(storageDir));
 
+  const savedAt = options.savedAt ?? new Date().toISOString();
   const savedInvestigation: Investigation = {
     ...investigation,
-    savedAt: new Date().toISOString(),
+    savedAt,
   };
   const envelope: StorageEnvelope = {
     schemaVersion: SCHEMA_VERSION,

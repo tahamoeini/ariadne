@@ -489,8 +489,10 @@ export function registerInvestigationCommands(
         }
 
         try {
-          await snapshotOpener.openInvestigation(investigation);
-          const result = await reopenSavedFiles(investigation, options.maxFilesToOpen);
+          const resumedInvestigation = await lifecycle.markInvestigationResumed(investigation.id);
+          const targetInvestigation = resumedInvestigation ?? investigation;
+          await snapshotOpener.openInvestigation(targetInvestigation);
+          const result = await reopenSavedFiles(targetInvestigation, options.maxFilesToOpen);
           vscode.window.showInformationMessage(buildResumeResultMessage(result));
           return result;
         } catch (error) {

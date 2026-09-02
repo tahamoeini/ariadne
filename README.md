@@ -12,7 +12,7 @@ RepoTrail 0.0.1:
 - lets you save the current investigation explicitly or retroactively save recent activity as an investigation
 - keeps one active investigation per workspace and refreshes its saved state on checkpoint, stop, and extension shutdown
 - stores only local JSON data needed for re-entry
-- shows a read-only Resume Snapshot
+- shows a read-only Resume Snapshot with a condensed investigation-scoped timeline
 - resumes by reopening up to 5 saved files and moving to the last saved location when that file still exists
 
 ## Commands
@@ -48,7 +48,7 @@ RepoTrail 0.0.1 records only the factual data needed for re-entry:
 - edited files
 - file visit counts
 - last saved location
-- a short recent observed path
+- a condensed investigation-scoped factual timeline of file transitions, collapsed edit events, checkpoint changes, Git snapshots, and save/resume points
 - an optional developer-authored checkpoint
 
 RepoTrail 0.0.1 does not currently emit definition/reference navigation events. Those remain deferred until they can be detected reliably through supported VS Code APIs.
@@ -58,7 +58,7 @@ RepoTrail 0.0.1 does not currently emit definition/reference navigation events. 
 RepoTrail 0.0.1 does not include:
 
 - AI
-- graph or timeline dashboards
+- graph visualizations or general activity dashboards
 - browser integration
 - cloud sync
 - accounts or team features
@@ -73,6 +73,7 @@ RepoTrail 0.0.1 does not include:
 - RepoTrail retains a `.bak` copy of the previous save for recovery.
 - Workspace file paths are stored relatively when possible and re-expanded on load.
 - The rolling event buffer remains in memory only and is not persisted as full raw events.
+- Saved investigations persist a condensed investigation timeline for re-entry; they do not persist an exhaustive activity log.
 
 ## Source-of-truth docs
 

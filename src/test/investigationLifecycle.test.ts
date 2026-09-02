@@ -206,6 +206,17 @@ suite('Investigation Lifecycle', () => {
     assert.deepStrictEqual(created.snapshot.editedFiles, [tokenServiceFile]);
     assert.deepStrictEqual(created.snapshot.visitedFileCounts, { [tokenServiceFile]: 1 });
     assert.strictEqual(created.snapshot.lastLocation?.line, 8);
+    assert.deepStrictEqual(created.timeline.map((entry) => entry.type), [
+      'file.transition',
+      'file.edit',
+      'git.snapshot',
+      'save.point',
+    ]);
+    assert.deepStrictEqual(created.timeline.at(-1), {
+      timestamp: created.savedAt,
+      type: 'save.point',
+      reason: 'start',
+    });
     assert.strictEqual(service.getActiveInvestigation(workspace)?.id, created.id);
 
     const revisit = makeEvent(
@@ -235,6 +246,21 @@ suite('Investigation Lifecycle', () => {
     assert.deepStrictEqual(saved!.snapshot.editedFiles, [tokenServiceFile, authTestFile]);
     assert.deepStrictEqual(saved!.snapshot.visitedFileCounts, { [tokenServiceFile]: 2 });
     assert.strictEqual(saved!.snapshot.lastLocation?.filePath, authTestFile);
+    assert.deepStrictEqual(saved!.timeline.map((entry) => entry.type), [
+      'file.transition',
+      'file.edit',
+      'git.snapshot',
+      'save.point',
+      'file.transition',
+      'file.edit',
+      'git.snapshot',
+      'save.point',
+    ]);
+    assert.deepStrictEqual(saved!.timeline.at(-1), {
+      timestamp: saved!.savedAt,
+      type: 'save.point',
+      reason: 'save-stop',
+    });
     assert.strictEqual(service.getActiveInvestigation(workspace), null);
 
     const loaded = loadInvestigation(tmpDir, created.id);
@@ -302,6 +328,14 @@ suite('Investigation Lifecycle', () => {
       [tokenServiceFile]: 1,
     });
     assert.strictEqual(created!.snapshot.recentEvents.length, 3);
+    assert.deepStrictEqual(created!.timeline.map((entry) => entry.type), [
+      'file.transition',
+      'file.transition',
+      'file.edit',
+      'checkpoint',
+      'git.snapshot',
+      'save.point',
+    ]);
   });
 
   test('does not create a retroactive investigation when the rolling buffer is empty', async () => {
@@ -483,6 +517,100 @@ suite('Investigation Lifecycle', () => {
     assert.deepStrictEqual(loaded!.snapshot.editedFiles, [secondFile]);
     assert.strictEqual(loaded!.snapshot.lastLocation?.filePath, secondFile);
     assert.strictEqual(loaded!.snapshot.git?.head, 'after-flush');
+  });
+
+  test('collapses consecutive edit noise into one timeline entry', async () => {
+    const workspace = '/workspace';
+    const filePath = '/workspace/src/timeline.ts';
+    const capture = new FakeCapture();
+
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore: new FakeStateStore(),
+      captureGitSnapshot: () => makeGitSnapshot(),
+    });
+
+    await service.startInvestigation({
+      workspace,
+      name: 'Collapse edit noise',
+      checkpointText: null,
+    });
+
+    const firstEdit = makeEvent(
+      'file.edit',
+      workspace,
+      filePath,
+      '2026-05-01T15:00:00.000Z',
+      5,
+      1,
+    );
+    const secondEdit = makeEvent(
+      'file.edit',
+      workspace,
+      filePath,
+      '2026-05-01T15:00:10.000Z',
+      5,
+      2,
+    );
+
+    capture.addEvent(firstEdit);
+    capture.addEvent(secondEdit);
+    service.recordObservedEvent(firstEdit);
+    service.recordObservedEvent(secondEdit);
+
+    const active = service.getActiveInvestigation(workspace);
+    assert.ok(active);
+    const editEntries = active!.timeline.filter((entry) => entry.type === 'file.edit');
+    assert.strictEqual(editEntries.length, 1);
+    assert.deepStrictEqual(editEntries[0], {
+      timestamp: '2026-05-01T15:00:10.000Z',
+      type: 'file.edit',
+      filePath,
+      count: 2,
+    });
+  });
+
+  test('marks a resume point without changing the saved timestamp', async () => {
+    const workspace = '/workspace';
+    const filePath = '/workspace/src/resume.ts';
+    const capture = new FakeCapture();
+
+    capture.setEvents(workspace, [
+      makeEvent(
+        'editor.active',
+        workspace,
+        filePath,
+        '2026-05-01T16:00:00.000Z',
+        7,
+        1,
+      ),
+    ]);
+
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore: new FakeStateStore(),
+      captureGitSnapshot: () => makeGitSnapshot(),
+    });
+
+    const created = await service.startInvestigation({
+      workspace,
+      name: 'Resume marker',
+      checkpointText: null,
+    });
+    const stopped = await service.saveAndStopInvestigation(workspace);
+    assert.ok(stopped);
+
+    const resumed = await service.markInvestigationResumed(created.id);
+    assert.ok(resumed);
+    assert.strictEqual(resumed!.savedAt, stopped!.savedAt);
+    assert.strictEqual(resumed!.timeline.at(-1)?.type, 'resume.point');
+
+    const loaded = loadInvestigation(tmpDir, created.id);
+    assert.ok(loaded);
+    assert.strictEqual(loaded!.savedAt, stopped!.savedAt);
+    assert.strictEqual(loaded!.timeline.at(-1)?.type, 'resume.point');
   });
 
   test('keeps an investigation active if workspace-state persistence fails while stopping', async () => {

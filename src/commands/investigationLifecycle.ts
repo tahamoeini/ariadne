@@ -4,8 +4,17 @@ import {
   FileLocation,
   GitSnapshot,
   Investigation,
+  InvestigationTimelineEntry,
+  InvestigationTimelineSavePointReason,
   ObservedEvent,
   Snapshot,
+  appendCheckpointToTimeline,
+  appendGitSnapshotToTimeline,
+  appendObservedEventToTimeline,
+  appendResumePointToTimeline,
+  appendSavePointToTimeline,
+  buildTimelineFromObservedEvents,
+  cloneTimelineEntry,
   createInvestigation,
 } from '../domain';
 import { captureGitSnapshot } from '../git';
@@ -93,6 +102,10 @@ function cloneGitSnapshot(git: GitSnapshot | null): GitSnapshot | null {
   };
 }
 
+function cloneTimeline(entries: InvestigationTimelineEntry[]): InvestigationTimelineEntry[] {
+  return entries.map(cloneTimelineEntry);
+}
+
 function cloneSnapshot(snapshot: Snapshot): Snapshot {
   return {
     editedFiles: [...snapshot.editedFiles],
@@ -108,6 +121,7 @@ function cloneInvestigation(investigation: Investigation): Investigation {
     ...investigation,
     checkpoint: cloneCheckpoint(investigation.checkpoint),
     snapshot: cloneSnapshot(investigation.snapshot),
+    timeline: cloneTimeline(investigation.timeline),
   };
 }
 
@@ -306,10 +320,12 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
     }
 
     const snapshot = applyObservedEventToSnapshot(active.snapshot, event);
+    const timeline = appendObservedEventToTimeline(active.timeline, event);
     this.activeInvestigations.set(event.workspace, {
       ...cloneInvestigation(active),
       repository: resolveRepository(snapshot, active.repository ?? event.repository),
       snapshot,
+      timeline,
     });
   }
 
@@ -342,9 +358,21 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
       'Checkpoint',
       MAX_CHECKPOINT_LENGTH,
     );
+    const checkpointTimestamp = new Date().toISOString();
+    const nextCheckpoint = nextCheckpointText
+      ? {
+          text: nextCheckpointText,
+          createdAt: checkpointTimestamp,
+        }
+      : null;
     const updated: Investigation = {
       ...cloneInvestigation(active),
-      checkpoint: nextCheckpointText ? createCheckpoint(nextCheckpointText) : null,
+      checkpoint: nextCheckpoint,
+      timeline: appendCheckpointToTimeline(
+        active.timeline,
+        nextCheckpoint?.text ?? null,
+        checkpointTimestamp,
+      ),
     };
 
     return this.persistActiveInvestigation(updated);
@@ -356,7 +384,7 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
       return null;
     }
 
-    const saved = await this.persistActiveInvestigation(active);
+    const saved = await this.persistActiveInvestigation(active, 'save-stop');
     const persistedActive = this.activeInvestigations.get(workspace);
     if (!persistedActive) {
       throw new Error('Active investigation state was lost before stopping.');
@@ -388,6 +416,43 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
     return true;
   }
 
+  async markInvestigationResumed(id: string): Promise<Investigation | null> {
+    let source: Investigation | null = null;
+
+    for (const investigation of this.activeInvestigations.values()) {
+      if (investigation.id === id) {
+        source = cloneInvestigation(investigation);
+        break;
+      }
+    }
+
+    if (!source) {
+      source = loadInvestigation(this.options.storageDir, id);
+    }
+
+    if (!source) {
+      return null;
+    }
+
+    const resumedAt = new Date().toISOString();
+    const updated: Investigation = {
+      ...cloneInvestigation(source),
+      lastResumedAt: resumedAt,
+      timeline: appendResumePointToTimeline(source.timeline, resumedAt),
+    };
+    const saved = saveInvestigation(
+      this.options.storageDir,
+      updated,
+      { savedAt: source.savedAt },
+    );
+
+    if (this.activeInvestigations.get(saved.workspace)?.id === saved.id) {
+      this.activeInvestigations.set(saved.workspace, cloneInvestigation(saved));
+    }
+
+    return cloneInvestigation(saved);
+  }
+
   private async createAndActivateInvestigation(
     options: CreateInvestigationOptions,
     requireRecentActivity: boolean,
@@ -413,17 +478,25 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
       'Checkpoint',
       MAX_CHECKPOINT_LENGTH,
     );
+    const checkpoint = checkpointText ? createCheckpoint(checkpointText) : null;
+    let timeline = buildTimelineFromObservedEvents(snapshot.recentEvents);
+    if (checkpoint) {
+      timeline = appendCheckpointToTimeline(timeline, checkpoint.text, checkpoint.createdAt);
+    }
+
     const investigation: Investigation = {
       ...createInvestigation(name, workspace, resolveRepository(snapshot, null)),
-      checkpoint: checkpointText ? createCheckpoint(checkpointText) : null,
+      checkpoint,
       repository: resolveRepository(snapshot, null),
       snapshot,
+      timeline,
     };
 
-    const saved = saveInvestigation(this.options.storageDir, investigation);
-    this.activeInvestigations.set(workspace, cloneInvestigation(saved));
-    await this.persistActiveInvestigationIds();
-    return cloneInvestigation(saved);
+    return this.persistActiveInvestigation(
+      investigation,
+      requireRecentActivity ? 'save-recent' : 'start',
+      snapshot,
+    );
   }
 
   private buildSeedSnapshot(workspace: string): Snapshot {
@@ -462,12 +535,27 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
     }
   }
 
-  private async persistActiveInvestigation(investigation: Investigation): Promise<Investigation> {
-    const snapshot = this.refreshSnapshot(investigation);
+  private async persistActiveInvestigation(
+    investigation: Investigation,
+    savePointReason?: InvestigationTimelineSavePointReason,
+    snapshotOverride?: Snapshot,
+  ): Promise<Investigation> {
+    const snapshot = snapshotOverride
+      ? cloneSnapshot(snapshotOverride)
+      : this.refreshSnapshot(investigation);
+    const savedAt = new Date().toISOString();
+    let timeline = appendGitSnapshotToTimeline(investigation.timeline, snapshot.git);
+    if (savePointReason) {
+      timeline = appendSavePointToTimeline(timeline, savedAt, savePointReason);
+    }
+
     const saved = saveInvestigation(this.options.storageDir, {
       ...cloneInvestigation(investigation),
       repository: resolveRepository(snapshot, investigation.repository),
       snapshot,
+      timeline,
+    }, {
+      savedAt,
     });
 
     this.activeInvestigations.set(investigation.workspace, cloneInvestigation(saved));

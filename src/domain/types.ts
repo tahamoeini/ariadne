@@ -20,6 +20,96 @@ export type GitSnapshotAvailability =
   | 'git-missing'
   | 'git-error';
 
+/** Explicit investigation save-point markers retained for re-entry. */
+export type InvestigationTimelineSavePointReason =
+  | 'start'
+  | 'save-recent'
+  | 'save-stop'
+  | 'save';
+
+/** Investigation timeline entry: a factual file transition. */
+export interface InvestigationFileTransitionTimelineEntry {
+  /** ISO-8601 timestamp. */
+  timestamp: string;
+  /** Condensed transition event kind. */
+  type: 'file.transition';
+  /** Absolute file path moved to. */
+  filePath: string;
+}
+
+/** Investigation timeline entry: one or more collapsed edit events. */
+export interface InvestigationFileEditTimelineEntry {
+  /** ISO-8601 timestamp. */
+  timestamp: string;
+  /** Condensed edit event kind. */
+  type: 'file.edit';
+  /** Absolute file path that was edited. */
+  filePath: string;
+  /** Number of consecutive edit observations collapsed into this entry. */
+  count: number;
+}
+
+/** Investigation timeline entry: checkpoint creation or clearing. */
+export interface InvestigationCheckpointTimelineEntry {
+  /** ISO-8601 timestamp. */
+  timestamp: string;
+  /** Checkpoint event kind. */
+  type: 'checkpoint';
+  /** Checkpoint text, or null when the checkpoint was cleared. */
+  text: string | null;
+}
+
+/** Investigation timeline entry: condensed Git snapshot facts. */
+export interface InvestigationGitSnapshotTimelineEntry {
+  /** ISO-8601 timestamp. */
+  timestamp: string;
+  /** Git snapshot event kind. */
+  type: 'git.snapshot';
+  /** Snapshot capture outcome. */
+  availability: GitSnapshotAvailability;
+  /** Branch at capture time, if available. */
+  branch: string | null;
+  /** HEAD at capture time, if available. */
+  head: string | null;
+  /** Count of modified tracked files. */
+  modifiedCount: number;
+  /** Count of untracked files. */
+  untrackedCount: number;
+  /** Diff-stat files changed count. */
+  filesChanged: number;
+  /** Diff-stat insertions count. */
+  insertions: number;
+  /** Diff-stat deletions count. */
+  deletions: number;
+}
+
+/** Investigation timeline entry: a persisted save point. */
+export interface InvestigationSavePointTimelineEntry {
+  /** ISO-8601 timestamp. */
+  timestamp: string;
+  /** Save point event kind. */
+  type: 'save.point';
+  /** Explicit save-point source. */
+  reason: InvestigationTimelineSavePointReason;
+}
+
+/** Investigation timeline entry: a persisted resume point. */
+export interface InvestigationResumePointTimelineEntry {
+  /** ISO-8601 timestamp. */
+  timestamp: string;
+  /** Resume point event kind. */
+  type: 'resume.point';
+}
+
+/** Condensed factual sequence retained for re-entry. */
+export type InvestigationTimelineEntry =
+  | InvestigationFileTransitionTimelineEntry
+  | InvestigationFileEditTimelineEntry
+  | InvestigationCheckpointTimelineEntry
+  | InvestigationGitSnapshotTimelineEntry
+  | InvestigationSavePointTimelineEntry
+  | InvestigationResumePointTimelineEntry;
+
 /** A single factual observation of developer activity. */
 export interface ObservedEvent {
   /** ISO-8601 timestamp. */
@@ -111,4 +201,6 @@ export interface Investigation {
   checkpoint: Checkpoint | null;
   /** Current snapshot of investigation state. */
   snapshot: Snapshot;
+  /** Condensed factual investigation timeline retained for re-entry. */
+  timeline: InvestigationTimelineEntry[];
 }
