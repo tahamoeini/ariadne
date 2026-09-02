@@ -308,6 +308,56 @@ suite('Investigation Lifecycle', () => {
     assert.deepStrictEqual(loaded!.snapshot.editedFiles, [tokenServiceFile, authTestFile]);
   });
 
+  test('attaches deliberate browser references to the active investigation', async () => {
+    const workspace = '/workspace';
+    const capture = new FakeCapture();
+    const stateStore = new FakeStateStore();
+
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore,
+      captureGitSnapshot: () => makeGitSnapshot(),
+    });
+
+    const created = await service.startInvestigation({
+      workspace,
+      name: 'Attach docs',
+      checkpointText: null,
+    });
+
+    const firstAttach = await service.attachBrowserReference(workspace, {
+      url: 'https://developer.mozilla.org/docs/Web/API/URL',
+      title: 'MDN URL',
+    });
+
+    assert.ok(firstAttach);
+    assert.strictEqual(firstAttach!.browserReferences.length, 1);
+    assert.strictEqual(
+      firstAttach!.browserReferences[0].url,
+      'https://developer.mozilla.org/docs/Web/API/URL',
+    );
+    assert.strictEqual(firstAttach!.browserReferences[0].title, 'MDN URL');
+
+    const secondAttach = await service.attachBrowserReference(workspace, {
+      url: 'https://developer.mozilla.org/docs/Web/API/URL',
+      title: null,
+    });
+
+    assert.ok(secondAttach);
+    assert.strictEqual(secondAttach!.browserReferences.length, 1);
+    assert.strictEqual(secondAttach!.browserReferences[0].title, 'MDN URL');
+    assert.ok(
+      Date.parse(secondAttach!.browserReferences[0].capturedAt) >=
+        Date.parse(firstAttach!.browserReferences[0].capturedAt),
+    );
+
+    const loaded = loadInvestigation(tmpDir, created.id);
+    assert.ok(loaded);
+    assert.strictEqual(loaded!.browserReferences.length, 1);
+    assert.strictEqual(loaded!.browserReferences[0].title, 'MDN URL');
+  });
+
   test('creates a retroactive investigation from buffered activity with a checkpoint', async () => {
     const workspace = '/workspace';
     const authControllerFile = '/workspace/src/authController.ts';

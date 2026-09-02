@@ -36,6 +36,7 @@ Help a developer resume an interrupted code investigation after enough time has 
 - Investigation
 - Rolling Buffer
 - Checkpoint
+- Browser Reference
 - Snapshot
 
 ### Core actions
@@ -43,6 +44,7 @@ Help a developer resume an interrupted code investigation after enough time has 
 - Start Investigation
 - Save Recent Activity as Investigation
 - Add or Update Checkpoint
+- Attach Current Page to RepoTrail
 - Save and Stop Investigation
 - List Saved Investigations
 - Show Resume Snapshot
@@ -59,7 +61,7 @@ RepoTrail 0.0.1 does not add:
 - graph visualization
 - repository-wide dependency graphs or architecture maps
 - timeline dashboards or general activity dashboards
-- browser integration
+- automatic browser-history import or page-content capture
 - cloud sync
 - accounts
 - team features
@@ -102,6 +104,7 @@ RepoTrail records factual observations such as:
 - a Git snapshot was captured
 - the Investigation was saved or resumed
 - Git state changed between save time and resume time
+- the developer deliberately attached an external page reference to the Investigation
 
 RepoTrail must not turn those facts into unsupported labels such as:
 
@@ -110,6 +113,17 @@ RepoTrail must not turn those facts into unsupported labels such as:
 - high-priority file
 
 Human meaning remains human-supplied through the investigation name and optional checkpoint.
+
+## External reference boundary
+
+RepoTrail may retain a small set of deliberately attached browser references when that improves re-entry, but the boundary stays the Investigation itself.
+
+- References exist only inside one saved Investigation.
+- Capture is explicit, not automatic.
+- RepoTrail may offer the current open page or a temporary list of open page candidates, but the developer chooses what to attach.
+- Captured fields remain minimal: URL, title, capture timestamp, and the associated Investigation by containment.
+- RepoTrail does not capture page contents, browser history, tab history, screenshots, or browsing analytics.
+- RepoTrail must not evolve this feature into a general browser memory product.
 
 ## Timeline boundary
 
@@ -137,13 +151,14 @@ RepoTrail may retain a small Investigation-scoped navigation graph when it impro
 - all RepoTrail data is local-only
 - the rolling buffer remains in memory only
 - saved investigations persist only the data needed for re-entry
+- deliberate external references, when attached, persist only minimal page metadata needed for re-entry
 - RepoTrail does not capture source contents, terminal contents, keystrokes, clipboard data, screenshots, or unrelated application activity
 - RepoTrail makes no network requests
 
 ## Validation hypotheses
 
 - **H1: Re-entry utility** — RepoTrail helps developers resume interrupted investigations faster or with fewer reconstruction mistakes than the baseline workflow.
-- **H2: Capture sufficiency** — factual editor activity, Git state, and an optional checkpoint provide enough context for useful re-entry.
+- **H2: Capture sufficiency** — factual editor activity, Git state, an optional checkpoint, and a small number of deliberate external references provide enough context for useful re-entry.
 - **H3: Natural behavior** — RepoTrail fits into normal work without requiring heavy manual curation.
 
 ## Roadmap philosophy

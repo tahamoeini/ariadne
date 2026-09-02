@@ -13,6 +13,7 @@ RepoTrail 0.0.1:
 - keeps one active investigation per workspace and refreshes its saved state on checkpoint, stop, and extension shutdown
 - stores only local JSON data needed for re-entry
 - shows a read-only Resume Snapshot with a condensed investigation-scoped timeline and a collapsed navigation graph
+- lets the developer deliberately attach a current external page reference to the active investigation
 - resumes by reopening up to 5 saved files, prioritizing graph-adjacent artifacts before global file noise, and moving to the last saved location when that file still exists
 
 ## Commands
@@ -22,6 +23,7 @@ RepoTrail 0.0.1:
 | `RepoTrail: Start Investigation` | Saves the current workspace context and keeps the investigation active. |
 | `RepoTrail: Save Recent Activity as Investigation` | Saves the recent rolling-buffer activity and keeps the investigation active. |
 | `RepoTrail: Add or Update Checkpoint` | Saves or clears the checkpoint on the active investigation. |
+| `RepoTrail: Attach Current Page to RepoTrail` | Deliberately attaches a minimal external page reference to the active investigation. |
 | `RepoTrail: Save and Stop Investigation` | Persists the latest active state and clears the active investigation for that workspace. |
 | `RepoTrail: List Saved Investigations` | Lists saved investigations and opens the selected Resume Snapshot. |
 | `RepoTrail: Show Resume Snapshot` | Opens the saved Resume Snapshot without reopening files. |
@@ -37,6 +39,7 @@ RepoTrail 0.0.1 records only the factual data needed for re-entry:
 - active editor/file changes
 - selection changes used for the last saved location
 - edit occurrence, not edit content
+- deliberately attached external references with only URL, optional title, and capture timestamp
 - local Git snapshot state:
   - availability
   - repository root
@@ -60,7 +63,7 @@ RepoTrail 0.0.1 does not include:
 
 - AI
 - graph visualizations, repository-wide dependency graphs, or general activity dashboards
-- browser integration
+- automatic browser-history import or page-content capture
 - cloud sync
 - accounts or team features
 - exact workspace/tab/layout restoration
@@ -75,6 +78,7 @@ RepoTrail 0.0.1 does not include:
 - Workspace file paths are stored relatively when possible and re-expanded on load.
 - The rolling event buffer remains in memory only and is not persisted as full raw events.
 - Saved investigations persist a condensed investigation timeline and a collapsed Investigation navigation graph for re-entry; they do not persist an exhaustive activity log or a repository architecture model.
+- Attached browser references remain minimal and deliberate; RepoTrail does not import browser history or capture page contents.
 
 ## Source-of-truth docs
 

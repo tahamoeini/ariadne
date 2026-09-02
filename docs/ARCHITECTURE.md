@@ -30,7 +30,7 @@ src/
 │   ├── store.ts    # CRUD operations + schema envelope
 │   └── index.ts    # Public re-exports
 ├── commands/       # Investigation lifecycle service + VS Code command handlers
-│   ├── investigationLifecycle.ts      # Active-investigation state + snapshot assembly
+│   ├── investigationLifecycle.ts      # Active-investigation state + snapshot assembly + explicit browser-reference attachment
 │   ├── registerInvestigationCommands.ts # Command Palette handlers and prompts
 │   └── index.ts                      # Public re-exports
 ├── ui/             # Resume Snapshot rendering + virtual-document provider
@@ -52,9 +52,17 @@ Modules communicate through domain types. No module directly imports another mod
 | savedAt | string (ISO-8601) | Last persisted timestamp |
 | lastResumedAt | string \| null | Last resumed timestamp |
 | checkpoint | Checkpoint \| null | Optional developer note |
+| browserReferences | InvestigationBrowserReference[] | Deliberately attached external page references retained for re-entry |
 | snapshot | Snapshot | Current state capture |
 | navigationGraph | InvestigationNavigationGraph | Collapsed factual spatial summary used during Resume |
 | timeline | InvestigationTimelineEntry[] | Condensed factual sequence retained for re-entry |
+
+### InvestigationBrowserReference
+| Field | Type | Description |
+|-------|------|-------------|
+| url | string | Attached http(s) URL |
+| title | string \| null | Minimal page title captured from the tab or provided manually |
+| capturedAt | string (ISO-8601) | Timestamp when the developer attached the reference |
 
 ### InvestigationNavigationGraph
 | Field | Type | Description |
@@ -150,7 +158,7 @@ The runtime model is intentionally richer than the persisted schema. RepoTrail r
 **Format:** Each file is a JSON envelope:
 ```json
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "investigation": { ... }
 }
 ```
@@ -165,6 +173,7 @@ The runtime model is intentionally richer than the persisted schema. RepoTrail r
 | `repository` | Kept only to preserve saved repository context when the workspace is nested |
 | `savedAt` | Required to sort and display recency |
 | `checkpoint.text` | Optional human-authored re-entry note |
+| `browserReferences.{url,title,capturedAt}` | Minimal deliberate external references used during re-entry |
 | `navigationGraph` | Required to retain Investigation-local spatial movement evidence that improves Resume ordering without inferring repository architecture |
 | `timeline` | Required to reconstruct factual investigation sequence during re-entry without keeping the full raw event log |
 | `snapshot.editedFiles` | Factual reopen evidence |
@@ -185,7 +194,7 @@ The runtime model is intentionally richer than the persisted schema. RepoTrail r
 
 When file paths are inside the saved workspace, RepoTrail stores them as workspace-relative paths on disk and expands them back to absolute paths only when loading the Investigation.
 
-**Schema versioning:** The `schemaVersion` field is checked on load. Current saves use schema version 5. Legacy version 1 investigations are migrated to the explicit Git availability model. Legacy version 2 and 3 investigations are minimized on load into the current schema shape and receive a best-effort derived timeline and navigation graph when none were persisted. Legacy version 4 investigations derive the navigation graph from the persisted timeline when needed. Unknown future versions are rejected (returns null).
+**Schema versioning:** The `schemaVersion` field is checked on load. Current saves use schema version 6. Legacy version 1 investigations are migrated to the explicit Git availability model. Legacy version 2 and 3 investigations are minimized on load into the current schema shape and receive a best-effort derived timeline and navigation graph when none were persisted. Legacy version 4 investigations derive the navigation graph from the persisted timeline when needed. Legacy version 5 investigations load with an empty browser-reference list. Unknown future versions are rejected (returns null).
 
 **Properties:**
 - Local-only, no cloud.
@@ -203,6 +212,7 @@ When file paths are inside the saved workspace, RepoTrail stores them as workspa
 - RepoTrail requires no account and makes no network, cloud, analytics, or repository-upload requests.
 - The rolling event buffer stays in memory only; saving an Investigation persists only the reduced re-entry subset above.
 - RepoTrail does not store keystrokes, clipboard data, screenshots, terminal content, or full source-code contents.
+- RepoTrail does not import browser history or capture page contents; deliberate browser references persist only minimal page metadata.
 - Checkpoint text is persisted as plain local text because it is the user-authored re-entry note; it should not contain secrets.
 - The persisted timeline is condensed and investigation-scoped; it is not a general telemetry stream or cross-investigation history.
 - The persisted navigation graph is also investigation-scoped and factual; it is not a repository dependency graph or architectural map.
@@ -253,6 +263,7 @@ Minimal command surface for 0.0.1:
 - Start Investigation.
 - Save Recent Activity as Investigation.
 - Add or update Checkpoint text on the active Investigation.
+- Attach a browser reference explicitly to the active Investigation.
 - Save and stop the active Investigation.
 - List saved Investigations.
 - Show Resume Snapshot for a saved Investigation.
@@ -275,7 +286,7 @@ The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confi
 ## Resume Snapshot (Implemented)
 
 - Saved Investigations can be opened into a read-only virtual Markdown document backed by a VS Code `TextDocumentContentProvider`.
-- The Snapshot shows factual re-entry context in a fixed order: investigation name, optional checkpoint, saved timestamp, workspace/repository, branch when saved, saved Git state, current Git state, factual saved-vs-current Git differences, edited files, revisited files with explicit visit counts, last location, and a condensed investigation timeline.
+- The Snapshot shows factual re-entry context in a fixed order: investigation name, optional checkpoint, attached external references, saved timestamp, workspace/repository, branch when saved, saved Git state, current Git state, factual saved-vs-current Git differences, edited files, revisited files with explicit visit counts, last location, and a condensed investigation timeline.
 - Missing or unavailable data is rendered explicitly instead of inferred, including absent checkpoints, missing Git state, deleted/moved saved paths, and missing/corrupted Investigation payloads.
 - Each Investigation reuses a stable virtual-document URI so reopening the Resume Snapshot refreshes the existing tab instead of creating duplicates for each save.
 - Timeline rendering collapses noise by deduplicating repeated file focus transitions and folding consecutive edit events on the same file into one counted entry.
@@ -283,7 +294,7 @@ The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confi
 ## Resume Actions (Implemented)
 
 - `RepoTrail: Resume Investigation` first opens the read-only Resume Snapshot (remember) and then reopens a conservative set of saved files (reopen).
-- Reopen planning is based only on factual evidence already captured in the Investigation: the last saved file/location, edited files, and revisited-file counts.
+- Reopen planning is still based only on factual code-investigation evidence already captured in the Investigation: the last saved file/location, edited files, revisited-file counts, and graph relationships. External references help the developer remember context but do not drive automatic reopening.
 - The reopen limit is intentionally small (5 files by default) to avoid recreating a huge tab set.
 - If the last saved file still exists, the command reopens it last and moves the cursor to the saved line/column, clamped to the file's current bounds when the location is stale.
 - Missing files, missing workspaces, changed branches, repository drift, and no-Git states do not fail the resume flow; the Snapshot still opens and the command reports partial recovery honestly.
@@ -300,4 +311,4 @@ The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confi
 
 1. **Snapshot trigger**: Automatic periodic snapshots vs. manual-only?
 2. **Multi-root workspaces**: How to handle in 0.0.1.
-3. **Future data migration**: Strategy for schema changes beyond the current v1 → v2 migration.
+3. **Future data migration**: Strategy for schema changes beyond the current v1 → v6 migrations.

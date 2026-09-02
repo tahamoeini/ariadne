@@ -234,6 +234,24 @@ function describeLastLocation(
   return `- ${displayPath}:${location.line}:${location.column}${suffix}`;
 }
 
+function buildBrowserReferenceLines(investigation: Investigation): string[] {
+  if (investigation.browserReferences.length === 0) {
+    return ['- No external references were attached.'];
+  }
+
+  return [...investigation.browserReferences]
+    .sort((left, right) => {
+      return (
+        eventTimestamp(right.capturedAt) - eventTimestamp(left.capturedAt) ||
+        left.url.localeCompare(right.url)
+      );
+    })
+    .map((reference) => {
+      const prefix = reference.title ? `${reference.title} — ` : '';
+      return `- ${prefix}${reference.url} — attached ${reference.capturedAt}`;
+    });
+}
+
 function describeTimelineSavePoint(reason: InvestigationTimelineSavePointReason): string {
   switch (reason) {
     case 'start':
@@ -474,6 +492,10 @@ export function buildResumeSnapshotContent(
   }
 
   sections.push(
+    '## External references',
+    '',
+    ...buildBrowserReferenceLines(investigation),
+    '',
     `Saved timestamp: ${investigation.savedAt}`,
     '',
     '## Workspace / repository',

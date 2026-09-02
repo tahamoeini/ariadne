@@ -8,7 +8,7 @@ Developers who resume an interrupted code investigation with RepoTrail context r
 
 ### H2: Capture Sufficiency
 
-The combination of observed activity trail, Git state snapshot, optional developer checkpoint, a condensed investigation timeline, and an Investigation-scoped navigation graph captures enough context to support re-entry without requiring exhaustive logging or AI interpretation.
+The combination of observed activity trail, Git state snapshot, optional developer checkpoint, a condensed investigation timeline, an Investigation-scoped navigation graph, and a small number of deliberate external references captures enough context to support re-entry without requiring exhaustive logging or AI interpretation.
 
 ### H3: Natural Behavior
 
@@ -66,3 +66,13 @@ Metrics to be defined before validation begins. Candidates include:
 5. The overhead of RepoTrail running passively is acceptable (performance, distraction).
 6. A condensed investigation-scoped timeline improves sequence reconstruction without becoming noisy telemetry.
 7. A collapsed Investigation-scoped navigation graph improves resume decisions without being mistaken for repository architecture.
+8. Deliberately attached external references improve re-entry without creating pressure for automatic browser capture.
+
+## Browser Reference Validation Gate
+
+Before adding anything beyond explicit attachment, validate whether minimal browser references actually improve re-entry.
+
+- Compare resume performance with and without attached external references while keeping the rest of the Investigation surface constant.
+- Measure whether developers use the attached references during re-entry, or whether checkpoint plus timeline plus graph already cover the same need.
+- Confirm that explicit attachment feels lightweight enough that developers will actually use it when a web reference matters.
+- Treat browser-history import, content capture, sync, and broader browser-extension behavior as blocked unless this minimal deliberate model proves necessary and useful first.

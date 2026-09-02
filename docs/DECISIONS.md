@@ -245,3 +245,11 @@
 **Decision:** RepoTrail persists a small Investigation-scoped navigation graph whose nodes are observed Investigation artifacts and whose edges are factual observed transitions or supported navigation relationships. The graph is rendered textually inside the Resume Snapshot and is used to prioritize reopen candidates during Resume.
 
 **Reason:** Validation evidence showed that sequence alone was not always enough; developers also needed a spatial representation of how they moved through one Investigation. The implemented graph stays narrow by collapsing noise, avoiding architectural inference, staying bounded to one Investigation, and directly improving Resume instead of becoming a decorative analytics feature.
+
+---
+
+## ADR-032: Deliberate Minimal Browser References Only
+
+**Decision:** RepoTrail may retain a small list of browser references only when the developer explicitly attaches them to the active Investigation. RepoTrail may offer the current open page or a temporary list of open-page candidates from VS Code tabs, but it must not automatically import browser history or page content.
+
+**Reason:** Validation evidence indicated that external web references were a recurring re-entry gap, but broad browser capture would push RepoTrail toward a different product. Explicit attachment captures only what the developer decides matters, keeps the saved shape minimal, avoids background history ingestion, preserves the local-only privacy boundary, and keeps the feature tied to Investigation re-entry rather than general browsing analytics.

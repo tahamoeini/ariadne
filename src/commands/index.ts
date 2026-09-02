@@ -4,6 +4,7 @@ export {
   buildSnapshotFromObservedEvents,
 } from './investigationLifecycle';
 export type {
+  AttachBrowserReferenceInput,
   CreateInvestigationOptions,
   InvestigationLifecycleCapture,
   InvestigationLifecycleDebugApi,
@@ -11,6 +12,7 @@ export type {
   InvestigationLifecycleStateStore,
 } from './investigationLifecycle';
 export {
+  COMMAND_ATTACH_BROWSER_REFERENCE,
   COMMAND_DELETE_ALL_DATA,
   COMMAND_DELETE_INVESTIGATION,
   COMMAND_LIST_INVESTIGATIONS,

@@ -20,6 +20,7 @@ import {
   FileLocation,
   GitSnapshot,
   Investigation,
+  InvestigationBrowserReference,
   InvestigationNavigationEdge,
   InvestigationNavigationGraph,
   InvestigationNavigationNode,
@@ -37,7 +38,7 @@ import {
 } from '../domain';
 
 /** Current schema version. Bump when the persisted shape changes. */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 const INVESTIGATIONS_DIR_NAME = 'investigations';
 const BACKUP_SUFFIX = '.bak';
@@ -81,6 +82,12 @@ interface LegacyInvestigation {
 
 interface PersistedCheckpoint {
   text: string;
+}
+
+interface PersistedBrowserReference {
+  url: string;
+  title: string | null;
+  capturedAt: string;
 }
 
 interface PersistedFileLocation {
@@ -182,6 +189,7 @@ interface PersistedInvestigation {
   repository: string | null;
   savedAt: string;
   checkpoint: PersistedCheckpoint | null;
+  browserReferences: PersistedBrowserReference[];
   navigationGraph: PersistedNavigationGraph;
   timeline: PersistedTimelineEntry[];
   snapshot: {
@@ -305,8 +313,30 @@ function normalizeString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+function timestampValue(value: string): number {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+}
+
 function normalizeNullableString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
+}
+
+function normalizeBrowserReferenceUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value.trim());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 }
 
 function isGitAvailability(value: unknown): value is GitSnapshot['availability'] {
@@ -679,6 +709,52 @@ function normalizeCheckpoint(
   };
 }
 
+function normalizeBrowserReferences(value: unknown): InvestigationBrowserReference[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const referencesByUrl = new Map<string, InvestigationBrowserReference>();
+  for (const entry of value) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+
+    const url = normalizeBrowserReferenceUrl(entry.url);
+    const capturedAt = normalizeString(entry.capturedAt);
+    if (!url || !capturedAt) {
+      continue;
+    }
+
+    const title = entry.title === null ? null : normalizeString(entry.title) ?? null;
+    const existing = referencesByUrl.get(url);
+    if (!existing) {
+      referencesByUrl.set(url, { url, title, capturedAt });
+      continue;
+    }
+
+    if (timestampValue(capturedAt) >= timestampValue(existing.capturedAt)) {
+      referencesByUrl.set(url, {
+        url,
+        title: title ?? existing.title,
+        capturedAt,
+      });
+      continue;
+    }
+
+    if (!existing.title && title) {
+      referencesByUrl.set(url, {
+        ...existing,
+        title,
+      });
+    }
+  }
+
+  return Array.from(referencesByUrl.values()).sort((left, right) => {
+    return timestampValue(right.capturedAt) - timestampValue(left.capturedAt) || left.url.localeCompare(right.url);
+  });
+}
+
 function normalizeDiffStats(value: unknown): GitSnapshot['diffStats'] {
   if (!isRecord(value)) {
     return emptyDiffStats();
@@ -804,6 +880,7 @@ function buildRuntimeInvestigation(
       value.checkpoint,
       inferCheckpointCreatedAtFromTimeline(persistedTimeline) ?? savedAt,
     ),
+    browserReferences: normalizeBrowserReferences(value.browserReferences),
     snapshot: {
       editedFiles: normalizeWorkspaceFileList(snapshot.editedFiles, workspace),
       visitedFileCounts: normalizeVisitedFileCounts(snapshot.visitedFileCounts, workspace),
@@ -856,6 +933,7 @@ function migrateInvestigationV1(investigation: LegacyInvestigation): Investigati
       ...investigation.snapshot,
       git: migrateGitSnapshot(investigation.snapshot.git, investigation.repository),
     },
+    browserReferences: [],
     navigationGraph: { nodes: [], edges: [] },
     timeline: [],
   };
@@ -894,6 +972,7 @@ function inflateEnvelope(envelope: unknown): Investigation | null {
   if (
     envelope.schemaVersion !== 3 &&
     envelope.schemaVersion !== 4 &&
+    envelope.schemaVersion !== 5 &&
     envelope.schemaVersion !== SCHEMA_VERSION
   ) {
     return null;
@@ -1046,6 +1125,11 @@ function toPersistedInvestigation(investigation: Investigation): PersistedInvest
     repository: investigation.repository,
     savedAt: investigation.savedAt,
     checkpoint: investigation.checkpoint ? { text: investigation.checkpoint.text } : null,
+    browserReferences: investigation.browserReferences.map((reference) => ({
+      url: reference.url,
+      title: reference.title,
+      capturedAt: reference.capturedAt,
+    })),
     navigationGraph: {
       nodes: investigation.navigationGraph.nodes.map((node) =>
         toPersistedNavigationNode(node, investigation.workspace),

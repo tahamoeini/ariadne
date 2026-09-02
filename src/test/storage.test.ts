@@ -85,6 +85,13 @@ suite('Storage', () => {
         text: 'local note',
         createdAt: '2026-01-01T00:03:30.000Z',
       };
+      inv.browserReferences = [
+        {
+          url: 'https://example.com/spec',
+          title: 'Spec',
+          capturedAt: '2026-01-01T00:03:45.000Z',
+        },
+      ];
       inv.snapshot.editedFiles = ['/ws/src/token.ts'];
       inv.snapshot.visitedFileCounts = {
         '/ws/src/token.ts': 3,
@@ -194,6 +201,13 @@ suite('Storage', () => {
       assert.ok(!('createdAt' in investigation));
       assert.ok(!('lastResumedAt' in investigation));
       assert.deepStrictEqual(investigation.checkpoint, { text: 'local note' });
+      assert.deepStrictEqual(investigation.browserReferences, [
+        {
+          url: 'https://example.com/spec',
+          title: 'Spec',
+          capturedAt: '2026-01-01T00:03:45.000Z',
+        },
+      ]);
       assert.deepStrictEqual(navigationGraph, {
         nodes: [
           {

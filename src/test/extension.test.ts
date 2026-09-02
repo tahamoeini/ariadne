@@ -71,6 +71,10 @@ suite('RepoTrail Extension', () => {
     );
     assert.ok(commands.includes('repotrail.updateCheckpoint'), 'Command repotrail.updateCheckpoint not found');
     assert.ok(
+      commands.includes('repotrail.attachBrowserReference'),
+      'Command repotrail.attachBrowserReference not found',
+    );
+    assert.ok(
       commands.includes('repotrail.saveAndStopInvestigation'),
       'Command repotrail.saveAndStopInvestigation not found',
     );
@@ -270,6 +274,19 @@ suite('RepoTrail Extension', () => {
 
     assert.ok(created);
 
+    const referenced = await vscode.commands.executeCommand<Investigation>(
+      'repotrail.attachBrowserReference',
+      {
+        workspacePath: workspaceRoot,
+        url: 'https://developer.mozilla.org/docs/Web/API/URL',
+        title: 'MDN URL',
+      },
+    );
+
+    assert.ok(referenced);
+    assert.strictEqual(referenced!.browserReferences.length, 1);
+    assert.strictEqual(referenced!.browserReferences[0].title, 'MDN URL');
+
     await vscode.commands.executeCommand<Investigation>('repotrail.saveAndStopInvestigation', {
       workspacePath: workspaceRoot,
     });
@@ -286,6 +303,8 @@ suite('RepoTrail Extension', () => {
     const text = vscode.window.activeTextEditor?.document.getText() ?? '';
     assert.ok(text.includes('# Snapshot investigation'));
     assert.ok(text.includes('## Checkpoint'));
+    assert.ok(text.includes('## External references'));
+    assert.ok(text.includes('https://developer.mozilla.org/docs/Web/API/URL'));
     assert.ok(text.includes('## Current Git state'));
   });
 

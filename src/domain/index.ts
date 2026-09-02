@@ -9,6 +9,7 @@ export {
 	buildNavigationGraphFromObservedEvents,
 	buildNavigationGraphFromTimeline,
 	buildTimelineFromObservedEvents,
+	cloneBrowserReference,
 	cloneNavigationGraph,
 	cloneTimelineEntry,
 	createInvestigation,

@@ -4,6 +4,7 @@ import {
   FileLocation,
   GitSnapshot,
   Investigation,
+  InvestigationBrowserReference,
   InvestigationNavigationGraph,
   InvestigationTimelineEntry,
   InvestigationTimelineSavePointReason,
@@ -17,6 +18,7 @@ import {
   appendSavePointToTimeline,
   buildNavigationGraphFromObservedEvents,
   buildTimelineFromObservedEvents,
+  cloneBrowserReference,
   cloneNavigationGraph,
   cloneTimelineEntry,
   createInvestigation,
@@ -33,6 +35,8 @@ import {
 const ACTIVE_INVESTIGATIONS_KEY = 'repotrail.activeInvestigations';
 export const MAX_INVESTIGATION_NAME_LENGTH = 120;
 export const MAX_CHECKPOINT_LENGTH = 1000;
+export const MAX_BROWSER_REFERENCE_URL_LENGTH = 2000;
+export const MAX_BROWSER_REFERENCE_TITLE_LENGTH = 200;
 
 const VISIT_EVENT_TYPES: ReadonlySet<ObservedEvent['type']> = new Set([
   'editor.active',
@@ -63,6 +67,11 @@ export interface CreateInvestigationOptions {
   checkpointText?: string | null;
 }
 
+export interface AttachBrowserReferenceInput {
+  url: string;
+  title?: string | null;
+}
+
 export interface InvestigationLifecycleDebugApi {
   getActiveInvestigation(workspace?: string): Investigation | null;
   listInvestigations(): Investigation[];
@@ -83,6 +92,12 @@ function cloneLocation(location: FileLocation | null): FileLocation | null {
 
 function cloneCheckpoint(checkpoint: Checkpoint | null): Checkpoint | null {
   return checkpoint ? { ...checkpoint } : null;
+}
+
+function cloneBrowserReferences(
+  references: InvestigationBrowserReference[],
+): InvestigationBrowserReference[] {
+  return references.map(cloneBrowserReference);
 }
 
 function cloneObservedEvent(event: ObservedEvent): ObservedEvent {
@@ -128,10 +143,63 @@ function cloneInvestigation(investigation: Investigation): Investigation {
   return {
     ...investigation,
     checkpoint: cloneCheckpoint(investigation.checkpoint),
+    browserReferences: cloneBrowserReferences(investigation.browserReferences),
     snapshot: cloneSnapshot(investigation.snapshot),
     navigationGraph: cloneGraph(investigation.navigationGraph),
     timeline: cloneTimeline(investigation.timeline),
   };
+}
+
+function parseBrowserReferenceUrl(value: string): string {
+  const trimmed = requireBoundedText(
+    value,
+    'Browser reference URL',
+    MAX_BROWSER_REFERENCE_URL_LENGTH,
+  );
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error('Browser reference URL must be a valid http:// or https:// URL.');
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Browser reference URL must use http:// or https://.');
+  }
+
+  return parsed.toString();
+}
+
+function compareTimestampDescending(left: string, right: string): number {
+  return Date.parse(right) - Date.parse(left);
+}
+
+function upsertBrowserReference(
+  references: InvestigationBrowserReference[],
+  input: AttachBrowserReferenceInput,
+): InvestigationBrowserReference[] {
+  const url = parseBrowserReferenceUrl(input.url);
+  const title = optionalBoundedText(
+    input.title,
+    'Browser reference title',
+    MAX_BROWSER_REFERENCE_TITLE_LENGTH,
+  );
+  const existing = references.find((reference) => reference.url === url);
+  const nextReference: InvestigationBrowserReference = {
+    url,
+    title: title ?? existing?.title ?? null,
+    capturedAt: new Date().toISOString(),
+  };
+
+  return [...references.filter((reference) => reference.url !== url), nextReference].sort(
+    (left, right) => {
+      return (
+        compareTimestampDescending(left.capturedAt, right.capturedAt) ||
+        left.url.localeCompare(right.url)
+      );
+    },
+  );
 }
 
 function trimToNull(value: string | null | undefined): string | null {
@@ -384,6 +452,23 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
         nextCheckpoint?.text ?? null,
         checkpointTimestamp,
       ),
+    };
+
+    return this.persistActiveInvestigation(updated);
+  }
+
+  async attachBrowserReference(
+    workspace: string,
+    reference: AttachBrowserReferenceInput,
+  ): Promise<Investigation | null> {
+    const active = this.activeInvestigations.get(workspace);
+    if (!active) {
+      return null;
+    }
+
+    const updated: Investigation = {
+      ...cloneInvestigation(active),
+      browserReferences: upsertBrowserReference(active.browserReferences, reference),
     };
 
     return this.persistActiveInvestigation(updated);

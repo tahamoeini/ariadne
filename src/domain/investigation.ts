@@ -7,6 +7,7 @@ import {
   Checkpoint,
   GitSnapshot,
   Investigation,
+  InvestigationBrowserReference,
   InvestigationNavigationEdge,
   InvestigationNavigationGraph,
   InvestigationNavigationNode,
@@ -290,10 +291,17 @@ export function createInvestigation(
     savedAt: now,
     lastResumedAt: null,
     checkpoint: null,
+    browserReferences: [],
     snapshot: createEmptySnapshot(),
     navigationGraph: createEmptyNavigationGraph(),
     timeline: [],
   };
+}
+
+export function cloneBrowserReference(
+  reference: InvestigationBrowserReference,
+): InvestigationBrowserReference {
+  return { ...reference };
 }
 
 export function cloneNavigationGraph(

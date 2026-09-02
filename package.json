@@ -37,6 +37,11 @@
         "category": "RepoTrail"
       },
       {
+        "command": "repotrail.attachBrowserReference",
+        "title": "Attach Current Page to RepoTrail",
+        "category": "RepoTrail"
+      },
+      {
         "command": "repotrail.saveAndStopInvestigation",
         "title": "Save and Stop Investigation",
         "category": "RepoTrail"

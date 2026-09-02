@@ -2,8 +2,11 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { Investigation } from '../domain';
 import {
+  AttachBrowserReferenceInput,
   CreateInvestigationOptions,
   InvestigationLifecycleService,
+  MAX_BROWSER_REFERENCE_TITLE_LENGTH,
+  MAX_BROWSER_REFERENCE_URL_LENGTH,
   MAX_CHECKPOINT_LENGTH,
   MAX_INVESTIGATION_NAME_LENGTH,
 } from './investigationLifecycle';
@@ -17,6 +20,7 @@ import { ResumeSnapshotOpener } from '../ui';
 export const COMMAND_START_INVESTIGATION = 'repotrail.startInvestigation';
 export const COMMAND_SAVE_RECENT_ACTIVITY = 'repotrail.saveRecentActivityAsInvestigation';
 export const COMMAND_UPDATE_CHECKPOINT = 'repotrail.updateCheckpoint';
+export const COMMAND_ATTACH_BROWSER_REFERENCE = 'repotrail.attachBrowserReference';
 export const COMMAND_SAVE_AND_STOP = 'repotrail.saveAndStopInvestigation';
 export const COMMAND_LIST_INVESTIGATIONS = 'repotrail.listInvestigations';
 export const COMMAND_DELETE_INVESTIGATION = 'repotrail.deleteInvestigation';
@@ -33,6 +37,12 @@ interface CreateInvestigationCommandOptions {
 
 interface SaveAndStopCommandOptions {
   workspacePath?: string;
+}
+
+interface AttachBrowserReferenceCommandOptions {
+  workspacePath?: string;
+  url?: string;
+  title?: string | null;
 }
 
 interface ListInvestigationsCommandOptions {
@@ -63,6 +73,17 @@ interface ShowStorageLocationCommandOptions {
 
 interface InvestigationQuickPickItem extends vscode.QuickPickItem {
   investigation: Investigation;
+}
+
+interface BrowserReferenceCandidate {
+  url: string;
+  title: string | null;
+  isActive: boolean;
+}
+
+interface BrowserReferenceQuickPickItem extends vscode.QuickPickItem {
+  candidate?: BrowserReferenceCandidate;
+  manualEntry?: boolean;
 }
 
 interface RegisterInvestigationCommandsOptions {
@@ -104,6 +125,186 @@ function validateBoundedText(
   }
 
   return undefined;
+}
+
+function validateRequiredHttpUrl(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return 'Browser reference URL is required.';
+  }
+
+  if (trimmed.length > MAX_BROWSER_REFERENCE_URL_LENGTH) {
+    return `Browser reference URL must be ${MAX_BROWSER_REFERENCE_URL_LENGTH} characters or fewer.`;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return 'Browser reference URL must be a valid http:// or https:// URL.';
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return 'Browser reference URL must use http:// or https://.';
+  }
+
+  return undefined;
+}
+
+function isHttpUri(uri: vscode.Uri): boolean {
+  return uri.scheme === 'http' || uri.scheme === 'https';
+}
+
+function extractHttpUrisFromTabInput(input: vscode.Tab['input']): vscode.Uri[] {
+  if (input instanceof vscode.TabInputText) {
+    return isHttpUri(input.uri) ? [input.uri] : [];
+  }
+
+  if (input instanceof vscode.TabInputTextDiff) {
+    return [input.original, input.modified].filter(isHttpUri);
+  }
+
+  if (input instanceof vscode.TabInputCustom) {
+    return isHttpUri(input.uri) ? [input.uri] : [];
+  }
+
+  if (input instanceof vscode.TabInputNotebook) {
+    return isHttpUri(input.uri) ? [input.uri] : [];
+  }
+
+  return [];
+}
+
+function collectBrowserReferenceCandidates(): BrowserReferenceCandidate[] {
+  const candidatesByUrl = new Map<string, BrowserReferenceCandidate>();
+
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      for (const uri of extractHttpUrisFromTabInput(tab.input)) {
+        const url = uri.toString();
+        const title = trimToNull(tab.label !== url ? tab.label : null);
+        const isActive = group.isActive && tab.isActive;
+        const existing = candidatesByUrl.get(url);
+
+        if (!existing) {
+          candidatesByUrl.set(url, { url, title, isActive });
+          continue;
+        }
+
+        candidatesByUrl.set(url, {
+          url,
+          title: existing.title ?? title,
+          isActive: existing.isActive || isActive,
+        });
+      }
+    }
+  }
+
+  return Array.from(candidatesByUrl.values()).sort((left, right) => {
+    return (
+      Number(right.isActive) - Number(left.isActive) ||
+      (left.title ?? left.url).localeCompare(right.title ?? right.url)
+    );
+  });
+}
+
+function suggestReferenceTitle(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname && parsed.pathname !== '/'
+      ? `${parsed.host}${parsed.pathname}`
+      : parsed.host;
+  } catch {
+    return '';
+  }
+}
+
+async function promptForManualBrowserReference(): Promise<AttachBrowserReferenceInput | undefined> {
+  const url = await vscode.window.showInputBox({
+    title: 'RepoTrail: Browser Reference URL',
+    prompt: `Paste the current page URL. RepoTrail saves only the URL, optional title, and timestamp locally (${MAX_BROWSER_REFERENCE_URL_LENGTH} characters max).`,
+    placeHolder: 'https://example.com/docs/investigation-context',
+    ignoreFocusOut: true,
+    validateInput(value) {
+      return validateRequiredHttpUrl(value);
+    },
+  });
+
+  if (url === undefined) {
+    return undefined;
+  }
+
+  const normalizedUrl = url.trim();
+  const title = await vscode.window.showInputBox({
+    title: 'RepoTrail: Browser Reference Title',
+    prompt: `Optional page title saved locally in plain text. RepoTrail does not capture page contents (${MAX_BROWSER_REFERENCE_TITLE_LENGTH} characters max).`,
+    placeHolder: suggestReferenceTitle(normalizedUrl) || 'Reference title (optional)',
+    ignoreFocusOut: true,
+    validateInput(value) {
+      return validateBoundedText(
+        value,
+        'Browser reference title',
+        MAX_BROWSER_REFERENCE_TITLE_LENGTH,
+      );
+    },
+  });
+
+  if (title === undefined) {
+    return undefined;
+  }
+
+  return {
+    url: normalizedUrl,
+    title: trimToNull(title),
+  };
+}
+
+async function promptForBrowserReference(): Promise<AttachBrowserReferenceInput | undefined> {
+  const candidates = collectBrowserReferenceCandidates();
+  if (candidates.length === 0) {
+    return promptForManualBrowserReference();
+  }
+
+  const selected = await vscode.window.showQuickPick(
+    [
+      ...candidates.map<BrowserReferenceQuickPickItem>((candidate) => ({
+        label: candidate.title ?? candidate.url,
+        description: candidate.url,
+        detail: candidate.isActive
+          ? 'Current open page candidate'
+          : 'Open page candidate from VS Code tabs',
+        candidate,
+      })),
+      {
+        label: 'Enter URL manually',
+        description: 'Paste the current page URL and optional title',
+        manualEntry: true,
+      },
+    ],
+    {
+      title: 'RepoTrail: Attach Browser Reference',
+      matchOnDescription: true,
+      matchOnDetail: true,
+      placeHolder: 'Choose an open page candidate or enter a URL manually',
+    },
+  );
+
+  if (!selected) {
+    return undefined;
+  }
+
+  if (selected.manualEntry) {
+    return promptForManualBrowserReference();
+  }
+
+  if (!selected.candidate) {
+    return undefined;
+  }
+
+  return {
+    url: selected.candidate.url,
+    title: selected.candidate.title,
+  };
 }
 
 async function resolveWorkspacePath(explicitPath?: string): Promise<string | null> {
@@ -400,6 +601,52 @@ export function registerInvestigationCommands(
           return updated;
         } catch (error) {
           showCommandError('update the checkpoint', error);
+          return undefined;
+        }
+      },
+    ),
+    vscode.commands.registerCommand(
+      COMMAND_ATTACH_BROWSER_REFERENCE,
+      async (options: AttachBrowserReferenceCommandOptions = {}) => {
+        const workspace = await resolveWorkspacePath(options.workspacePath);
+        if (!workspace) {
+          vscode.window.showInformationMessage('RepoTrail: Open a workspace or file first.');
+          return undefined;
+        }
+
+        const activeInvestigation = lifecycle.getActiveInvestigation(workspace);
+        if (!activeInvestigation) {
+          vscode.window.showInformationMessage(
+            'RepoTrail: Start or resume an investigation before attaching a browser reference.',
+          );
+          return null;
+        }
+
+        const reference = options.url
+          ? {
+              url: options.url,
+              title: trimToNull(options.title),
+            }
+          : await promptForBrowserReference();
+        if (!reference) {
+          return undefined;
+        }
+
+        try {
+          const updated = await lifecycle.attachBrowserReference(workspace, reference);
+          if (!updated) {
+            vscode.window.showInformationMessage(
+              'RepoTrail: No active investigation was found for this workspace.',
+            );
+            return null;
+          }
+
+          vscode.window.showInformationMessage(
+            `RepoTrail: Attached browser reference to "${updated.name}".`,
+          );
+          return updated;
+        } catch (error) {
+          showCommandError('attach the browser reference', error);
           return undefined;
         }
       },

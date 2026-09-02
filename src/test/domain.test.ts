@@ -21,6 +21,7 @@ suite('Domain Model', () => {
       assert.ok(inv.savedAt);
       assert.strictEqual(inv.lastResumedAt, null);
       assert.strictEqual(inv.checkpoint, null);
+      assert.deepStrictEqual(inv.browserReferences, []);
       assert.deepStrictEqual(inv.snapshot.editedFiles, []);
       assert.deepStrictEqual(inv.snapshot.visitedFileCounts, {});
       assert.strictEqual(inv.snapshot.lastLocation, null);
@@ -199,6 +200,13 @@ suite('Domain Model', () => {
     test('Investigation survives JSON round-trip', () => {
       const inv = createInvestigation('Roundtrip', '/ws', '/ws/.git');
       inv.checkpoint = createCheckpoint('note');
+      inv.browserReferences = [
+        {
+          url: 'https://developer.mozilla.org/docs/Web/API/URL',
+          title: 'MDN URL',
+          capturedAt: '2026-01-01T00:00:02.500Z',
+        },
+      ];
       inv.snapshot.editedFiles = ['a.ts', 'b.ts'];
       inv.snapshot.visitedFileCounts = { 'a.ts': 3, 'c.ts': 1 };
       inv.snapshot.lastLocation = { filePath: 'a.ts', line: 10, column: 5 };

@@ -223,6 +223,16 @@ export interface Checkpoint {
   createdAt: string;
 }
 
+/** A deliberately attached external page reference retained for re-entry. */
+export interface InvestigationBrowserReference {
+  /** Absolute http(s) URL. */
+  url: string;
+  /** Optional title captured from the page tab or provided manually. */
+  title: string | null;
+  /** ISO-8601 timestamp when the reference was attached. */
+  capturedAt: string;
+}
+
 /** A named unit of work representing a code exploration session. */
 export interface Investigation {
   /** Unique identifier (UUID v4). */
@@ -241,6 +251,8 @@ export interface Investigation {
   lastResumedAt: string | null;
   /** Optional developer checkpoint. */
   checkpoint: Checkpoint | null;
+  /** Deliberately attached external page references retained for re-entry. */
+  browserReferences: InvestigationBrowserReference[];
   /** Current snapshot of investigation state. */
   snapshot: Snapshot;
   /** Investigation-scoped factual navigation graph retained for resume. */

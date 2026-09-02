@@ -35,6 +35,13 @@ function makeInvestigation(): Investigation {
     text: 'Reproduce delayed refresh after session invalidation.',
     createdAt: '2026-06-01T12:30:00.000Z',
   };
+  investigation.browserReferences = [
+    {
+      url: 'https://datatracker.ietf.org/doc/html/rfc6749',
+      title: 'OAuth 2.0 Authorization Framework',
+      capturedAt: '2026-06-01T12:10:00.000Z',
+    },
+  ];
   investigation.snapshot.editedFiles = [
     '/workspace/src/tokenService.ts',
     '/workspace/src/auth.test.ts',
@@ -124,6 +131,12 @@ suite('Resume Snapshot', () => {
     });
 
     assert.ok(content.startsWith('# Investigate token race\n\n## Checkpoint'));
+    assert.ok(content.includes('## External references'));
+    assert.ok(
+      content.includes(
+        '- OAuth 2.0 Authorization Framework — https://datatracker.ietf.org/doc/html/rfc6749 — attached 2026-06-01T12:10:00.000Z',
+      ),
+    );
     assert.ok(content.includes('Saved timestamp: 2026-06-01T12:34:56.000Z'));
     assert.ok(content.includes('- Workspace: /workspace'));
     assert.ok(content.includes('- Branch: feature/resume-snapshot'));
@@ -171,6 +184,7 @@ suite('Resume Snapshot', () => {
       fileExists: () => true,
     });
 
+    assert.ok(content.includes('- No external references were attached.'));
     assert.ok(content.includes('- Repository: No repository was captured.'));
     assert.ok(content.includes('- No branch was captured.'));
     assert.ok(content.includes('- No saved or current Git snapshot is available for comparison.'));
