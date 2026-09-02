@@ -635,6 +635,81 @@ suite('Investigation Lifecycle', () => {
     assert.strictEqual(loaded!.snapshot.git?.head, 'after-flush');
   });
 
+  test('autosaves active investigation after observed activity', async () => {
+    const workspace = '/workspace';
+    const firstFile = '/workspace/src/seed.ts';
+    const secondFile = '/workspace/src/auto.ts';
+    const capture = new FakeCapture();
+    const stateStore = new FakeStateStore();
+
+    capture.setEvents(workspace, [
+      makeEvent(
+        'editor.active',
+        workspace,
+        firstFile,
+        '2026-05-01T13:30:00.000Z',
+        2,
+        1,
+      ),
+    ]);
+
+    const gitSnapshots = [
+      makeGitSnapshot({
+        timestamp: '2026-05-01T13:30:00.000Z',
+        head: 'start',
+        modifiedFiles: ['src/seed.ts'],
+      }),
+      makeGitSnapshot({
+        timestamp: '2026-05-01T13:31:00.000Z',
+        head: 'auto-saved',
+        modifiedFiles: ['src/seed.ts', 'src/auto.ts'],
+        diffStats: { filesChanged: 2, insertions: 4, deletions: 1 },
+      }),
+    ];
+    let gitSnapshotIndex = 0;
+
+    const service = new InvestigationLifecycleService({
+      storageDir: tmpDir,
+      capture,
+      stateStore,
+      captureGitSnapshot: () => gitSnapshots[Math.min(gitSnapshotIndex++, gitSnapshots.length - 1)],
+      autoSaveDebounceMs: 5,
+    });
+
+    const created = await service.startInvestigation({
+      workspace,
+      name: 'Autosave active progress',
+      checkpointText: null,
+    });
+
+    const followUpEdit = makeEvent(
+      'file.edit',
+      workspace,
+      secondFile,
+      '2026-05-01T13:30:30.000Z',
+      8,
+      4,
+    );
+    capture.addEvent(followUpEdit);
+    service.recordObservedEvent(followUpEdit);
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const loaded = loadInvestigation(tmpDir, created.id);
+    assert.ok(loaded);
+    assert.deepStrictEqual(loaded!.snapshot.editedFiles, [secondFile]);
+    assert.strictEqual(loaded!.snapshot.lastLocation?.filePath, secondFile);
+    assert.strictEqual(loaded!.snapshot.git?.head, 'auto-saved');
+    assert.strictEqual(loaded!.timeline.at(-1)?.type, 'save.point');
+    assert.deepStrictEqual(loaded!.timeline.at(-1), {
+      timestamp: loaded!.savedAt,
+      type: 'save.point',
+      reason: 'save',
+    });
+
+    service.dispose();
+  });
+
   test('collapses consecutive edit noise into one timeline entry', async () => {
     const workspace = '/workspace';
     const filePath = '/workspace/src/timeline.ts';

@@ -59,6 +59,7 @@ export interface InvestigationLifecycleOptions {
   capture: InvestigationLifecycleCapture;
   stateStore: InvestigationLifecycleStateStore;
   captureGitSnapshot?: (targetPath: string) => GitSnapshot | PromiseLike<GitSnapshot>;
+  autoSaveDebounceMs?: number;
 }
 
 export interface CreateInvestigationOptions {
@@ -344,10 +345,21 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
   private readonly captureGitSnapshotForTarget: (
     targetPath: string,
   ) => GitSnapshot | PromiseLike<GitSnapshot>;
+  private readonly autoSaveDebounceMs: number;
+  private readonly autoSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly inFlightAutoSave = new Set<string>();
 
   constructor(private readonly options: InvestigationLifecycleOptions) {
     this.captureGitSnapshotForTarget = options.captureGitSnapshot ?? captureGitSnapshot;
+    this.autoSaveDebounceMs = Math.max(0, Math.floor(options.autoSaveDebounceMs ?? 15_000));
     this.restoreActiveInvestigations();
+  }
+
+  dispose(): void {
+    for (const timer of this.autoSaveTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.autoSaveTimers.clear();
   }
 
   getActiveInvestigation(workspace?: string): Investigation | null {
@@ -371,6 +383,7 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
   }
 
   async persistActiveInvestigations(): Promise<void> {
+    this.cancelAllAutoSaves();
     for (const workspace of Array.from(this.activeInvestigations.keys())) {
       const investigation = this.activeInvestigations.get(workspace);
       if (!investigation) {
@@ -386,6 +399,7 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
   }
 
   async deleteAllData(): Promise<number> {
+    this.cancelAllAutoSaves();
     const deletedCount = deleteAllStoredInvestigations(this.options.storageDir);
     this.activeInvestigations.clear();
     await this.persistActiveInvestigationIds();
@@ -408,6 +422,8 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
       navigationGraph,
       timeline,
     });
+
+    this.scheduleAutoSave(event.workspace);
   }
 
   async startInvestigation(options: CreateInvestigationOptions): Promise<Investigation> {
@@ -477,6 +493,7 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
   }
 
   async saveAndStopInvestigation(workspace: string): Promise<Investigation | null> {
+    this.cancelAutoSave(workspace);
     const active = this.activeInvestigations.get(workspace);
     if (!active) {
       return null;
@@ -506,6 +523,7 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
 
     for (const [workspace, investigation] of this.activeInvestigations.entries()) {
       if (investigation.id === id) {
+        this.cancelAutoSave(workspace);
         this.activeInvestigations.delete(workspace);
       }
     }
@@ -664,6 +682,55 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
     this.activeInvestigations.set(investigation.workspace, cloneInvestigation(saved));
     await this.persistActiveInvestigationIds();
     return cloneInvestigation(saved);
+  }
+
+  private scheduleAutoSave(workspace: string): void {
+    if (this.autoSaveDebounceMs <= 0) {
+      return;
+    }
+
+    this.cancelAutoSave(workspace);
+    const timer = setTimeout(() => {
+      this.autoSaveTimers.delete(workspace);
+      void this.runAutoSave(workspace);
+    }, this.autoSaveDebounceMs);
+    this.autoSaveTimers.set(workspace, timer);
+  }
+
+  private cancelAutoSave(workspace: string): void {
+    const timer = this.autoSaveTimers.get(workspace);
+    if (!timer) {
+      return;
+    }
+
+    clearTimeout(timer);
+    this.autoSaveTimers.delete(workspace);
+  }
+
+  private cancelAllAutoSaves(): void {
+    for (const workspace of Array.from(this.autoSaveTimers.keys())) {
+      this.cancelAutoSave(workspace);
+    }
+  }
+
+  private async runAutoSave(workspace: string): Promise<void> {
+    if (this.inFlightAutoSave.has(workspace)) {
+      return;
+    }
+
+    const active = this.activeInvestigations.get(workspace);
+    if (!active) {
+      return;
+    }
+
+    this.inFlightAutoSave.add(workspace);
+    try {
+      await this.persistActiveInvestigation(active, 'save');
+    } catch {
+      // Ignore autosave failures; explicit save/stop remains available.
+    } finally {
+      this.inFlightAutoSave.delete(workspace);
+    }
   }
 
   private async persistActiveInvestigationIds(): Promise<void> {

@@ -76,3 +76,61 @@ Before adding anything beyond explicit attachment, validate whether minimal brow
 - Measure whether developers use the attached references during re-entry, or whether checkpoint plus timeline plus graph already cover the same need.
 - Confirm that explicit attachment feels lightweight enough that developers will actually use it when a web reference matters.
 - Treat browser-history import, content capture, sync, and broader browser-extension behavior as blocked unless this minimal deliberate model proves necessary and useful first.
+
+## External Validation Build (Milestone G)
+
+Run interruption-recovery studies with real tasks and delayed resumes.
+
+### Study Setup
+
+1. Recruit developers who regularly debug or investigate unfamiliar code paths.
+2. Use a fixed task bank (bug triage, regression root-cause, behavior tracing).
+3. Enforce interruption windows of 48-72 hours before resume sessions.
+4. Randomize variants A-E per task to reduce ordering bias.
+
+### Session Protocol
+
+1. Participant performs investigation for a fixed initial window (20-40 minutes).
+2. Participant stops with assigned variant condition.
+3. After interruption delay, participant returns and resumes.
+4. Capture timing and confidence outcomes.
+
+### Primary Metrics
+
+- Time to orientation:
+	- from resume start to participant stating a concrete current hypothesis.
+- Time to first meaningful continuation:
+	- from resume start to first non-trivial code or test action advancing the investigation.
+- Goal recall fidelity:
+	- participant can explain prior goal accurately without re-exploration.
+- Rework rate:
+	- number of repeated exploratory steps that were already performed previously.
+
+### Secondary Metrics
+
+- Perceived resume usefulness (Likert scale).
+- Perceived cognitive load during resume.
+- Number of files opened before first meaningful continuation.
+
+### Guardrails
+
+- Do not optimize for event count or UI density.
+- Treat any feature requests outside MVP scope as deferred hypotheses.
+- Keep privacy boundary fixed throughout validation.
+
+## Instrumentation Notes
+
+For validation, prefer lightweight manual or local scripts that do not alter RepoTrail's local-first privacy model.
+
+- Session timers can be captured by facilitator tooling outside the extension.
+- RepoTrail data exports, if needed, should remain local and user-initiated.
+- Do not add telemetry pipelines for MVP validation.
+
+## Exit Criteria for 0.0.1
+
+Proceed to next milestone only if most participants in variant C show clear improvement over baseline E in both:
+
+1. time to orientation
+2. time to first meaningful continuation
+
+If improvement is not clear, iterate on snapshot clarity and lifecycle friction before adding new feature classes.

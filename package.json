@@ -20,6 +20,32 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "RepoTrail",
+      "properties": {
+        "repotrail.capture.retentionMinutes": {
+          "type": "number",
+          "default": 20,
+          "minimum": 1,
+          "maximum": 240,
+          "description": "How long RepoTrail keeps rolling observed activity in memory before it can be saved retroactively."
+        },
+        "repotrail.capture.maxEvents": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 100,
+          "maximum": 20000,
+          "description": "Maximum observed events retained per workspace in the rolling in-memory buffer."
+        },
+        "repotrail.lifecycle.autoSaveSeconds": {
+          "type": "number",
+          "default": 15,
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "Debounce interval for automatic active-investigation persistence. Set to 0 to disable autosave between explicit save points."
+        }
+      }
+    },
     "commands": [
       {
         "command": "repotrail.startInvestigation",

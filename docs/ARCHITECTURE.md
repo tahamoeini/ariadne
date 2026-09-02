@@ -312,3 +312,136 @@ The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confi
 1. **Snapshot trigger**: Automatic periodic snapshots vs. manual-only?
 2. **Multi-root workspaces**: How to handle in 0.0.1.
 3. **Future data migration**: Strategy for schema changes beyond the current v1 → v6 migrations.
+
+## Architecture Audit (Milestone A)
+
+This section documents the current implementation behavior as audited from source.
+
+### Activation
+
+- Entry point: `src/extension.ts`
+- Activation event: `onStartupFinished`
+- Runtime wiring:
+  - create VS Code observed-event capture
+  - instantiate investigation lifecycle service
+  - register resume snapshot virtual document provider
+  - subscribe capture events into lifecycle (`recordObservedEvent`)
+  - register command handlers
+- Deactivation behavior:
+  - persist active investigations
+  - dispose lifecycle timers/resources
+
+### Event Handling
+
+- Capture adapter: `src/capture/vscodeEventCapture.ts`
+- Observed events:
+  - `editor.active`
+  - `editor.selection`
+  - `file.edit`
+- Captured metadata only:
+  - timestamp
+  - workspace path
+  - repository root (best effort)
+  - file path
+  - location (line/column)
+  - minimal source metadata (language id, change count)
+- Privacy boundary:
+  - no file contents
+  - no keystrokes
+  - no terminal output
+  - no clipboard
+
+### Storage
+
+- Storage module: `src/storage/store.ts`
+- Medium:
+  - local JSON files in `globalStorageUri/investigations`
+  - schema envelope with `schemaVersion`
+- Reliability:
+  - temp-file replacement writes
+  - `.bak` recovery file
+  - malformed file tolerance during list/load
+- Data minimization:
+  - persisted fields are resume-focused only
+  - paths stored workspace-relative when possible
+
+### Lifecycle
+
+- Lifecycle service: `src/commands/investigationLifecycle.ts`
+- Model:
+  - one active investigation per workspace
+  - active IDs persisted in `workspaceState`
+- Operations:
+  - start investigation
+  - save recent activity as investigation
+  - checkpoint update/clear
+  - attach browser reference
+  - save and stop
+  - mark resumed
+  - delete one / delete all
+- Incremental safety:
+  - observed events update active in-memory snapshot incrementally
+  - active investigations now autosave with configurable debounce
+
+### UI
+
+- Resume UI module: `src/ui/resumeSnapshot.ts`
+- Delivery:
+  - read-only virtual markdown document via content provider
+- Priority:
+  - factual orientation (checkpoint, git then/now, changed files, location, timeline, graph)
+  - no dashboard or graph rendering framework
+
+## Reusable Components
+
+1. `createWorkspaceEventBuffer` and `createRollingEventBuffer` for bounded factual capture
+2. `InvestigationLifecycleService` for lifecycle orchestration and restart recovery
+3. `captureGitSnapshot` adapter for read-only local Git metadata
+4. `saveInvestigation`/`loadInvestigation` schema-aware persistence with migrations
+5. Resume planning (`buildResumePlan`) for conservative reopen behavior
+6. Resume snapshot rendering for consistent factual re-entry surface
+
+## Technical Debt
+
+1. Autosave currently swallows persistence errors; surfacing non-intrusive diagnostics is deferred.
+2. Rolling-buffer settings are configurable but not yet surfaced in docs/tests for boundary extremes.
+3. Multi-root workspace behavior remains basic and needs explicit validation scenarios.
+4. Navigation definition/reference events are typed but currently deferred in capture.
+5. Validation harness exists, but external interruption-recovery user study automation is not yet built.
+
+## Milestone Coverage Map
+
+### Milestone A: Extension architecture audit
+
+- Status: complete in this document.
+
+### Milestone B: Reliable factual event capture
+
+- Status: complete for active editor, selection, and edit occurrence events.
+- Deferred: reliable definition/reference capture.
+
+### Milestone C: Rolling local buffer
+
+- Status: complete.
+- Added: configurable retention and max events through extension settings.
+
+### Milestone D: Investigation lifecycle
+
+- Status: complete for create/checkpoint/stop/resume.
+- Added: debounced autosave for active investigations to improve crash resilience.
+
+### Milestone E: Git snapshot at save points
+
+- Status: complete.
+- Persisted: availability, branch, HEAD, modified/untracked files, diff stats.
+
+### Milestone F: Resume Snapshot UI
+
+- Status: complete as read-only resume-first markdown surface.
+
+### Milestone G: External validation build
+
+- Status: partially prepared.
+- Remaining:
+  - execute interruption-based usability sessions
+  - measure orientation and continuation time deltas against baseline
