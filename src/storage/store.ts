@@ -20,9 +20,14 @@ import {
   FileLocation,
   GitSnapshot,
   Investigation,
+  InvestigationNavigationEdge,
+  InvestigationNavigationGraph,
+  InvestigationNavigationNode,
+  InvestigationNavigationRelationship,
   InvestigationTimelineEntry,
   InvestigationTimelineSavePointReason,
   ObservedEvent,
+  buildNavigationGraphFromTimeline,
   appendCheckpointToTimeline,
   appendGitSnapshotToTimeline,
   appendResumePointToTimeline,
@@ -32,7 +37,7 @@ import {
 } from '../domain';
 
 /** Current schema version. Bump when the persisted shape changes. */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 const INVESTIGATIONS_DIR_NAME = 'investigations';
 const BACKUP_SUFFIX = '.bak';
@@ -141,6 +146,27 @@ interface PersistedResumePointTimelineEntry {
   type: 'resume.point';
 }
 
+interface PersistedNavigationNode {
+  kind: 'file';
+  filePath: string;
+  visitCount: number;
+  editCount: number;
+  lastObservedAt: string;
+}
+
+interface PersistedNavigationEdge {
+  fromFilePath: string;
+  toFilePath: string;
+  relationship: InvestigationNavigationRelationship;
+  count: number;
+  lastObservedAt: string;
+}
+
+interface PersistedNavigationGraph {
+  nodes: PersistedNavigationNode[];
+  edges: PersistedNavigationEdge[];
+}
+
 type PersistedTimelineEntry =
   | PersistedFileTransitionTimelineEntry
   | PersistedFileEditTimelineEntry
@@ -156,6 +182,7 @@ interface PersistedInvestigation {
   repository: string | null;
   savedAt: string;
   checkpoint: PersistedCheckpoint | null;
+  navigationGraph: PersistedNavigationGraph;
   timeline: PersistedTimelineEntry[];
   snapshot: {
     editedFiles: string[];
@@ -293,6 +320,12 @@ function isGitAvailability(value: unknown): value is GitSnapshot['availability']
 
 function isSavePointReason(value: unknown): value is InvestigationTimelineSavePointReason {
   return value === 'start' || value === 'save-recent' || value === 'save-stop' || value === 'save';
+}
+
+function isNavigationRelationship(
+  value: unknown,
+): value is InvestigationNavigationRelationship {
+  return value === 'transition' || value === 'definition' || value === 'reference';
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -525,6 +558,93 @@ function normalizeTimelineEntries(
   return trimInvestigationTimeline(timeline);
 }
 
+function normalizeNavigationNodes(
+  value: unknown,
+  workspacePath: string,
+): InvestigationNavigationNode[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const nodes: InvestigationNavigationNode[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+
+    const filePath = normalizeString(entry.filePath);
+    const lastObservedAt = normalizeString(entry.lastObservedAt);
+    if (entry.kind !== 'file' || !filePath || !lastObservedAt) {
+      continue;
+    }
+
+    nodes.push({
+      kind: 'file',
+      filePath: fromStoredPath(filePath, workspacePath),
+      visitCount: normalizeNumber(entry.visitCount, 0, 0),
+      editCount: normalizeNumber(entry.editCount, 0, 0),
+      lastObservedAt,
+    });
+  }
+
+  return nodes;
+}
+
+function normalizeNavigationEdges(
+  value: unknown,
+  workspacePath: string,
+): InvestigationNavigationEdge[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const edges: InvestigationNavigationEdge[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+
+    const fromFilePath = normalizeString(entry.fromFilePath);
+    const toFilePath = normalizeString(entry.toFilePath);
+    const lastObservedAt = normalizeString(entry.lastObservedAt);
+    if (
+      !fromFilePath ||
+      !toFilePath ||
+      !lastObservedAt ||
+      !isNavigationRelationship(entry.relationship)
+    ) {
+      continue;
+    }
+
+    edges.push({
+      fromFilePath: fromStoredPath(fromFilePath, workspacePath),
+      toFilePath: fromStoredPath(toFilePath, workspacePath),
+      relationship: entry.relationship,
+      count: normalizeNumber(entry.count, 1, 1),
+      lastObservedAt,
+    });
+  }
+
+  return edges;
+}
+
+function normalizeNavigationGraph(
+  value: unknown,
+  workspacePath: string,
+): InvestigationNavigationGraph {
+  if (!isRecord(value)) {
+    return {
+      nodes: [],
+      edges: [],
+    };
+  }
+
+  return {
+    nodes: normalizeNavigationNodes(value.nodes, workspacePath),
+    edges: normalizeNavigationEdges(value.edges, workspacePath),
+  };
+}
+
 function inflateRecentEvents(
   recentPath: readonly string[],
   savedAt: string,
@@ -670,6 +790,7 @@ function buildRuntimeInvestigation(
   const recentPath = normalizeRecentPathEntries(recentPathEntries, workspace);
   const git = normalizeGitSnapshot(snapshot.git, repository, savedAt);
   const persistedTimeline = normalizeTimelineEntries(value.timeline, workspace);
+  const persistedGraph = normalizeNavigationGraph(value.navigationGraph, workspace);
 
   const investigation: Investigation = {
     id,
@@ -690,14 +811,20 @@ function buildRuntimeInvestigation(
       recentEvents: inflateRecentEvents(recentPath, savedAt, workspace, repository),
       git,
     },
+    navigationGraph: { nodes: [], edges: [] },
     timeline: [],
   };
 
   const timeline = persistedTimeline.length > 0 ? persistedTimeline : buildLegacyTimeline(investigation);
+  const navigationGraph =
+    persistedGraph.nodes.length > 0 || persistedGraph.edges.length > 0
+      ? persistedGraph
+      : buildNavigationGraphFromTimeline(timeline);
   return {
     ...investigation,
     lastResumedAt:
       normalizeNullableString(value.lastResumedAt) ?? inferLastResumedAtFromTimeline(timeline),
+    navigationGraph,
     timeline,
   };
 }
@@ -729,6 +856,7 @@ function migrateInvestigationV1(investigation: LegacyInvestigation): Investigati
       ...investigation.snapshot,
       git: migrateGitSnapshot(investigation.snapshot.git, investigation.repository),
     },
+    navigationGraph: { nodes: [], edges: [] },
     timeline: [],
   };
 }
@@ -765,6 +893,7 @@ function inflateEnvelope(envelope: unknown): Investigation | null {
 
   if (
     envelope.schemaVersion !== 3 &&
+    envelope.schemaVersion !== 4 &&
     envelope.schemaVersion !== SCHEMA_VERSION
   ) {
     return null;
@@ -857,6 +986,32 @@ function toPersistedTimelineEntry(
   }
 }
 
+function toPersistedNavigationNode(
+  node: InvestigationNavigationNode,
+  workspacePath: string,
+): PersistedNavigationNode {
+  return {
+    kind: 'file',
+    filePath: toStoredPath(node.filePath, workspacePath),
+    visitCount: normalizeNumber(node.visitCount, 0, 0),
+    editCount: normalizeNumber(node.editCount, 0, 0),
+    lastObservedAt: node.lastObservedAt,
+  };
+}
+
+function toPersistedNavigationEdge(
+  edge: InvestigationNavigationEdge,
+  workspacePath: string,
+): PersistedNavigationEdge {
+  return {
+    fromFilePath: toStoredPath(edge.fromFilePath, workspacePath),
+    toFilePath: toStoredPath(edge.toFilePath, workspacePath),
+    relationship: edge.relationship,
+    count: normalizeNumber(edge.count, 1, 1),
+    lastObservedAt: edge.lastObservedAt,
+  };
+}
+
 function buildRecentPathFromInvestigation(investigation: Investigation): string[] {
   const recentPath: string[] = [];
   for (const event of investigation.snapshot.recentEvents) {
@@ -891,6 +1046,14 @@ function toPersistedInvestigation(investigation: Investigation): PersistedInvest
     repository: investigation.repository,
     savedAt: investigation.savedAt,
     checkpoint: investigation.checkpoint ? { text: investigation.checkpoint.text } : null,
+    navigationGraph: {
+      nodes: investigation.navigationGraph.nodes.map((node) =>
+        toPersistedNavigationNode(node, investigation.workspace),
+      ),
+      edges: investigation.navigationGraph.edges.map((edge) =>
+        toPersistedNavigationEdge(edge, investigation.workspace),
+      ),
+    },
     timeline: investigation.timeline.map((entry) =>
       toPersistedTimelineEntry(entry, investigation.workspace),
     ),

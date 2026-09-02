@@ -3,6 +3,7 @@ import {
   appendCheckpointToTimeline,
   appendGitSnapshotToTimeline,
   appendSavePointToTimeline,
+  buildNavigationGraphFromObservedEvents,
   buildTimelineFromObservedEvents,
   createInvestigation,
   GitSnapshot,
@@ -86,6 +87,9 @@ function makeInvestigation(): Investigation {
     },
   ];
   investigation.snapshot.git = makeGitSnapshot();
+  investigation.navigationGraph = buildNavigationGraphFromObservedEvents(
+    investigation.snapshot.recentEvents,
+  );
   investigation.timeline = buildTimelineFromObservedEvents(investigation.snapshot.recentEvents);
   investigation.timeline = appendCheckpointToTimeline(
     investigation.timeline,
@@ -132,6 +136,22 @@ suite('Resume Snapshot', () => {
     assert.ok(content.includes('- src/tokenService.ts — 6 visits'));
     assert.ok(content.includes('- src/auth.test.ts — saved path missing (deleted or moved) — 2 visits'));
     assert.ok(content.includes('- src/tokenService.ts:183:7'));
+    assert.ok(content.includes('## Investigation navigation graph'));
+    assert.ok(content.includes('- Observed artifacts: 3 file node(s)'));
+    assert.ok(content.includes('- Collapsed relationships: 3'));
+    assert.ok(content.includes('- Resume anchor: src/tokenService.ts'));
+    assert.ok(
+      content.includes('- Anchor neighbor: src/authController.ts — transition x1'),
+    );
+    assert.ok(
+      content.includes('- Anchor neighbor: src/auth.test.ts — saved path missing (deleted or moved) — transition x2'),
+    );
+    assert.ok(
+      content.includes('- src/tokenService.ts → src/auth.test.ts — saved path missing (deleted or moved) — transition x1'),
+    );
+    assert.ok(
+      content.includes('- src/auth.test.ts — saved path missing (deleted or moved) → src/tokenService.ts — transition x1'),
+    );
     assert.ok(content.includes('## Investigation timeline'));
     assert.ok(content.includes('- 2026-06-01T12:20:00.000Z — Focused src/authController.ts'));
     assert.ok(content.includes('- 2026-06-01T12:21:00.000Z — src/authController.ts → src/tokenService.ts'));
@@ -157,6 +177,7 @@ suite('Resume Snapshot', () => {
     assert.ok(content.includes('- No edited files were captured.'));
     assert.ok(content.includes('- No revisited files were captured.'));
     assert.ok(content.includes('- No last location was captured.'));
+    assert.ok(content.includes('- No investigation navigation graph was captured.'));
     assert.ok(content.includes('- No investigation timeline was captured.'));
   });
 

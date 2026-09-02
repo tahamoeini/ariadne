@@ -3,11 +3,15 @@ import * as path from 'path';
 import {
   GitSnapshot,
   Investigation,
+  InvestigationNavigationRelationship,
   InvestigationTimelineEntry,
   InvestigationTimelineSavePointReason,
+  getLatestNavigationGraphFilePath,
 } from '../domain';
 
 const MISSING_PATH_SUFFIX = ' — saved path missing (deleted or moved)';
+const NAVIGATION_GRAPH_EDGE_DISPLAY_LIMIT = 8;
+const NAVIGATION_GRAPH_NEIGHBOR_DISPLAY_LIMIT = 5;
 
 export interface ResumeSnapshotRenderOptions {
   fileExists?: (filePath: string) => boolean;
@@ -54,12 +58,41 @@ function summarizeFileList(paths: string[], maxItems = 5): string {
   return `${visible}, +${paths.length - maxItems} more`;
 }
 
+function eventTimestamp(value: string): number {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+}
+
 function describeBranch(branch: string | null): string {
   return branch ?? 'detached HEAD';
 }
 
 function describeHead(head: string | null): string {
   return head ?? 'no commits';
+}
+
+function describeNavigationRelationship(
+  relationship: InvestigationNavigationRelationship,
+): string {
+  switch (relationship) {
+    case 'transition':
+      return 'transition';
+    case 'definition':
+      return 'definition';
+    case 'reference':
+      return 'reference';
+  }
+}
+
+function relationshipPriority(relationship: InvestigationNavigationRelationship): number {
+  switch (relationship) {
+    case 'definition':
+      return 2;
+    case 'reference':
+      return 1;
+    case 'transition':
+      return 0;
+  }
 }
 
 function describeGitAvailability(git: GitSnapshot | null, tense: 'saved' | 'current'): string[] {
@@ -235,6 +268,139 @@ function describeTimelineGit(entry: Extract<InvestigationTimelineEntry, { type: 
   ].join('; ');
 }
 
+function buildNavigationGraphLines(
+  investigation: Investigation,
+  fileExists: (filePath: string) => boolean,
+): string[] {
+  const graph = investigation.navigationGraph;
+  if (graph.nodes.length === 0 && graph.edges.length === 0) {
+    return ['- No investigation navigation graph was captured.'];
+  }
+
+  const anchorFilePath =
+    investigation.snapshot.lastLocation?.filePath ??
+    getLatestNavigationGraphFilePath(investigation.navigationGraph);
+  const lines: string[] = [
+    `- Observed artifacts: ${graph.nodes.length} file node(s)`,
+    `- Collapsed relationships: ${graph.edges.length}`,
+    anchorFilePath
+      ? `- Resume anchor: ${describeSavedFile(anchorFilePath, investigation, fileExists)}`
+      : '- Resume anchor: none captured',
+  ];
+
+  if (anchorFilePath) {
+    const neighborSummaries = new Map<
+      string,
+      {
+        filePath: string;
+        counts: Record<InvestigationNavigationRelationship, number>;
+        lastObservedAt: string;
+      }
+    >();
+
+    for (const edge of graph.edges) {
+      if (edge.fromFilePath !== anchorFilePath && edge.toFilePath !== anchorFilePath) {
+        continue;
+      }
+
+      const neighborFilePath: string =
+        edge.fromFilePath === anchorFilePath ? edge.toFilePath : edge.fromFilePath;
+      if (neighborFilePath === anchorFilePath) {
+        continue;
+      }
+
+      const existing = neighborSummaries.get(neighborFilePath);
+      const counts = existing?.counts ?? {
+        transition: 0,
+        definition: 0,
+        reference: 0,
+      };
+      counts[edge.relationship] += edge.count;
+
+      neighborSummaries.set(neighborFilePath, {
+        filePath: neighborFilePath,
+        counts,
+        lastObservedAt:
+          existing && eventTimestamp(existing.lastObservedAt) >= eventTimestamp(edge.lastObservedAt)
+            ? existing.lastObservedAt
+            : edge.lastObservedAt,
+      });
+    }
+
+    const sortedNeighbors = Array.from(neighborSummaries.values())
+      .sort((left, right) => {
+        const leftPriority = Math.max(
+          left.counts.definition > 0 ? relationshipPriority('definition') : 0,
+          left.counts.reference > 0 ? relationshipPriority('reference') : 0,
+          left.counts.transition > 0 ? relationshipPriority('transition') : 0,
+        );
+        const rightPriority = Math.max(
+          right.counts.definition > 0 ? relationshipPriority('definition') : 0,
+          right.counts.reference > 0 ? relationshipPriority('reference') : 0,
+          right.counts.transition > 0 ? relationshipPriority('transition') : 0,
+        );
+        const leftTotal = left.counts.definition + left.counts.reference + left.counts.transition;
+        const rightTotal = right.counts.definition + right.counts.reference + right.counts.transition;
+
+        return (
+          rightPriority - leftPriority ||
+          rightTotal - leftTotal ||
+          eventTimestamp(right.lastObservedAt) - eventTimestamp(left.lastObservedAt) ||
+          left.filePath.localeCompare(right.filePath)
+        );
+      })
+      .slice(0, NAVIGATION_GRAPH_NEIGHBOR_DISPLAY_LIMIT);
+
+    if (sortedNeighbors.length > 0) {
+      for (const neighbor of sortedNeighbors) {
+        const relationshipSummary = [
+          neighbor.counts.definition > 0
+            ? `${describeNavigationRelationship('definition')} x${neighbor.counts.definition}`
+            : null,
+          neighbor.counts.reference > 0
+            ? `${describeNavigationRelationship('reference')} x${neighbor.counts.reference}`
+            : null,
+          neighbor.counts.transition > 0
+            ? `${describeNavigationRelationship('transition')} x${neighbor.counts.transition}`
+            : null,
+        ]
+          .filter((value): value is string => Boolean(value))
+          .join(', ');
+        lines.push(
+          `- Anchor neighbor: ${describeSavedFile(neighbor.filePath, investigation, fileExists)} — ${relationshipSummary}`,
+        );
+      }
+    }
+  }
+
+  const sortedEdges = [...graph.edges]
+    .sort((left, right) => {
+      return (
+        right.count - left.count ||
+        relationshipPriority(right.relationship) - relationshipPriority(left.relationship) ||
+        eventTimestamp(right.lastObservedAt) - eventTimestamp(left.lastObservedAt) ||
+        left.fromFilePath.localeCompare(right.fromFilePath) ||
+        left.toFilePath.localeCompare(right.toFilePath)
+      );
+    })
+    .slice(0, NAVIGATION_GRAPH_EDGE_DISPLAY_LIMIT);
+
+  if (sortedEdges.length > 0) {
+    for (const edge of sortedEdges) {
+      lines.push(
+        `- ${describeSavedFile(edge.fromFilePath, investigation, fileExists)} → ${describeSavedFile(edge.toFilePath, investigation, fileExists)} — ${describeNavigationRelationship(edge.relationship)} x${edge.count}`,
+      );
+    }
+  }
+
+  const omittedEdgeCount = graph.edges.length - sortedEdges.length;
+  if (omittedEdgeCount > 0) {
+    lines.push(`- ${omittedEdgeCount} additional collapsed relationship(s) omitted.`);
+  }
+
+  return lines;
+}
+
 function buildTimelineLines(
   investigation: Investigation,
   fileExists: (filePath: string) => boolean,
@@ -342,6 +508,10 @@ export function buildResumeSnapshotContent(
     '## Last location',
     '',
     describeLastLocation(investigation, fileExists),
+    '',
+    '## Investigation navigation graph',
+    '',
+    ...buildNavigationGraphLines(investigation, fileExists),
     '',
     '## Investigation timeline',
     '',

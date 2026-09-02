@@ -8,7 +8,7 @@ Developers who resume an interrupted code investigation with RepoTrail context r
 
 ### H2: Capture Sufficiency
 
-The combination of observed activity trail, Git state snapshot, optional developer checkpoint, and a condensed investigation timeline captures enough context to support re-entry without requiring exhaustive logging or AI interpretation.
+The combination of observed activity trail, Git state snapshot, optional developer checkpoint, a condensed investigation timeline, and an Investigation-scoped navigation graph captures enough context to support re-entry without requiring exhaustive logging or AI interpretation.
 
 ### H3: Natural Behavior
 
@@ -32,14 +32,21 @@ Developers use RepoTrail without significant changes to their existing workflow.
 - **D vs. C:** Is the developer checkpoint necessary, or is passive capture sufficient?
 - **C vs. E:** Does the full RepoTrail experience improve re-entry over baseline?
 
-## Timeline Validation Gate
+## Timeline Validation Result
 
-Before any graph is added, validate whether the condensed investigation timeline materially improves re-entry.
+Validation evidence from timeline-focused Resume testing indicated that developers still needed a spatial representation of how they moved through an Investigation.
 
-- Compare Resume Snapshot use with and without the condensed timeline while holding the rest of the Investigation surface constant.
-- Measure whether developers reconstruct sequence faster or with fewer mistaken reopen actions.
-- Capture whether collapsed factual sequence is enough, or whether users still need a richer spatial relationship view.
-- Treat graph work as blocked unless the timeline itself proves insufficient.
+- The timeline remains part of the product because it preserves sequence honestly.
+- The graph was added only after that evidence showed the timeline alone was insufficient for some resume tasks.
+
+## Navigation Graph Validation Gate
+
+Before expanding the graph beyond the current Investigation-scoped Resume support, validate whether the graph materially improves re-entry.
+
+- Compare Resume behavior with and without graph-guided reopen ordering while holding the rest of the Investigation surface constant.
+- Measure whether developers reopen the right neighboring artifacts faster and with fewer false starts.
+- Confirm that the textual graph inside the Resume Snapshot is understandable without becoming noisy analytics.
+- Treat repository-wide graph work, visualization work, and richer inferred relationships as blocked unless the current graph proves useful first.
 
 ## Evaluation Metrics (Future)
 
@@ -58,3 +65,4 @@ Metrics to be defined before validation begins. Candidates include:
 4. Optional checkpoints are written often enough to be useful.
 5. The overhead of RepoTrail running passively is acceptable (performance, distraction).
 6. A condensed investigation-scoped timeline improves sequence reconstruction without becoming noisy telemetry.
+7. A collapsed Investigation-scoped navigation graph improves resume decisions without being mistaken for repository architecture.

@@ -53,7 +53,32 @@ Modules communicate through domain types. No module directly imports another mod
 | lastResumedAt | string \| null | Last resumed timestamp |
 | checkpoint | Checkpoint \| null | Optional developer note |
 | snapshot | Snapshot | Current state capture |
+| navigationGraph | InvestigationNavigationGraph | Collapsed factual spatial summary used during Resume |
 | timeline | InvestigationTimelineEntry[] | Condensed factual sequence retained for re-entry |
+
+### InvestigationNavigationGraph
+| Field | Type | Description |
+|-------|------|-------------|
+| nodes | InvestigationNavigationNode[] | Observed Investigation artifacts, currently file-backed only |
+| edges | InvestigationNavigationEdge[] | Collapsed factual relationships between those artifacts |
+
+### InvestigationNavigationNode
+| Field | Type | Description |
+|-------|------|-------------|
+| kind | `file` | Current artifact type |
+| filePath | string | Absolute file path for the observed artifact |
+| visitCount | number | Count of observed arrivals into the artifact |
+| editCount | number | Count of collapsed edit observations for the artifact |
+| lastObservedAt | string (ISO-8601) | Last factual observation for the artifact |
+
+### InvestigationNavigationEdge
+| Field | Type | Description |
+|-------|------|-------------|
+| fromFilePath | string | Absolute source artifact path |
+| toFilePath | string | Absolute destination artifact path |
+| relationship | `transition` \| `definition` \| `reference` | Factual relationship kind |
+| count | number | Number of collapsed observations for that relationship |
+| lastObservedAt | string (ISO-8601) | Last factual observation for that relationship |
 
 ### Checkpoint
 | Field | Type | Description |
@@ -125,7 +150,7 @@ The runtime model is intentionally richer than the persisted schema. RepoTrail r
 **Format:** Each file is a JSON envelope:
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "investigation": { ... }
 }
 ```
@@ -140,6 +165,7 @@ The runtime model is intentionally richer than the persisted schema. RepoTrail r
 | `repository` | Kept only to preserve saved repository context when the workspace is nested |
 | `savedAt` | Required to sort and display recency |
 | `checkpoint.text` | Optional human-authored re-entry note |
+| `navigationGraph` | Required to retain Investigation-local spatial movement evidence that improves Resume ordering without inferring repository architecture |
 | `timeline` | Required to reconstruct factual investigation sequence during re-entry without keeping the full raw event log |
 | `snapshot.editedFiles` | Factual reopen evidence |
 | `snapshot.visitedFileCounts` | Factual revisit priority signal |
@@ -159,7 +185,7 @@ The runtime model is intentionally richer than the persisted schema. RepoTrail r
 
 When file paths are inside the saved workspace, RepoTrail stores them as workspace-relative paths on disk and expands them back to absolute paths only when loading the Investigation.
 
-**Schema versioning:** The `schemaVersion` field is checked on load. Current saves use schema version 4. Legacy version 1 investigations are migrated to the explicit Git availability model. Legacy version 2 and 3 investigations are minimized on load into the current schema shape and receive a best-effort derived timeline when none was persisted. Unknown future versions are rejected (returns null).
+**Schema versioning:** The `schemaVersion` field is checked on load. Current saves use schema version 5. Legacy version 1 investigations are migrated to the explicit Git availability model. Legacy version 2 and 3 investigations are minimized on load into the current schema shape and receive a best-effort derived timeline and navigation graph when none were persisted. Legacy version 4 investigations derive the navigation graph from the persisted timeline when needed. Unknown future versions are rejected (returns null).
 
 **Properties:**
 - Local-only, no cloud.
@@ -179,6 +205,7 @@ When file paths are inside the saved workspace, RepoTrail stores them as workspa
 - RepoTrail does not store keystrokes, clipboard data, screenshots, terminal content, or full source-code contents.
 - Checkpoint text is persisted as plain local text because it is the user-authored re-entry note; it should not contain secrets.
 - The persisted timeline is condensed and investigation-scoped; it is not a general telemetry stream or cross-investigation history.
+- The persisted navigation graph is also investigation-scoped and factual; it is not a repository dependency graph or architectural map.
 
 ## Event Capture Concept
 
@@ -202,6 +229,7 @@ Observed events are stored in a bounded, time-limited rolling buffer rather than
 - Buffer is per-workspace, with a safety max-event cap to avoid unbounded growth during noisy sessions.
 - Purpose: provide recent activity context when a Snapshot is taken, not permanent telemetry.
 - The capture adapter also exposes synchronous reads of recent events/last location plus an observed-event stream so an active Investigation can accumulate factual visit/edit evidence while it remains active.
+- Active Investigations also accumulate a collapsed navigation graph from those same observed events so Resume can prioritize direct neighbors around the saved anchor file.
 - A developer-only debug API exposes the current factual events for inspection during extension development.
 
 ## Git Adapter Boundary

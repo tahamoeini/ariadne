@@ -154,10 +154,38 @@ suite('Storage', () => {
           reason: 'save',
         },
       ];
+      inv.navigationGraph = {
+        nodes: [
+          {
+            kind: 'file',
+            filePath: '/ws/src/token.ts',
+            visitCount: 2,
+            editCount: 1,
+            lastObservedAt: '2026-01-01T00:03:00.000Z',
+          },
+          {
+            kind: 'file',
+            filePath: '/ws/src/helper.ts',
+            visitCount: 1,
+            editCount: 0,
+            lastObservedAt: '2026-01-01T00:02:30.000Z',
+          },
+        ],
+        edges: [
+          {
+            fromFilePath: '/ws/src/helper.ts',
+            toFilePath: '/ws/src/token.ts',
+            relationship: 'transition',
+            count: 1,
+            lastObservedAt: '2026-01-01T00:03:00.000Z',
+          },
+        ],
+      };
 
       saveInvestigation(tmpDir, inv);
       const savedJson = readSavedJson(tmpDir, inv.id);
       const investigation = savedJson.investigation as Record<string, unknown>;
+      const navigationGraph = investigation.navigationGraph as Record<string, unknown>;
       const snapshot = investigation.snapshot as Record<string, unknown>;
       const git = snapshot.git as Record<string, unknown>;
       const timeline = investigation.timeline as Record<string, unknown>[];
@@ -166,6 +194,33 @@ suite('Storage', () => {
       assert.ok(!('createdAt' in investigation));
       assert.ok(!('lastResumedAt' in investigation));
       assert.deepStrictEqual(investigation.checkpoint, { text: 'local note' });
+      assert.deepStrictEqual(navigationGraph, {
+        nodes: [
+          {
+            kind: 'file',
+            filePath: 'src/token.ts',
+            visitCount: 2,
+            editCount: 1,
+            lastObservedAt: '2026-01-01T00:03:00.000Z',
+          },
+          {
+            kind: 'file',
+            filePath: 'src/helper.ts',
+            visitCount: 1,
+            editCount: 0,
+            lastObservedAt: '2026-01-01T00:02:30.000Z',
+          },
+        ],
+        edges: [
+          {
+            fromFilePath: 'src/helper.ts',
+            toFilePath: 'src/token.ts',
+            relationship: 'transition',
+            count: 1,
+            lastObservedAt: '2026-01-01T00:03:00.000Z',
+          },
+        ],
+      });
       assert.deepStrictEqual(timeline, [
         {
           timestamp: '2026-01-01T00:02:00.000Z',
@@ -361,6 +416,33 @@ suite('Storage', () => {
       );
       assert.strictEqual(loaded!.checkpoint?.createdAt, '2026-01-01T00:00:00.000Z');
       assert.strictEqual(loaded!.snapshot.git?.repositoryRoot, '/repo');
+      assert.deepStrictEqual(loaded!.navigationGraph, {
+        nodes: [
+          {
+            kind: 'file',
+            filePath: '/ws/src/helper.ts',
+            visitCount: 1,
+            editCount: 0,
+            lastObservedAt: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            kind: 'file',
+            filePath: '/ws/src/token.ts',
+            visitCount: 1,
+            editCount: 0,
+            lastObservedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        edges: [
+          {
+            fromFilePath: '/ws/src/helper.ts',
+            toFilePath: '/ws/src/token.ts',
+            relationship: 'transition',
+            count: 1,
+            lastObservedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      });
       assert.deepStrictEqual(loaded!.timeline.map((entry) => entry.type), [
         'file.transition',
         'file.transition',
@@ -368,6 +450,81 @@ suite('Storage', () => {
         'git.snapshot',
         'save.point',
       ]);
+    });
+
+    test('derives a navigation graph from schema version 4 storage', () => {
+      const dir = path.join(tmpDir, 'investigations');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'v4.json'),
+        JSON.stringify({
+          schemaVersion: 4,
+          investigation: {
+            id: 'v4',
+            name: 'Schema 4',
+            workspace: '/ws',
+            repository: '/repo',
+            savedAt: '2026-01-01T00:00:00.000Z',
+            checkpoint: null,
+            timeline: [
+              {
+                timestamp: '2026-01-01T00:00:00.000Z',
+                type: 'file.transition',
+                filePath: 'src/a.ts',
+              },
+              {
+                timestamp: '2026-01-01T00:00:10.000Z',
+                type: 'file.transition',
+                filePath: 'src/b.ts',
+              },
+              {
+                timestamp: '2026-01-01T00:00:11.000Z',
+                type: 'file.edit',
+                filePath: 'src/b.ts',
+                count: 2,
+              },
+            ],
+            snapshot: {
+              editedFiles: ['src/b.ts'],
+              visitedFileCounts: { 'src/a.ts': 1, 'src/b.ts': 1 },
+              lastLocation: { filePath: 'src/b.ts', line: 3, column: 2 },
+              recentPath: ['src/a.ts', 'src/b.ts'],
+              git: null,
+            },
+          },
+        }),
+        'utf-8',
+      );
+
+      const loaded = loadInvestigation(tmpDir, 'v4');
+      assert.ok(loaded);
+      assert.deepStrictEqual(loaded!.navigationGraph, {
+        nodes: [
+          {
+            kind: 'file',
+            filePath: '/ws/src/a.ts',
+            visitCount: 1,
+            editCount: 0,
+            lastObservedAt: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            kind: 'file',
+            filePath: '/ws/src/b.ts',
+            visitCount: 1,
+            editCount: 2,
+            lastObservedAt: '2026-01-01T00:00:11.000Z',
+          },
+        ],
+        edges: [
+          {
+            fromFilePath: '/ws/src/a.ts',
+            toFilePath: '/ws/src/b.ts',
+            relationship: 'transition',
+            count: 1,
+            lastObservedAt: '2026-01-01T00:00:10.000Z',
+          },
+        ],
+      });
     });
 
     test('recovers from a valid backup when the primary file is malformed', () => {

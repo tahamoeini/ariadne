@@ -7,6 +7,10 @@ import {
   Checkpoint,
   GitSnapshot,
   Investigation,
+  InvestigationNavigationEdge,
+  InvestigationNavigationGraph,
+  InvestigationNavigationNode,
+  InvestigationNavigationRelationship,
   InvestigationFileEditTimelineEntry,
   InvestigationGitSnapshotTimelineEntry,
   InvestigationTimelineEntry,
@@ -22,6 +26,167 @@ const VISIT_EVENT_TYPES: ReadonlySet<ObservedEvent['type']> = new Set([
   'navigation.definition',
   'navigation.reference',
 ]);
+
+function navigationTimestamp(value: string): number {
+  return eventTimestamp(value);
+}
+
+function cloneNavigationNode(
+  node: InvestigationNavigationNode,
+): InvestigationNavigationNode {
+  return { ...node };
+}
+
+function cloneNavigationEdge(
+  edge: InvestigationNavigationEdge,
+): InvestigationNavigationEdge {
+  return { ...edge };
+}
+
+function cloneNavigationGraphInternal(
+  graph: InvestigationNavigationGraph,
+): InvestigationNavigationGraph {
+  return {
+    nodes: graph.nodes.map(cloneNavigationNode),
+    edges: graph.edges.map(cloneNavigationEdge),
+  };
+}
+
+function currentNavigationGraphFilePath(
+  graph: InvestigationNavigationGraph,
+): string | null {
+  let currentFilePath: string | null = null;
+  let currentTimestamp = Number.NEGATIVE_INFINITY;
+
+  for (const node of graph.nodes) {
+    const timestamp = navigationTimestamp(node.lastObservedAt);
+    if (timestamp >= currentTimestamp) {
+      currentTimestamp = timestamp;
+      currentFilePath = node.filePath;
+    }
+  }
+
+  return currentFilePath;
+}
+
+function hasNavigationNode(
+  graph: InvestigationNavigationGraph,
+  filePath: string,
+): boolean {
+  return graph.nodes.some((node) => node.filePath === filePath);
+}
+
+function maxTimestamp(left: string, right: string): string {
+  return navigationTimestamp(left) >= navigationTimestamp(right) ? left : right;
+}
+
+function upsertNavigationNode(
+  nodes: InvestigationNavigationNode[],
+  filePath: string,
+  timestamp: string,
+  visitIncrement: number,
+  editIncrement: number,
+): InvestigationNavigationNode[] {
+  const nodeIndex = nodes.findIndex((node) => node.filePath === filePath);
+  if (nodeIndex < 0) {
+    nodes.push({
+      kind: 'file',
+      filePath,
+      visitCount: visitIncrement,
+      editCount: editIncrement,
+      lastObservedAt: timestamp,
+    });
+    return nodes;
+  }
+
+  const existing = nodes[nodeIndex];
+  nodes[nodeIndex] = {
+    ...existing,
+    visitCount: existing.visitCount + visitIncrement,
+    editCount: existing.editCount + editIncrement,
+    lastObservedAt: maxTimestamp(existing.lastObservedAt, timestamp),
+  };
+  return nodes;
+}
+
+function upsertNavigationEdge(
+  edges: InvestigationNavigationEdge[],
+  fromFilePath: string,
+  toFilePath: string,
+  relationship: InvestigationNavigationRelationship,
+  timestamp: string,
+): InvestigationNavigationEdge[] {
+  const edgeIndex = edges.findIndex(
+    (edge) =>
+      edge.fromFilePath === fromFilePath &&
+      edge.toFilePath === toFilePath &&
+      edge.relationship === relationship,
+  );
+
+  if (edgeIndex < 0) {
+    edges.push({
+      fromFilePath,
+      toFilePath,
+      relationship,
+      count: 1,
+      lastObservedAt: timestamp,
+    });
+    return edges;
+  }
+
+  const existing = edges[edgeIndex];
+  edges[edgeIndex] = {
+    ...existing,
+    count: existing.count + 1,
+    lastObservedAt: maxTimestamp(existing.lastObservedAt, timestamp),
+  };
+  return edges;
+}
+
+function appendFileObservationToNavigationGraph(
+  graph: InvestigationNavigationGraph,
+  filePath: string,
+  timestamp: string,
+  relationship: InvestigationNavigationRelationship | null,
+  visitIncrement: number,
+  editIncrement: number,
+): InvestigationNavigationGraph {
+  const previousFilePath = currentNavigationGraphFilePath(graph);
+  const moved = previousFilePath !== filePath;
+  const nextVisitIncrement =
+    visitIncrement > 0 && (moved || !hasNavigationNode(graph, filePath))
+      ? visitIncrement
+      : 0;
+
+  if (nextVisitIncrement === 0 && editIncrement === 0) {
+    return cloneNavigationGraphInternal(graph);
+  }
+
+  const nodes = graph.nodes.map(cloneNavigationNode);
+  upsertNavigationNode(nodes, filePath, timestamp, nextVisitIncrement, editIncrement);
+
+  const edges = graph.edges.map(cloneNavigationEdge);
+  if (relationship && previousFilePath && moved) {
+    upsertNavigationEdge(edges, previousFilePath, filePath, relationship, timestamp);
+  }
+
+  return { nodes, edges };
+}
+
+function relationshipForVisitEvent(
+  eventType: ObservedEvent['type'],
+): InvestigationNavigationRelationship | null {
+  switch (eventType) {
+    case 'navigation.definition':
+      return 'definition';
+    case 'navigation.reference':
+      return 'reference';
+    case 'editor.active':
+      return 'transition';
+    default:
+      return null;
+  }
+}
 
 function eventTimestamp(value: string): number {
   const timestamp = Date.parse(value);
@@ -102,6 +267,13 @@ export function createEmptySnapshot(): Snapshot {
   };
 }
 
+export function createEmptyNavigationGraph(): InvestigationNavigationGraph {
+  return {
+    nodes: [],
+    edges: [],
+  };
+}
+
 /** Create a new Investigation with sensible defaults. */
 export function createInvestigation(
   name: string,
@@ -119,8 +291,21 @@ export function createInvestigation(
     lastResumedAt: null,
     checkpoint: null,
     snapshot: createEmptySnapshot(),
+    navigationGraph: createEmptyNavigationGraph(),
     timeline: [],
   };
+}
+
+export function cloneNavigationGraph(
+  graph: InvestigationNavigationGraph,
+): InvestigationNavigationGraph {
+  return cloneNavigationGraphInternal(graph);
+}
+
+export function getLatestNavigationGraphFilePath(
+  graph: InvestigationNavigationGraph,
+): string | null {
+  return currentNavigationGraphFilePath(graph);
 }
 
 export function cloneTimelineEntry(
@@ -155,6 +340,93 @@ export function buildTimelineFromObservedEvents(
   }
 
   return timeline;
+}
+
+export function buildNavigationGraphFromObservedEvents(
+  events: readonly ObservedEvent[],
+): InvestigationNavigationGraph {
+  let graph = createEmptyNavigationGraph();
+  for (const event of [...events].sort((left, right) => {
+    return eventTimestamp(left.timestamp) - eventTimestamp(right.timestamp);
+  })) {
+    graph = appendObservedEventToNavigationGraph(graph, event);
+  }
+
+  return graph;
+}
+
+export function buildNavigationGraphFromTimeline(
+  timeline: readonly InvestigationTimelineEntry[],
+): InvestigationNavigationGraph {
+  let graph = createEmptyNavigationGraph();
+  for (const entry of [...timeline].sort((left, right) => {
+    return eventTimestamp(left.timestamp) - eventTimestamp(right.timestamp);
+  })) {
+    if (entry.type === 'file.transition') {
+      graph = appendFileObservationToNavigationGraph(
+        graph,
+        entry.filePath,
+        entry.timestamp,
+        'transition',
+        1,
+        0,
+      );
+      continue;
+    }
+
+    if (entry.type === 'file.edit') {
+      const currentFilePath = currentNavigationGraphFilePath(graph);
+      graph = appendFileObservationToNavigationGraph(
+        graph,
+        entry.filePath,
+        entry.timestamp,
+        currentFilePath !== entry.filePath ? 'transition' : null,
+        currentFilePath !== entry.filePath ? 1 : 0,
+        entry.count,
+      );
+    }
+  }
+
+  return graph;
+}
+
+export function appendObservedEventToNavigationGraph(
+  graph: InvestigationNavigationGraph,
+  event: ObservedEvent,
+): InvestigationNavigationGraph {
+  if (!event.filePath) {
+    return cloneNavigationGraphInternal(graph);
+  }
+
+  if (VISIT_EVENT_TYPES.has(event.type)) {
+    const relationship = relationshipForVisitEvent(event.type);
+    if (!relationship) {
+      return cloneNavigationGraphInternal(graph);
+    }
+
+    return appendFileObservationToNavigationGraph(
+      graph,
+      event.filePath,
+      event.timestamp,
+      relationship,
+      1,
+      0,
+    );
+  }
+
+  if (event.type !== 'file.edit') {
+    return cloneNavigationGraphInternal(graph);
+  }
+
+  const currentFilePath = currentNavigationGraphFilePath(graph);
+  return appendFileObservationToNavigationGraph(
+    graph,
+    event.filePath,
+    event.timestamp,
+    currentFilePath !== event.filePath ? 'transition' : null,
+    currentFilePath !== event.filePath ? 1 : 0,
+    1,
+  );
 }
 
 export function appendObservedEventToTimeline(

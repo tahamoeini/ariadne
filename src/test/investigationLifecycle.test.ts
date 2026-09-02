@@ -206,6 +206,18 @@ suite('Investigation Lifecycle', () => {
     assert.deepStrictEqual(created.snapshot.editedFiles, [tokenServiceFile]);
     assert.deepStrictEqual(created.snapshot.visitedFileCounts, { [tokenServiceFile]: 1 });
     assert.strictEqual(created.snapshot.lastLocation?.line, 8);
+    assert.deepStrictEqual(created.navigationGraph, {
+      nodes: [
+        {
+          kind: 'file',
+          filePath: tokenServiceFile,
+          visitCount: 1,
+          editCount: 1,
+          lastObservedAt: '2026-05-01T10:00:30.000Z',
+        },
+      ],
+      edges: [],
+    });
     assert.deepStrictEqual(created.timeline.map((entry) => entry.type), [
       'file.transition',
       'file.edit',
@@ -246,6 +258,33 @@ suite('Investigation Lifecycle', () => {
     assert.deepStrictEqual(saved!.snapshot.editedFiles, [tokenServiceFile, authTestFile]);
     assert.deepStrictEqual(saved!.snapshot.visitedFileCounts, { [tokenServiceFile]: 2 });
     assert.strictEqual(saved!.snapshot.lastLocation?.filePath, authTestFile);
+    assert.deepStrictEqual(saved!.navigationGraph, {
+      nodes: [
+        {
+          kind: 'file',
+          filePath: tokenServiceFile,
+          visitCount: 1,
+          editCount: 1,
+          lastObservedAt: '2026-05-01T10:00:30.000Z',
+        },
+        {
+          kind: 'file',
+          filePath: authTestFile,
+          visitCount: 1,
+          editCount: 1,
+          lastObservedAt: '2026-05-01T10:03:00.000Z',
+        },
+      ],
+      edges: [
+        {
+          fromFilePath: tokenServiceFile,
+          toFilePath: authTestFile,
+          relationship: 'transition',
+          count: 1,
+          lastObservedAt: '2026-05-01T10:03:00.000Z',
+        },
+      ],
+    });
     assert.deepStrictEqual(saved!.timeline.map((entry) => entry.type), [
       'file.transition',
       'file.edit',
@@ -328,6 +367,33 @@ suite('Investigation Lifecycle', () => {
       [tokenServiceFile]: 1,
     });
     assert.strictEqual(created!.snapshot.recentEvents.length, 3);
+    assert.deepStrictEqual(created!.navigationGraph, {
+      nodes: [
+        {
+          kind: 'file',
+          filePath: authControllerFile,
+          visitCount: 1,
+          editCount: 0,
+          lastObservedAt: '2026-05-01T11:00:00.000Z',
+        },
+        {
+          kind: 'file',
+          filePath: tokenServiceFile,
+          visitCount: 1,
+          editCount: 1,
+          lastObservedAt: '2026-05-01T11:01:00.000Z',
+        },
+      ],
+      edges: [
+        {
+          fromFilePath: authControllerFile,
+          toFilePath: tokenServiceFile,
+          relationship: 'transition',
+          count: 1,
+          lastObservedAt: '2026-05-01T11:00:15.000Z',
+        },
+      ],
+    });
     assert.deepStrictEqual(created!.timeline.map((entry) => entry.type), [
       'file.transition',
       'file.transition',

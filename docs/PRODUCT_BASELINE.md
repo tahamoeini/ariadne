@@ -57,6 +57,7 @@ RepoTrail 0.0.1 does not add:
 
 - AI
 - graph visualization
+- repository-wide dependency graphs or architecture maps
 - timeline dashboards or general activity dashboards
 - browser integration
 - cloud sync
@@ -95,6 +96,7 @@ RepoTrail records factual observations such as:
 - a file was edited
 - a file was revisited
 - the sequence of file transitions within one Investigation
+- the collapsed navigation relationships around those file transitions within one Investigation
 - the last saved location was `file:line:column`
 - a checkpoint was added or cleared
 - a Git snapshot was captured
@@ -117,7 +119,18 @@ RepoTrail may retain a small factual timeline when that improves re-entry, but t
 - Timeline entries remain factual: file transitions, edit events, checkpoint changes, Git snapshots, and save/resume points.
 - Noise is collapsed rather than logged exhaustively.
 - RepoTrail must not infer relevance, intent, priority, or architectural meaning from that sequence.
-- Graph visualization remains deferred until validation shows that the timeline alone is insufficient for re-entry.
+- Graph visualization remains deferred even though the product now retains a small Investigation navigation graph for Resume.
+
+## Navigation graph boundary
+
+RepoTrail may retain a small Investigation-scoped navigation graph when it improves Resume, but it stays bounded to factual observed movement.
+
+- The graph exists only inside one saved Investigation.
+- Nodes represent observed Investigation artifacts, currently file-backed editor artifacts only.
+- Edges represent factual observed transitions or supported navigation relationships only.
+- Noise is aggressively collapsed into counts and recent-neighbor evidence instead of preserving every movement.
+- RepoTrail must not infer repository architecture, dependency structure, intent, or code importance from the graph.
+- The graph exists to support Resume ordering and understanding, not to become a decorative analytics surface.
 
 ## Privacy and local trust
 
@@ -135,4 +148,4 @@ RepoTrail may retain a small factual timeline when that improves re-entry, but t
 
 ## Roadmap philosophy
 
-RepoTrail 0.0.1 should stay narrow. If the product hypothesis is weak, the next step is to learn from validation, not to rescue the milestone by adding AI, graphs, dashboards, or unrelated integrations.
+RepoTrail 0.0.1 should stay narrow. If the product hypothesis is weak, the next step is to learn from validation, not to rescue the milestone by adding AI, graph visualization, repository analysis, dashboards, or unrelated integrations.

@@ -4,16 +4,20 @@ import {
   FileLocation,
   GitSnapshot,
   Investigation,
+  InvestigationNavigationGraph,
   InvestigationTimelineEntry,
   InvestigationTimelineSavePointReason,
   ObservedEvent,
   Snapshot,
+  appendObservedEventToNavigationGraph,
   appendCheckpointToTimeline,
   appendGitSnapshotToTimeline,
   appendObservedEventToTimeline,
   appendResumePointToTimeline,
   appendSavePointToTimeline,
+  buildNavigationGraphFromObservedEvents,
   buildTimelineFromObservedEvents,
+  cloneNavigationGraph,
   cloneTimelineEntry,
   createInvestigation,
 } from '../domain';
@@ -106,6 +110,10 @@ function cloneTimeline(entries: InvestigationTimelineEntry[]): InvestigationTime
   return entries.map(cloneTimelineEntry);
 }
 
+function cloneGraph(graph: InvestigationNavigationGraph): InvestigationNavigationGraph {
+  return cloneNavigationGraph(graph);
+}
+
 function cloneSnapshot(snapshot: Snapshot): Snapshot {
   return {
     editedFiles: [...snapshot.editedFiles],
@@ -121,6 +129,7 @@ function cloneInvestigation(investigation: Investigation): Investigation {
     ...investigation,
     checkpoint: cloneCheckpoint(investigation.checkpoint),
     snapshot: cloneSnapshot(investigation.snapshot),
+    navigationGraph: cloneGraph(investigation.navigationGraph),
     timeline: cloneTimeline(investigation.timeline),
   };
 }
@@ -320,11 +329,13 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
     }
 
     const snapshot = applyObservedEventToSnapshot(active.snapshot, event);
+    const navigationGraph = appendObservedEventToNavigationGraph(active.navigationGraph, event);
     const timeline = appendObservedEventToTimeline(active.timeline, event);
     this.activeInvestigations.set(event.workspace, {
       ...cloneInvestigation(active),
       repository: resolveRepository(snapshot, active.repository ?? event.repository),
       snapshot,
+      navigationGraph,
       timeline,
     });
   }
@@ -489,6 +500,7 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
       checkpoint,
       repository: resolveRepository(snapshot, null),
       snapshot,
+      navigationGraph: buildNavigationGraphFromObservedEvents(snapshot.recentEvents),
       timeline,
     };
 

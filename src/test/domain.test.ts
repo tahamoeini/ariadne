@@ -1,7 +1,10 @@
 import * as assert from 'assert';
 import {
+  appendObservedEventToNavigationGraph,
+  buildNavigationGraphFromObservedEvents,
   createInvestigation,
   createCheckpoint,
+  createEmptyNavigationGraph,
   createEmptySnapshot,
 } from '../domain';
 import type { Investigation } from '../domain';
@@ -23,6 +26,7 @@ suite('Domain Model', () => {
       assert.strictEqual(inv.snapshot.lastLocation, null);
       assert.deepStrictEqual(inv.snapshot.recentEvents, []);
       assert.strictEqual(inv.snapshot.git, null);
+      assert.deepStrictEqual(inv.navigationGraph, { nodes: [], edges: [] });
       assert.deepStrictEqual(inv.timeline, []);
     });
 
@@ -54,6 +58,131 @@ suite('Domain Model', () => {
       assert.strictEqual(s.lastLocation, null);
       assert.deepStrictEqual(s.recentEvents, []);
       assert.strictEqual(s.git, null);
+    });
+  });
+
+  suite('createEmptyNavigationGraph', () => {
+    test('returns a blank graph', () => {
+      const graph = createEmptyNavigationGraph();
+      assert.deepStrictEqual(graph, { nodes: [], edges: [] });
+    });
+  });
+
+  suite('navigation graph', () => {
+    test('collapses observed movement into factual nodes and edges', () => {
+      const graph = buildNavigationGraphFromObservedEvents([
+        {
+          timestamp: '2026-01-01T00:00:00.000Z',
+          type: 'editor.active',
+          workspace: '/ws',
+          repository: '/repo',
+          filePath: '/ws/src/a.ts',
+        },
+        {
+          timestamp: '2026-01-01T00:00:10.000Z',
+          type: 'navigation.definition',
+          workspace: '/ws',
+          repository: '/repo',
+          filePath: '/ws/src/b.ts',
+        },
+        {
+          timestamp: '2026-01-01T00:00:11.000Z',
+          type: 'file.edit',
+          workspace: '/ws',
+          repository: '/repo',
+          filePath: '/ws/src/b.ts',
+        },
+        {
+          timestamp: '2026-01-01T00:00:20.000Z',
+          type: 'editor.active',
+          workspace: '/ws',
+          repository: '/repo',
+          filePath: '/ws/src/c.ts',
+        },
+        {
+          timestamp: '2026-01-01T00:00:21.000Z',
+          type: 'file.edit',
+          workspace: '/ws',
+          repository: '/repo',
+          filePath: '/ws/src/c.ts',
+        },
+        {
+          timestamp: '2026-01-01T00:00:22.000Z',
+          type: 'editor.active',
+          workspace: '/ws',
+          repository: '/repo',
+          filePath: '/ws/src/c.ts',
+        },
+      ]);
+
+      assert.deepStrictEqual(graph.nodes, [
+        {
+          kind: 'file',
+          filePath: '/ws/src/a.ts',
+          visitCount: 1,
+          editCount: 0,
+          lastObservedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          kind: 'file',
+          filePath: '/ws/src/b.ts',
+          visitCount: 1,
+          editCount: 1,
+          lastObservedAt: '2026-01-01T00:00:11.000Z',
+        },
+        {
+          kind: 'file',
+          filePath: '/ws/src/c.ts',
+          visitCount: 1,
+          editCount: 1,
+          lastObservedAt: '2026-01-01T00:00:21.000Z',
+        },
+      ]);
+      assert.deepStrictEqual(graph.edges, [
+        {
+          fromFilePath: '/ws/src/a.ts',
+          toFilePath: '/ws/src/b.ts',
+          relationship: 'definition',
+          count: 1,
+          lastObservedAt: '2026-01-01T00:00:10.000Z',
+        },
+        {
+          fromFilePath: '/ws/src/b.ts',
+          toFilePath: '/ws/src/c.ts',
+          relationship: 'transition',
+          count: 1,
+          lastObservedAt: '2026-01-01T00:00:20.000Z',
+        },
+      ]);
+    });
+
+    test('adds an implicit transition when edits move to a different file', () => {
+      const first = appendObservedEventToNavigationGraph(createEmptyNavigationGraph(), {
+        timestamp: '2026-01-01T00:00:00.000Z',
+        type: 'editor.active',
+        workspace: '/ws',
+        repository: '/repo',
+        filePath: '/ws/src/a.ts',
+      });
+      const second = appendObservedEventToNavigationGraph(first, {
+        timestamp: '2026-01-01T00:00:05.000Z',
+        type: 'file.edit',
+        workspace: '/ws',
+        repository: '/repo',
+        filePath: '/ws/src/b.ts',
+      });
+
+      assert.deepStrictEqual(second.edges, [
+        {
+          fromFilePath: '/ws/src/a.ts',
+          toFilePath: '/ws/src/b.ts',
+          relationship: 'transition',
+          count: 1,
+          lastObservedAt: '2026-01-01T00:00:05.000Z',
+        },
+      ]);
+      assert.strictEqual(second.nodes[1].visitCount, 1);
+      assert.strictEqual(second.nodes[1].editCount, 1);
     });
   });
 
@@ -91,6 +220,18 @@ suite('Domain Model', () => {
         modifiedFiles: ['a.ts'],
         untrackedFiles: ['new.txt'],
         diffStats: { filesChanged: 1, insertions: 10, deletions: 2 },
+      };
+      inv.navigationGraph = {
+        nodes: [
+          {
+            kind: 'file',
+            filePath: 'a.ts',
+            visitCount: 1,
+            editCount: 1,
+            lastObservedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        edges: [],
       };
       inv.timeline = [
         {

@@ -118,4 +118,97 @@ suite('Resume Actions', () => {
       '/workspace/src/read-only.ts',
     ]);
   });
+
+  test('prefers graph-adjacent files before global visit-count noise', () => {
+    const investigation = createInvestigation('Graph-guided resume', '/workspace');
+    investigation.snapshot.lastLocation = {
+      filePath: '/workspace/src/anchor.ts',
+      line: 9,
+      column: 2,
+    };
+    investigation.snapshot.visitedFileCounts = {
+      '/workspace/src/noisy.ts': 20,
+      '/workspace/src/neighbor-a.ts': 2,
+      '/workspace/src/neighbor-b.ts': 1,
+    };
+    investigation.navigationGraph = {
+      nodes: [
+        {
+          kind: 'file',
+          filePath: '/workspace/src/anchor.ts',
+          visitCount: 3,
+          editCount: 1,
+          lastObservedAt: '2026-01-01T00:00:20.000Z',
+        },
+        {
+          kind: 'file',
+          filePath: '/workspace/src/neighbor-a.ts',
+          visitCount: 2,
+          editCount: 1,
+          lastObservedAt: '2026-01-01T00:00:19.000Z',
+        },
+        {
+          kind: 'file',
+          filePath: '/workspace/src/neighbor-b.ts',
+          visitCount: 1,
+          editCount: 0,
+          lastObservedAt: '2026-01-01T00:00:18.000Z',
+        },
+      ],
+      edges: [
+        {
+          fromFilePath: '/workspace/src/anchor.ts',
+          toFilePath: '/workspace/src/neighbor-a.ts',
+          relationship: 'transition',
+          count: 3,
+          lastObservedAt: '2026-01-01T00:00:19.000Z',
+        },
+        {
+          fromFilePath: '/workspace/src/neighbor-b.ts',
+          toFilePath: '/workspace/src/anchor.ts',
+          relationship: 'definition',
+          count: 1,
+          lastObservedAt: '2026-01-01T00:00:18.000Z',
+        },
+      ],
+    };
+
+    const plan = buildResumePlan(investigation, {
+      currentWorkspacePaths: ['/workspace'],
+      fileExists: () => true,
+      pathExists: () => true,
+    });
+
+    assert.deepStrictEqual(plan.filesToOpen, [
+      '/workspace/src/neighbor-b.ts',
+      '/workspace/src/neighbor-a.ts',
+      '/workspace/src/noisy.ts',
+      '/workspace/src/anchor.ts',
+    ]);
+  });
+
+  test('uses the graph anchor when no last location was saved', () => {
+    const investigation = createInvestigation('Graph anchor fallback', '/workspace');
+    investigation.navigationGraph = {
+      nodes: [
+        {
+          kind: 'file',
+          filePath: '/workspace/src/anchor.ts',
+          visitCount: 1,
+          editCount: 0,
+          lastObservedAt: '2026-01-01T00:00:10.000Z',
+        },
+      ],
+      edges: [],
+    };
+
+    const plan = buildResumePlan(investigation, {
+      currentWorkspacePaths: ['/workspace'],
+      fileExists: () => true,
+      pathExists: () => true,
+    });
+
+    assert.deepStrictEqual(plan.filesToOpen, ['/workspace/src/anchor.ts']);
+    assert.strictEqual(plan.targetLocation, null);
+  });
 });

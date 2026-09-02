@@ -1,5 +1,11 @@
 import * as fs from 'fs';
-import { FileLocation, Investigation } from '../domain';
+import {
+  FileLocation,
+  Investigation,
+  InvestigationNavigationEdge,
+  InvestigationNavigationNode,
+  getLatestNavigationGraphFilePath,
+} from '../domain';
 
 export const DEFAULT_RESUME_REOPEN_FILE_LIMIT = 5;
 
@@ -48,6 +54,106 @@ function compareVisitedFiles(left: [string, number], right: [string, number]): n
   return right[1] - left[1] || left[0].localeCompare(right[0]);
 }
 
+function eventTimestamp(value: string): number {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+}
+
+function compareGraphTimestamps(left: string, right: string): number {
+  return eventTimestamp(right) - eventTimestamp(left);
+}
+
+function graphNodeByPath(
+  investigation: Investigation,
+  filePath: string,
+): InvestigationNavigationNode | undefined {
+  return investigation.navigationGraph.nodes.find((node) => node.filePath === filePath);
+}
+
+function relationshipPriority(edge: InvestigationNavigationEdge): number {
+  switch (edge.relationship) {
+    case 'definition':
+      return 2;
+    case 'reference':
+      return 1;
+    case 'transition':
+      return 0;
+  }
+}
+
+function listGraphNeighborPaths(
+  investigation: Investigation,
+  anchorFilePath: string | null,
+  excludedPaths: ReadonlySet<string>,
+): string[] {
+  if (!anchorFilePath) {
+    return [];
+  }
+
+  const neighborScores = new Map<
+    string,
+    {
+      filePath: string;
+      navigationCount: number;
+      transitionCount: number;
+      relationshipPriority: number;
+      lastObservedAt: string;
+      nodeVisitCount: number;
+      nodeEditCount: number;
+    }
+  >();
+
+  for (const edge of investigation.navigationGraph.edges) {
+    if (edge.fromFilePath !== anchorFilePath && edge.toFilePath !== anchorFilePath) {
+      continue;
+    }
+
+    const otherFilePath: string =
+      edge.fromFilePath === anchorFilePath ? edge.toFilePath : edge.fromFilePath;
+    if (otherFilePath === anchorFilePath || excludedPaths.has(otherFilePath)) {
+      continue;
+    }
+
+    const node = graphNodeByPath(investigation, otherFilePath);
+    const existing = neighborScores.get(otherFilePath);
+    const nextNavigationCount =
+      edge.relationship === 'transition'
+        ? existing?.navigationCount ?? 0
+        : (existing?.navigationCount ?? 0) + edge.count;
+    const nextTransitionCount =
+      edge.relationship === 'transition'
+        ? (existing?.transitionCount ?? 0) + edge.count
+        : existing?.transitionCount ?? 0;
+
+    neighborScores.set(otherFilePath, {
+      filePath: otherFilePath,
+      navigationCount: nextNavigationCount,
+      transitionCount: nextTransitionCount,
+      relationshipPriority: Math.max(existing?.relationshipPriority ?? 0, relationshipPriority(edge)),
+      lastObservedAt:
+        existing && compareGraphTimestamps(existing.lastObservedAt, edge.lastObservedAt) <= 0
+          ? existing.lastObservedAt
+          : edge.lastObservedAt,
+      nodeVisitCount: node?.visitCount ?? 0,
+      nodeEditCount: node?.editCount ?? 0,
+    });
+  }
+
+  return Array.from(neighborScores.values())
+    .sort((left, right) => {
+      return (
+        right.relationshipPriority - left.relationshipPriority ||
+        right.navigationCount - left.navigationCount ||
+        right.transitionCount - left.transitionCount ||
+        right.nodeEditCount - left.nodeEditCount ||
+        right.nodeVisitCount - left.nodeVisitCount ||
+        compareGraphTimestamps(left.lastObservedAt, right.lastObservedAt) ||
+        left.filePath.localeCompare(right.filePath)
+      );
+    })
+    .map((entry) => entry.filePath);
+}
+
 function listVisitedFallbackPaths(
   investigation: Investigation,
   excludedPaths: ReadonlySet<string>,
@@ -79,14 +185,22 @@ export function buildResumePlan(
   const currentWorkspacePaths = options.currentWorkspacePaths ?? [];
   const maxFilesToOpen = normalizeLimit(options.maxFilesToOpen);
   const lastLocation = cloneLocation(investigation.snapshot.lastLocation);
-  const primaryFilePath = lastLocation?.filePath ?? null;
+  const primaryFilePath =
+    lastLocation?.filePath ?? getLatestNavigationGraphFilePath(investigation.navigationGraph);
   const excludedPaths = new Set<string>(investigation.snapshot.editedFiles);
 
   if (primaryFilePath) {
     excludedPaths.add(primaryFilePath);
   }
 
+  const graphNeighborPaths = listGraphNeighborPaths(
+    investigation,
+    primaryFilePath,
+    excludedPaths,
+  );
+
   const supportCandidates = dedupePaths([
+    ...graphNeighborPaths,
     ...investigation.snapshot.editedFiles.filter((filePath) => filePath !== primaryFilePath),
     ...listVisitedFallbackPaths(investigation, excludedPaths),
   ]);
@@ -116,7 +230,7 @@ export function buildResumePlan(
   if (primaryFilePath) {
     if (primaryExists) {
       filesToOpen.push(primaryFilePath);
-      targetLocation = lastLocation;
+      targetLocation = lastLocation?.filePath === primaryFilePath ? lastLocation : null;
     } else if (!primaryExists) {
       missingFiles.push(primaryFilePath);
     }

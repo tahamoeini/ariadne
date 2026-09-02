@@ -32,11 +32,11 @@
 
 ---
 
-## ADR-005: No Graph Visualization in 0.0.1
+## ADR-005: No Graph Visualization or Repository-Wide Dependency Graph in 0.0.1
 
-**Decision:** RepoTrail 0.0.1 does not include graph or network visualizations.
+**Decision:** RepoTrail 0.0.1 does not include graph or network visualizations, and it does not build a repository-wide dependency graph.
 
-**Reason:** Graph rendering adds significant UI complexity (layout algorithms, interaction models, rendering libraries). The first version focuses on validating whether captured context helps re-entry, not on visual presentation. Graph features are a natural future addition once the data model is proven.
+**Reason:** Graph rendering adds significant UI complexity (layout algorithms, interaction models, rendering libraries), while repository-wide dependency inference would answer a different question than the product is trying to solve. RepoTrail focuses on re-entry into one Investigation, not on explaining repository architecture.
 
 ---
 
@@ -186,17 +186,17 @@
 
 ## ADR-024: Resume Uses Conservative Reopen, Not Restore
 
-**Decision:** RepoTrail 0.0.1 resume actions open the factual Resume Snapshot and then reopen at most five saved files, prioritizing the last saved file, edited files, and factual revisit counts. Missing files and workspace drift are reported as partial recovery instead of triggering exact restore attempts.
+**Decision:** RepoTrail 0.0.1 resume actions open the factual Resume Snapshot and then reopen at most five saved files, prioritizing the saved anchor file, graph-adjacent Investigation artifacts, edited files, and factual revisit counts. Missing files and workspace drift are reported as partial recovery instead of triggering exact restore attempts.
 
-**Reason:** VS Code can reliably reopen existing files and reveal saved positions, but it cannot truthfully promise full restoration of a prior tab set, window layout, workspace session, or a developer's mental state. Keeping reopen behavior small and factual makes Resume helpful without turning it into noisy tab explosion or making claims the product cannot support.
+**Reason:** VS Code can reliably reopen existing files and reveal saved positions, but it cannot truthfully promise full restoration of a prior tab set, window layout, workspace session, or a developer's mental state. Keeping reopen behavior small and factual makes Resume helpful without turning it into noisy tab explosion, and using Investigation-local navigation relationships keeps the reopen order relevant without inferring repository architecture.
 
 ---
 
 ## ADR-025: Persist Only Re-Entry-Critical Investigation Data
 
-**Decision:** Schema version 3 persists only the subset of Investigation data required for re-entry: investigation identity, workspace context, optional checkpoint text, workspace-relative reopen evidence, a short recent path, and saved Git drift metadata. RepoTrail no longer persists `createdAt`, `lastResumedAt`, `checkpoint.createdAt`, full observed-event objects, or per-event source metadata.
+**Decision:** Schema version 3 and later persist only the subset of Investigation data required for re-entry: investigation identity, workspace context, optional checkpoint text, workspace-relative reopen evidence, a short recent path, saved Git drift metadata, and any later Investigation-scoped sequence or graph data that directly improves Resume. RepoTrail does not persist `createdAt`, `lastResumedAt`, `checkpoint.createdAt`, full observed-event objects, or per-event source metadata.
 
-**Reason:** Prompt 8 requires every persisted field to justify itself against the question "Is this required for re-entry?" The removed fields added sensitive local metadata without materially improving reopen behavior, while the retained fields directly support remembering, reopening, or honestly showing repository drift.
+**Reason:** Every persisted field must justify itself against the question "Is this required for re-entry?" Removed fields added sensitive local metadata without materially improving reopen behavior, while the retained fields directly support remembering, reopening, or honestly showing repository drift.
 
 ---
 
@@ -237,3 +237,11 @@
 **Decision:** RepoTrail 0.0.1 persists and renders a small factual timeline inside each Investigation before considering any graph visualization.
 
 **Reason:** Validation evidence indicated that developers needed better reconstruction of sequence during re-entry. The smallest trustworthy response is a condensed timeline bounded to one Investigation and rendered in the existing Resume Snapshot. This preserves factual ordering of file transitions, edit events, checkpoint changes, Git snapshots, and save/resume points without creating a dashboard, inferring meaning, or introducing graph complexity before the timeline itself is validated.
+
+---
+
+## ADR-031: Add an Investigation-Scoped Navigation Graph for Resume
+
+**Decision:** RepoTrail persists a small Investigation-scoped navigation graph whose nodes are observed Investigation artifacts and whose edges are factual observed transitions or supported navigation relationships. The graph is rendered textually inside the Resume Snapshot and is used to prioritize reopen candidates during Resume.
+
+**Reason:** Validation evidence showed that sequence alone was not always enough; developers also needed a spatial representation of how they moved through one Investigation. The implemented graph stays narrow by collapsing noise, avoiding architectural inference, staying bounded to one Investigation, and directly improving Resume instead of becoming a decorative analytics feature.

@@ -12,8 +12,8 @@ RepoTrail 0.0.1:
 - lets you save the current investigation explicitly or retroactively save recent activity as an investigation
 - keeps one active investigation per workspace and refreshes its saved state on checkpoint, stop, and extension shutdown
 - stores only local JSON data needed for re-entry
-- shows a read-only Resume Snapshot with a condensed investigation-scoped timeline
-- resumes by reopening up to 5 saved files and moving to the last saved location when that file still exists
+- shows a read-only Resume Snapshot with a condensed investigation-scoped timeline and a collapsed navigation graph
+- resumes by reopening up to 5 saved files, prioritizing graph-adjacent artifacts before global file noise, and moving to the last saved location when that file still exists
 
 ## Commands
 
@@ -48,6 +48,7 @@ RepoTrail 0.0.1 records only the factual data needed for re-entry:
 - edited files
 - file visit counts
 - last saved location
+- an investigation-scoped navigation graph of observed file artifacts and collapsed factual relationships
 - a condensed investigation-scoped factual timeline of file transitions, collapsed edit events, checkpoint changes, Git snapshots, and save/resume points
 - an optional developer-authored checkpoint
 
@@ -58,7 +59,7 @@ RepoTrail 0.0.1 does not currently emit definition/reference navigation events. 
 RepoTrail 0.0.1 does not include:
 
 - AI
-- graph visualizations or general activity dashboards
+- graph visualizations, repository-wide dependency graphs, or general activity dashboards
 - browser integration
 - cloud sync
 - accounts or team features
@@ -73,7 +74,7 @@ RepoTrail 0.0.1 does not include:
 - RepoTrail retains a `.bak` copy of the previous save for recovery.
 - Workspace file paths are stored relatively when possible and re-expanded on load.
 - The rolling event buffer remains in memory only and is not persisted as full raw events.
-- Saved investigations persist a condensed investigation timeline for re-entry; they do not persist an exhaustive activity log.
+- Saved investigations persist a condensed investigation timeline and a collapsed Investigation navigation graph for re-entry; they do not persist an exhaustive activity log or a repository architecture model.
 
 ## Source-of-truth docs
 

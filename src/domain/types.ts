@@ -27,6 +27,48 @@ export type InvestigationTimelineSavePointReason =
   | 'save-stop'
   | 'save';
 
+/** Collapsed factual relationship represented by a navigation-graph edge. */
+export type InvestigationNavigationRelationship =
+  | 'transition'
+  | 'definition'
+  | 'reference';
+
+/** Investigation navigation-graph node: an observed file artifact. */
+export interface InvestigationNavigationNode {
+  /** Currently only file-backed artifacts are represented. */
+  kind: 'file';
+  /** Absolute file path for the observed artifact. */
+  filePath: string;
+  /** Number of observed arrivals into this file within the Investigation. */
+  visitCount: number;
+  /** Number of collapsed edit observations for this file. */
+  editCount: number;
+  /** ISO-8601 timestamp when this node was last observed. */
+  lastObservedAt: string;
+}
+
+/** Investigation navigation-graph edge: a collapsed factual relationship. */
+export interface InvestigationNavigationEdge {
+  /** Absolute source file path. */
+  fromFilePath: string;
+  /** Absolute destination file path. */
+  toFilePath: string;
+  /** Factual relationship kind. */
+  relationship: InvestigationNavigationRelationship;
+  /** Number of collapsed observations for this relationship. */
+  count: number;
+  /** ISO-8601 timestamp when this relationship was last observed. */
+  lastObservedAt: string;
+}
+
+/** Investigation-scoped spatial summary of observed file movement. */
+export interface InvestigationNavigationGraph {
+  /** Observed file artifacts involved in the Investigation. */
+  nodes: InvestigationNavigationNode[];
+  /** Collapsed observed relationships between those artifacts. */
+  edges: InvestigationNavigationEdge[];
+}
+
 /** Investigation timeline entry: a factual file transition. */
 export interface InvestigationFileTransitionTimelineEntry {
   /** ISO-8601 timestamp. */
@@ -201,6 +243,8 @@ export interface Investigation {
   checkpoint: Checkpoint | null;
   /** Current snapshot of investigation state. */
   snapshot: Snapshot;
+  /** Investigation-scoped factual navigation graph retained for resume. */
+  navigationGraph: InvestigationNavigationGraph;
   /** Condensed factual investigation timeline retained for re-entry. */
   timeline: InvestigationTimelineEntry[];
 }
