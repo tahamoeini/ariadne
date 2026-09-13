@@ -25,6 +25,7 @@ pub struct ForegroundObservation {
 pub fn observe_foreground() -> Result<Option<ForegroundObservation>, SensorError> {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
+    use std::ptr::null_mut;
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::ProcessStatus::GetModuleFileNameExW;
     use windows_sys::Win32::System::Threading::{
@@ -37,7 +38,7 @@ pub fn observe_foreground() -> Result<Option<ForegroundObservation>, SensorError
     // SAFETY: these are read-only Windows APIs and the returned handles are
     // closed on every successful process-open path.
     let window = unsafe { GetForegroundWindow() };
-    if window == 0 {
+    if window.is_null() {
         return Ok(None);
     }
     let mut process_id = 0;
@@ -49,12 +50,12 @@ pub fn observe_foreground() -> Result<Option<ForegroundObservation>, SensorError
     }
     let process =
         unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, process_id) };
-    if process == 0 {
+    if process.is_null() {
         return Err(SensorError::Api);
     }
     let mut path = [0u16; 1024];
     let path_len =
-        unsafe { GetModuleFileNameExW(process, 0, path.as_mut_ptr(), path.len() as u32) };
+        unsafe { GetModuleFileNameExW(process, null_mut(), path.as_mut_ptr(), path.len() as u32) };
     unsafe {
         CloseHandle(process);
     }
