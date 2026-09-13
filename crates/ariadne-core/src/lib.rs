@@ -52,6 +52,41 @@ mod tests {
     }
 
     #[test]
+    fn expired_timed_pause_returns_to_running() {
+        let mut policy = CapturePolicy::default();
+        policy.set_timed_pause(Some("2026-01-01T00:10:00Z".into()));
+        assert!(policy.is_paused("2026-01-01T00:09:59Z"));
+        assert!(!policy.is_paused("2026-01-01T00:10:00Z"));
+        assert!(matches!(policy.pause_state("2026-01-01T00:10:00Z"), PauseState::Running));
+    }
+
+    #[test]
+    fn insert_thread_keeps_only_one_active_thread() {
+        let mut core = CoreEngine::default();
+        let mut first = Thread::new("first", "2026-01-01T00:00:00Z").unwrap();
+        first.active = true;
+        let mut second = Thread::new("second", "2026-01-01T00:01:00Z").unwrap();
+        second.active = true;
+        core.insert_thread(first.clone());
+        core.insert_thread(second.clone());
+        assert_eq!(core.active_thread_id(), Some(first.id.as_str()));
+        assert!(core.thread(&first.id).unwrap().active);
+        assert!(!core.thread(&second.id).unwrap().active);
+    }
+
+    #[test]
+    fn restore_thread_state_restores_object_and_active_index() {
+        let mut core = CoreEngine::default();
+        let mut thread = Thread::new("saved", "2026-01-01T00:00:00Z").unwrap();
+        thread.active = false;
+        core.insert_thread(thread.clone());
+        let _ = core.resume_thread(&thread.id, "2026-01-01T00:01:00Z").unwrap();
+        core.restore_thread_state(thread.clone(), None);
+        assert!(!core.thread(&thread.id).unwrap().active);
+        assert_eq!(core.active_thread_id(), None);
+    }
+
+    #[test]
     fn graph_and_resume_plan_are_bounded() {
         let mut core = CoreEngine::default();
         core.start_thread("bounded", "2026-01-01T00:00:00Z").unwrap();

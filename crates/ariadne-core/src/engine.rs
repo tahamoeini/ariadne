@@ -38,11 +38,33 @@ impl CoreEngine {
         Self { rolling, policy, threads: HashMap::new(), active_thread_id: None }
     }
 
-    pub fn insert_thread(&mut self, thread: Thread) {
-        if thread.active {
+    /// Insert persisted state while maintaining the global one-active-thread
+    /// invariant. `list_threads` is ordered newest-first, so the first active
+    /// row wins deterministically during startup recovery.
+    pub fn insert_thread(&mut self, mut thread: Thread) {
+        if thread.active
+            && (self.active_thread_id.is_none()
+                || self.active_thread_id.as_deref() == Some(thread.id.as_str()))
+        {
             self.active_thread_id = Some(thread.id.clone());
+        } else if thread.active {
+            thread.active = false;
         }
         self.threads.insert(thread.id.clone(), thread);
+    }
+
+    pub fn active_thread_id(&self) -> Option<&str> {
+        self.active_thread_id.as_deref()
+    }
+
+    /// Restore a mutation and its index together. This is intentionally
+    /// separate from `insert_thread`; rollback must not infer the active id
+    /// from a partially restored object.
+    pub fn restore_thread_state(&mut self, thread: Thread, active_thread_id: Option<String>) {
+        let id = thread.id.clone();
+        self.threads.insert(id, thread);
+        self.active_thread_id = active_thread_id.filter(|active_id| self.threads.contains_key(active_id));
+        self.reconcile_active_flags();
     }
 
     pub fn thread(&self, id: &str) -> Option<&Thread> { self.threads.get(id) }
@@ -134,6 +156,18 @@ impl CoreEngine {
     }
 
     pub fn threads(&self) -> impl Iterator<Item = &Thread> { self.threads.values() }
+
+    pub fn clear_threads(&mut self) {
+        self.threads.clear();
+        self.active_thread_id = None;
+    }
+
+    fn reconcile_active_flags(&mut self) {
+        let active_id = self.active_thread_id.clone();
+        for (id, thread) in &mut self.threads {
+            thread.active = active_id.as_deref() == Some(id.as_str());
+        }
+    }
 
     fn active_thread_mut(&mut self) -> Result<&mut Thread, CoreError> {
         let id = self.active_thread_id.as_deref().ok_or(CoreError::NoActiveThread)?;

@@ -4,7 +4,7 @@
 //! migrations, optimistic revision checks, and tombstones so delayed writes
 //! cannot resurrect deleted Threads.
 
-use ariadne_core::Thread;
+use ariadne_core::{CapturePolicy, Thread};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 
@@ -106,7 +106,12 @@ impl Store {
     pub fn delete_thread(&mut self, id: &str, now: &str) -> Result<bool, StorageError> {
         let tx = self.connection.transaction()?;
         let changed = tx.execute("DELETE FROM threads WHERE id = ?1", [id])?;
-        if changed > 0 { tx.execute("INSERT OR REPLACE INTO thread_tombstones (id, deleted_at) VALUES (?1, ?2)", params![id, now])?; }
+        // Always write the tombstone. The row may not exist yet when a
+        // delayed first save is racing this delete.
+        tx.execute(
+            "INSERT OR REPLACE INTO thread_tombstones (id, deleted_at) VALUES (?1, ?2)",
+            params![id, now],
+        )?;
         tx.commit()?;
         Ok(changed > 0)
     }
@@ -123,8 +128,50 @@ impl Store {
 
     pub fn generation(&self) -> Result<i64, StorageError> { Ok(current_generation(&self.connection)?) }
 
+    pub fn load_capture_policy(&self) -> Result<CapturePolicy, StorageError> {
+        let value: Option<String> = self
+            .connection
+            .query_row("SELECT value FROM metadata WHERE key = 'capture_policy'", [], |row| row.get(0))
+            .optional()?;
+        value
+            .map(|json| serde_json::from_str(&json))
+            .transpose()
+            .map(|policy| policy.unwrap_or_default())
+    }
+
+    pub fn save_capture_policy(&mut self, policy: &CapturePolicy) -> Result<(), StorageError> {
+        let json = serde_json::to_string(policy)?;
+        self.connection.execute(
+            "INSERT INTO metadata (key, value) VALUES ('capture_policy', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [json],
+        )?;
+        Ok(())
+    }
+
     fn migrate(&self) -> Result<(), StorageError> {
         self.connection.execute_batch("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, name TEXT NOT NULL, workspace TEXT, saved_at TEXT NOT NULL, active INTEGER NOT NULL, revision INTEGER NOT NULL, generation INTEGER NOT NULL, payload_json TEXT NOT NULL); CREATE TABLE IF NOT EXISTS thread_tombstones (id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL); INSERT INTO metadata (key, value) VALUES ('schema_version', '1') ON CONFLICT(key) DO NOTHING; INSERT INTO metadata (key, value) VALUES ('generation', '0') ON CONFLICT(key) DO NOTHING;")?;
+        self.reconcile_active_threads()?;
+        self.connection.execute_batch("CREATE UNIQUE INDEX IF NOT EXISTS one_active_thread ON threads(active) WHERE active = 1;")?;
+        Ok(())
+    }
+
+    fn reconcile_active_threads(&self) -> Result<(), StorageError> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, payload_json FROM threads WHERE active = 1 ORDER BY saved_at DESC, id ASC",
+        )?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(statement);
+        for (id, payload) in rows.into_iter().skip(1) {
+            let mut thread: Thread = serde_json::from_str(&payload)?;
+            thread.active = false;
+            let payload = serde_json::to_string(&thread)?;
+            self.connection.execute(
+                "UPDATE threads SET active = 0, payload_json = ?2 WHERE id = ?1",
+                params![id, payload],
+            )?;
+        }
         Ok(())
     }
 }
@@ -157,6 +204,28 @@ mod tests {
         let error = store.save_thread(&thread, Some(1), 0).unwrap_err();
         assert!(matches!(error, StorageError::StaleWrite { .. }));
         let _ = ContextEvent { id: "x".into(), timestamp: "x".into(), event_type: ContextEventType::ThreadStarted, application: None, artifact: None, workspace: None, location: None, source: "test".into(), private_browsing: false };
+    }
+
+    #[test]
+    fn delete_before_first_save_rejects_delayed_insert() {
+        let mut store = Store::open_in_memory().unwrap();
+        let thread = Thread::new("delayed", "2026-01-01T00:00:00Z").unwrap();
+        assert!(!store.delete_thread(&thread.id, "2026-01-01T00:00:01Z").unwrap());
+        let error = store.save_thread(&thread, None, 0).unwrap_err();
+        assert!(matches!(error, StorageError::Deleted(id) if id == thread.id));
+        assert!(store.load_thread(&thread.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn capture_policy_round_trips_without_capturing_private_context() {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut policy = CapturePolicy::default();
+        policy.excluded_applications.push("password-manager".into());
+        policy.excluded_browser_domains.push("private.example".into());
+        store.save_capture_policy(&policy).unwrap();
+        let restored = store.load_capture_policy().unwrap();
+        assert_eq!(restored, policy);
+        assert!(!restored.capture_private_browsing);
     }
 
     #[test]

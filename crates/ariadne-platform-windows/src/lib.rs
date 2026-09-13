@@ -16,6 +16,8 @@ pub enum SensorError {
 pub struct ForegroundObservation {
     pub application_identity: String,
     pub display_name: String,
+    /// Reserved for a future, explicitly governed title policy. The current
+    /// sensor never reads a window title because the desktop does not use it.
     pub window_title: Option<String>,
 }
 
@@ -26,7 +28,7 @@ pub fn observe_foreground() -> Result<Option<ForegroundObservation>, SensorError
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::ProcessStatus::GetModuleFileNameExW;
     use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
-    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 
     // SAFETY: these are read-only Windows APIs and the returned handles are
     // closed on every successful process-open path.
@@ -43,14 +45,8 @@ pub fn observe_foreground() -> Result<Option<ForegroundObservation>, SensorError
     if path_len == 0 { return Err(SensorError::Api); }
     let executable = OsString::from_wide(&path[..path_len as usize]).to_string_lossy().into_owned();
     let identity = executable.clone();
-    let title_len = unsafe { GetWindowTextLengthW(window) };
-    let window_title = if title_len > 0 {
-        let mut title = vec![0u16; title_len as usize + 1];
-        let length = unsafe { GetWindowTextW(window, title.as_mut_ptr(), title.len() as i32) };
-        Some(String::from_utf16_lossy(&title[..length as usize]))
-    } else { None };
     let display_name = executable.rsplit(['\\', '/']).next().unwrap_or(&executable).to_owned();
-    Ok(Some(ForegroundObservation { application_identity: identity, display_name, window_title }))
+    Ok(Some(ForegroundObservation { application_identity: identity, display_name, window_title: None }))
 }
 
 #[cfg(not(windows))]

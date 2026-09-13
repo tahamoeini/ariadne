@@ -87,6 +87,23 @@
 
 **Run extension-host and user validation specifically against deliberate page attachment and Resume Snapshot reference usefulness before expanding browser integration beyond the current Investigation scope.**
 
+## Current platform implementation status
+
+The Rust platform foundation is now the authoritative direction. The existing
+Investigation extension remains a retained compatibility prototype until the
+VS Code adapter is connected to Core.
+
+| Category | Current state |
+|---|---|
+| Implemented | Rust Thread domain, bounded rolling context, SQLite persistence, tombstones, generation checks, policy persistence, deterministic active-thread reconciliation, Tauri lifecycle commands, desktop state refresh, protocol framing/session validation, Windows foreground observation boundary, single-instance plugin |
+| Verified | Root TypeScript compile/lint/typecheck/unit suite; desktop frontend `npm ci` and production build; static review of P0 rollback and deletion paths |
+| Remaining | Rust compile/test/clippy/fmt; Windows sensor and Tauri build; actual authenticated named-pipe transport; VS Code-to-Core adapter; tray; start-at-login; browser adapter; migration startup wiring; full deterministic race suite; installer artifact |
+| Deferred | macOS/Linux sensors, Android companion, cloud/accounts/sync, AI/LLM/embeddings, telemetry, screenshots, clipboard/keystrokes, content capture, productivity scoring |
+| Known failures | Rust and Windows verification are **NOT VERIFIED** in the current environment because `cargo`/`rustc` are unavailable; no installable Windows artifact was produced here |
+
+Do not describe the Windows MVP as complete until the Remaining items that are
+part of the Windows continuity loop have actual build and runtime evidence.
+
 ## Do Not Touch / Deferred
 
 - Do not add browser-history import, page-content capture, cloud sync, AI summarization, or broader browser-product features until the current deliberate reference flow is externally validated.
