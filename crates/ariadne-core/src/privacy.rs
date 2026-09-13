@@ -9,7 +9,7 @@ pub enum PauseState {
     Manual,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CapturePolicy {
     /// Kept as an option for backwards-compatible policy JSON. It is active
     /// only while the timestamp is later than the caller's current time.
@@ -19,18 +19,6 @@ pub struct CapturePolicy {
     pub excluded_applications: Vec<String>,
     pub excluded_browser_domains: Vec<String>,
     pub capture_private_browsing: bool,
-}
-
-impl Default for CapturePolicy {
-    fn default() -> Self {
-        Self {
-            paused_until: None,
-            paused_manually: false,
-            excluded_applications: Vec::new(),
-            excluded_browser_domains: Vec::new(),
-            capture_private_browsing: false,
-        }
-    }
 }
 
 impl CapturePolicy {
@@ -83,7 +71,11 @@ impl CapturePolicy {
         if event.event_type == crate::ContextEventType::BrowserNavigation
             || event.event_type == crate::ContextEventType::BrowserTabFocused
         {
-            if let Some(reference) = event.artifact.as_ref().map(|artifact| artifact.reference.as_str()) {
+            if let Some(reference) = event
+                .artifact
+                .as_ref()
+                .map(|artifact| artifact.reference.as_str())
+            {
                 if let Some(domain) = domain_from_url(reference) {
                     if self.excluded_browser_domains.iter().any(|excluded| {
                         let excluded = excluded.trim().to_ascii_lowercase();
@@ -118,6 +110,9 @@ impl CapturePolicy {
 
 fn domain_from_url(value: &str) -> Option<String> {
     let without_scheme = value.split_once("://")?.1;
-    let host = without_scheme.split(['/', '?', '#']).next()?.to_ascii_lowercase();
+    let host = without_scheme
+        .split(['/', '?', '#'])
+        .next()?
+        .to_ascii_lowercase();
     (!host.is_empty()).then_some(host)
 }

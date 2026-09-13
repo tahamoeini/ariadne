@@ -33,7 +33,12 @@ pub fn build_resume_plan(thread: &Thread) -> ResumePlan {
     let mut involved_applications = thread
         .events
         .iter()
-        .filter_map(|event| event.application.as_ref().map(|app| app.display_name.clone()))
+        .filter_map(|event| {
+            event
+                .application
+                .as_ref()
+                .map(|app| app.display_name.clone())
+        })
         .collect::<Vec<_>>();
     involved_applications.sort();
     involved_applications.dedup();
@@ -43,8 +48,15 @@ pub fn build_resume_plan(thread: &Thread) -> ResumePlan {
         primary_artifact,
         supporting_artifacts,
         involved_applications,
-        checkpoint: thread.checkpoint.as_ref().map(|checkpoint| checkpoint.text.clone()),
-        references: thread.references.iter().map(|reference| reference.url.clone()).collect(),
+        checkpoint: thread
+            .checkpoint
+            .as_ref()
+            .map(|checkpoint| checkpoint.text.clone()),
+        references: thread
+            .references
+            .iter()
+            .map(|reference| reference.url.clone())
+            .collect(),
         saved_at: thread.saved_at.clone(),
     }
 }

@@ -26,7 +26,7 @@ pub enum AdapterMessage {
     Event {
         protocol_version: u32,
         source: String,
-        event: ContextEvent,
+        event: Box<ContextEvent>,
     },
     Ping {
         protocol_version: u32,
@@ -112,23 +112,20 @@ impl BoundedMessageQueue {
 
 impl AdapterMessage {
     pub fn is_critical(&self) -> bool {
-        matches!(
-            self,
-            Self::Event {
-                event: ContextEvent {
-                    event_type:
-                        ariadne_core::ContextEventType::ThreadStarted
-                        | ariadne_core::ContextEventType::ThreadStopped
-                        | ariadne_core::ContextEventType::ThreadResumed
-                        | ariadne_core::ContextEventType::CheckpointCreated
-                        | ariadne_core::ContextEventType::CheckpointUpdated
-                        | ariadne_core::ContextEventType::CheckpointCleared
-                        | ariadne_core::ContextEventType::ExplicitReference,
-                    ..
-                },
-                ..
-            } | Self::AttachReference { .. }
-        )
+        match self {
+            Self::Event { event, .. } => matches!(
+                &event.event_type,
+                ariadne_core::ContextEventType::ThreadStarted
+                    | ariadne_core::ContextEventType::ThreadStopped
+                    | ariadne_core::ContextEventType::ThreadResumed
+                    | ariadne_core::ContextEventType::CheckpointCreated
+                    | ariadne_core::ContextEventType::CheckpointUpdated
+                    | ariadne_core::ContextEventType::CheckpointCleared
+                    | ariadne_core::ContextEventType::ExplicitReference
+            ),
+            Self::AttachReference { .. } => true,
+            _ => false,
+        }
     }
 
     fn source(&self) -> Option<&str> {
@@ -243,7 +240,7 @@ fn validate_message(message: &AdapterMessage) -> Result<(), ProtocolError> {
             if source.trim().is_empty() {
                 return Err(ProtocolError::MissingIdentity);
             }
-            if source != event.source {
+            if source.as_str() != event.source {
                 return Err(ProtocolError::SourceMismatch);
             }
             *protocol_version
@@ -270,7 +267,7 @@ fn validate_message(message: &AdapterMessage) -> Result<(), ProtocolError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ariadne_core::{ContextEventType, ContextEvent};
+    use ariadne_core::{ContextEvent, ContextEventType};
 
     fn event(source: &str, event_type: ContextEventType) -> ContextEvent {
         ContextEvent {
@@ -291,12 +288,14 @@ mod tests {
         let message = AdapterMessage::Event {
             protocol_version: 1,
             source: "vscode".into(),
-            event: event("vscode", ContextEventType::FileFocused),
+            event: Box::new(event("vscode", ContextEventType::FileFocused)),
         };
         let encoded = encode(&message).unwrap();
         assert_eq!(decode(&encoded).unwrap(), message);
 
-        let invalid = AdapterMessage::Ping { protocol_version: 2 };
+        let invalid = AdapterMessage::Ping {
+            protocol_version: 2,
+        };
         assert!(matches!(
             encode(&invalid),
             Err(ProtocolError::UnsupportedVersion(2))
@@ -306,12 +305,16 @@ mod tests {
     #[test]
     fn bounded_queue_preserves_critical_actions() {
         let mut queue = BoundedMessageQueue::new(2);
-        assert!(queue.push(AdapterMessage::Ping { protocol_version: 1 }));
-        assert!(queue.push(AdapterMessage::Ping { protocol_version: 1 }));
+        assert!(queue.push(AdapterMessage::Ping {
+            protocol_version: 1
+        }));
+        assert!(queue.push(AdapterMessage::Ping {
+            protocol_version: 1
+        }));
         assert!(queue.push(AdapterMessage::Event {
             protocol_version: 1,
             source: "test".into(),
-            event: event("test", ContextEventType::ThreadStopped),
+            event: Box::new(event("test", ContextEventType::ThreadStopped)),
         }));
         assert_eq!(queue.len(), 2);
     }
@@ -328,17 +331,16 @@ mod tests {
         let message = AdapterMessage::Event {
             protocol_version: 1,
             source: "other".into(),
-            event: event("other", ContextEventType::FileFocused),
+            event: Box::new(event("other", ContextEventType::FileFocused)),
         };
         assert!(matches!(
             session.accepts(&message),
             Err(ProtocolError::SourceMismatch)
         ));
 
-        let valid = AdapterMessage::Ping { protocol_version: 1 };
-        assert_eq!(
-            decode_frame(&encode_frame(&valid).unwrap()).unwrap(),
-            valid
-        );
+        let valid = AdapterMessage::Ping {
+            protocol_version: 1,
+        };
+        assert_eq!(decode_frame(&encode_frame(&valid).unwrap()).unwrap(), valid);
     }
 }

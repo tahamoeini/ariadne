@@ -27,26 +27,54 @@ pub fn observe_foreground() -> Result<Option<ForegroundObservation>, SensorError
     use std::os::windows::ffi::OsStringExt;
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::ProcessStatus::GetModuleFileNameExW;
-    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
-    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowThreadProcessId,
+    };
 
     // SAFETY: these are read-only Windows APIs and the returned handles are
     // closed on every successful process-open path.
     let window = unsafe { GetForegroundWindow() };
-    if window == 0 { return Ok(None); }
+    if window == 0 {
+        return Ok(None);
+    }
     let mut process_id = 0;
-    unsafe { GetWindowThreadProcessId(window, &mut process_id); }
-    if process_id == 0 { return Err(SensorError::Api); }
-    let process = unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, process_id) };
-    if process == 0 { return Err(SensorError::Api); }
+    unsafe {
+        GetWindowThreadProcessId(window, &mut process_id);
+    }
+    if process_id == 0 {
+        return Err(SensorError::Api);
+    }
+    let process =
+        unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, process_id) };
+    if process == 0 {
+        return Err(SensorError::Api);
+    }
     let mut path = [0u16; 1024];
-    let path_len = unsafe { GetModuleFileNameExW(process, 0, path.as_mut_ptr(), path.len() as u32) };
-    unsafe { CloseHandle(process); }
-    if path_len == 0 { return Err(SensorError::Api); }
-    let executable = OsString::from_wide(&path[..path_len as usize]).to_string_lossy().into_owned();
+    let path_len =
+        unsafe { GetModuleFileNameExW(process, 0, path.as_mut_ptr(), path.len() as u32) };
+    unsafe {
+        CloseHandle(process);
+    }
+    if path_len == 0 {
+        return Err(SensorError::Api);
+    }
+    let executable = OsString::from_wide(&path[..path_len as usize])
+        .to_string_lossy()
+        .into_owned();
     let identity = executable.clone();
-    let display_name = executable.rsplit(['\\', '/']).next().unwrap_or(&executable).to_owned();
-    Ok(Some(ForegroundObservation { application_identity: identity, display_name, window_title: None }))
+    let display_name = executable
+        .rsplit(['\\', '/'])
+        .next()
+        .unwrap_or(&executable)
+        .to_owned();
+    Ok(Some(ForegroundObservation {
+        application_identity: identity,
+        display_name,
+        window_title: None,
+    }))
 }
 
 #[cfg(not(windows))]

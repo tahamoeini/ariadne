@@ -161,7 +161,9 @@ fn stop_thread(
     let mut engine = state.engine.lock().map_err(|_| "core lock poisoned")?;
     let previous = engine.active_thread().cloned();
     let previous_active_id = engine.active_thread_id().map(str::to_owned);
-    let thread = engine.stop_thread(now()).map_err(|error| error.to_string())?;
+    let thread = engine
+        .stop_thread(now())
+        .map_err(|error| error.to_string())?;
 
     if let Err(error) = record_persistence(&*state, persist_thread(&*state, &thread)) {
         if let Some(previous) = previous {
@@ -231,9 +233,9 @@ fn set_timed_pause(
 
     let mut engine = state.engine.lock().map_err(|_| "core lock poisoned")?;
     let until = chrono::Utc::now() + chrono::Duration::minutes(minutes as i64);
-    engine
-        .policy
-        .set_timed_pause(Some(until.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)));
+    engine.policy.set_timed_pause(Some(
+        until.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+    ));
     let mut store = state.store.lock().map_err(|_| "storage lock poisoned")?;
     let result = store
         .save_capture_policy(&engine.policy)
