@@ -1,8 +1,0 @@
-out/
-node_modules/
-.vscode-test/
-*.vsix
-target/
-apps/desktop/dist/
-apps/desktop/src-tauri/target/
-apps/desktop/tsconfig.tsbuildinfo
