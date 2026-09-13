@@ -15,6 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository }}
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
       - uses: dtolnay/rust-toolchain@stable
@@ -22,7 +23,9 @@ jobs:
           toolchain: stable
           components: rustfmt
       - run: cargo fmt --all
+        working-directory: ${{ github.workspace }}
       - name: Commit normalized formatting
+        working-directory: ${{ github.workspace }}
         run: |
           if git diff --quiet; then
             exit 0
