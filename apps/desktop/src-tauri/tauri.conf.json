@@ -5,5 +5,16 @@
   "identifier": "one.taha.ariadne",
   "build": { "beforeDevCommand": "npm run dev", "beforeBuildCommand": "npm run build", "devUrl": "http://localhost:1420", "frontendDist": "../dist" },
   "app": { "windows": [{ "title": "Ariadne", "width": 920, "height": 760, "minWidth": 720, "minHeight": 600 }], "security": { "csp": "default-src 'self'; style-src 'self' 'unsafe-inline';" } },
-  "bundle": { "active": true, "targets": "all", "windows": { "webviewInstallMode": { "type": "downloadBootstrapper" } } }
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/64x64.png",
+      "icons/128x128.png",
+      "icons/icon-256.png",
+      "icons/icon.ico"
+    ],
+    "windows": { "webviewInstallMode": { "type": "downloadBootstrapper" } }
+  }
 }
