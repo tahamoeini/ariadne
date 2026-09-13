@@ -343,4 +343,16 @@ mod tests {
         };
         assert_eq!(decode_frame(&encode_frame(&valid).unwrap()).unwrap(), valid);
     }
+
+    #[test]
+    fn rejects_oversized_and_malformed_frames() {
+        assert!(matches!(
+            decode(&vec![0; MAX_MESSAGE_BYTES + 1]),
+            Err(ProtocolError::TooLarge)
+        ));
+        assert!(matches!(
+            decode_frame(&[1, 0, 0]),
+            Err(ProtocolError::InvalidFrame)
+        ));
+    }
 }

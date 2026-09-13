@@ -322,6 +322,67 @@ mod tests {
     }
 
     #[test]
+    fn startup_reconciles_corrupt_multiple_active_threads_deterministically() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 CREATE TABLE threads (id TEXT PRIMARY KEY, name TEXT NOT NULL, workspace TEXT,
+                   saved_at TEXT NOT NULL, active INTEGER NOT NULL, revision INTEGER NOT NULL,
+                   generation INTEGER NOT NULL, payload_json TEXT NOT NULL);
+                 CREATE TABLE thread_tombstones (id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL);
+                 INSERT INTO metadata (key, value) VALUES ('generation', '0');",
+            )
+            .unwrap();
+        let mut newest = Thread::new("newest", "2026-01-01T00:00:00Z").unwrap();
+        newest.active = true;
+        newest.saved_at = "2026-01-01T00:02:00Z".into();
+        let mut older = Thread::new("older", "2026-01-01T00:00:00Z").unwrap();
+        older.active = true;
+        older.saved_at = "2026-01-01T00:01:00Z".into();
+        for thread in [&newest, &older] {
+            connection
+                .execute(
+                    "INSERT INTO threads (id, name, workspace, saved_at, active, revision, generation, payload_json)
+                     VALUES (?1, ?2, ?3, ?4, ?5, 1, 0, ?6)",
+                    params![
+                        &thread.id,
+                        &thread.name,
+                        &thread.workspace,
+                        &thread.saved_at,
+                        thread.active,
+                        serde_json::to_string(thread).unwrap()
+                    ],
+                )
+                .unwrap();
+        }
+
+        let store = Store { connection };
+        store.migrate().unwrap();
+        let threads = store.list_threads().unwrap();
+        assert_eq!(
+            threads.iter().filter(|(thread, _)| thread.active).count(),
+            1
+        );
+        assert!(
+            threads
+                .iter()
+                .find(|(thread, _)| thread.id == newest.id)
+                .unwrap()
+                .0
+                .active
+        );
+        assert!(
+            !threads
+                .iter()
+                .find(|(thread, _)| thread.id == older.id)
+                .unwrap()
+                .0
+                .active
+        );
+    }
+
+    #[test]
     fn legacy_import_is_non_destructive_and_idempotent() {
         let mut store = Store::open_in_memory().unwrap();
         let legacy = r#"{

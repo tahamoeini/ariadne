@@ -96,10 +96,10 @@ VS Code adapter is connected to Core.
 | Category | Current state |
 |---|---|
 | Implemented | Rust Thread domain, bounded rolling context, SQLite persistence, tombstones, generation checks, policy persistence, deterministic active-thread reconciliation, Tauri lifecycle commands, desktop state refresh, protocol framing/session validation, Windows foreground observation boundary, single-instance plugin |
-| Verified | Root TypeScript compile/lint/typecheck/unit suite; desktop frontend `npm ci` and production build; static review of P0 rollback and deletion paths |
-| Remaining | Rust compile/test/clippy/fmt; Windows sensor and Tauri build; actual authenticated named-pipe transport; VS Code-to-Core adapter; tray; start-at-login; browser adapter; migration startup wiring; full deterministic race suite; installer artifact |
+| Verified | Root TypeScript compile/lint/typecheck/unit suite; desktop frontend `npm ci` and production build; portable Rust fmt/check/clippy/tests; deterministic P0 regression tests |
+| Remaining | Full workspace Tauri verification; Windows sensor and Tauri build; actual authenticated named-pipe transport; VS Code-to-Core adapter; tray; start-at-login; browser adapter; migration startup wiring; full deterministic race suite; installer artifact |
 | Deferred | macOS/Linux sensors, Android companion, cloud/accounts/sync, AI/LLM/embeddings, telemetry, screenshots, clipboard/keystrokes, content capture, productivity scoring |
-| Known failures | Rust and Windows verification are **NOT VERIFIED** in the current environment because `cargo`/`rustc` are unavailable; no installable Windows artifact was produced here |
+| Known failures | Full desktop Rust verification is **NOT VERIFIED** locally because the container lacks `pkg-config` and GTK/WebKit development libraries; Windows runtime and installer evidence remain pending |
 
 Do not describe the Windows MVP as complete until the Remaining items that are
 part of the Windows continuity loop have actual build and runtime evidence.
