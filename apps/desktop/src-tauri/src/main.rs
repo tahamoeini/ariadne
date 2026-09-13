@@ -123,7 +123,7 @@ fn start_thread(
         .map_err(|error| error.to_string())?
         .clone();
 
-    if let Err(error) = record_persistence(&*state, persist_thread(&*state, &thread)) {
+    if let Err(error) = record_persistence(&state, persist_thread(&state, &thread)) {
         engine.delete_thread(&thread.id);
         return Err(error);
     }
@@ -144,7 +144,7 @@ fn save_recent_context(
         .map_err(|error| error.to_string())?
         .clone();
 
-    if let Err(error) = record_persistence(&*state, persist_thread(&*state, &thread)) {
+    if let Err(error) = record_persistence(&state, persist_thread(&state, &thread)) {
         engine.delete_thread(&thread.id);
         return Err(error);
     }
@@ -165,7 +165,7 @@ fn stop_thread(
         .stop_thread(now())
         .map_err(|error| error.to_string())?;
 
-    if let Err(error) = record_persistence(&*state, persist_thread(&*state, &thread)) {
+    if let Err(error) = record_persistence(&state, persist_thread(&state, &thread)) {
         if let Some(previous) = previous {
             engine.restore_thread_state(previous, previous_active_id);
         }
@@ -190,7 +190,7 @@ fn resume_thread(
         .map_err(|error| error.to_string())?;
 
     if let Some(thread) = engine.thread(&id).cloned() {
-        if let Err(error) = record_persistence(&*state, persist_thread(&*state, &thread)) {
+        if let Err(error) = record_persistence(&state, persist_thread(&state, &thread)) {
             if let Some(previous) = previous {
                 engine.restore_thread_state(previous, previous_active_id);
             }
@@ -214,7 +214,7 @@ fn set_capture_paused(
     let result = store
         .save_capture_policy(&engine.policy)
         .map_err(|error| error.to_string());
-    let result = record_persistence(&*state, result);
+    let result = record_persistence(&state, result);
     if result.is_ok() {
         notify_state(&app);
     }
@@ -240,7 +240,7 @@ fn set_timed_pause(
     let result = store
         .save_capture_policy(&engine.policy)
         .map_err(|error| error.to_string());
-    let result = record_persistence(&*state, result);
+    let result = record_persistence(&state, result);
     if result.is_ok() {
         notify_state(&app);
     }
@@ -262,7 +262,7 @@ fn set_checkpoint(
         .cloned()
         .ok_or_else(|| "no active Thread".to_owned())?;
 
-    let result = record_persistence(&*state, persist_thread(&*state, &thread));
+    let result = record_persistence(&state, persist_thread(&state, &thread));
     if result.is_ok() {
         notify_state(&app);
     }
@@ -365,7 +365,7 @@ fn start_foreground_sensor(app: tauri::AppHandle) {
                             let accepted = engine.record(event, &now());
                             if accepted {
                                 if let Some(active) = engine.active_thread().cloned() {
-                                    match persist_thread(&*state, &active) {
+                                    match persist_thread(&state, &active) {
                                         Ok(()) => {
                                             if let Ok(mut error) = state.persistence_error.lock() {
                                                 *error = None;
