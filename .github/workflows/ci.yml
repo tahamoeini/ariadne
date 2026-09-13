@@ -6,36 +6,6 @@ on:
   pull_request:
 
 jobs:
-  rust-format-repair:
-    name: Normalize Rust formatting
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          components: rustfmt
-      - run: cargo fmt --all
-        working-directory: ${{ github.workspace }}
-      - name: Commit normalized formatting
-        working-directory: ${{ github.workspace }}
-        run: |
-          if git diff --quiet; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- '*.rs'
-          git commit -m "style: normalize Rust formatting"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
-
   typescript:
     name: VS Code adapter prototype
     runs-on: ubuntu-latest
@@ -61,6 +31,17 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
+      - name: Generate Rust formatting patch
+        run: |
+          cargo fmt --all
+          git diff --binary -- '*.rs' > rustfmt.patch
+      - name: Upload Rust formatting patch
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustfmt-patch-${{ github.sha }}
+          path: rustfmt.patch
+          if-no-files-found: ignore
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --all-features
