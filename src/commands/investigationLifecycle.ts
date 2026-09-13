@@ -1,0 +1,770 @@
+import { DEFAULT_EVENT_BUFFER_MAX_EVENTS } from '../capture/eventBuffer';
+import {
+  Checkpoint,
+  FileLocation,
+  GitSnapshot,
+  Investigation,
+  InvestigationBrowserReference,
+  InvestigationNavigationGraph,
+  InvestigationTimelineEntry,
+  InvestigationTimelineSavePointReason,
+  ObservedEvent,
+  Snapshot,
+  appendObservedEventToNavigationGraph,
+  appendCheckpointToTimeline,
+  appendGitSnapshotToTimeline,
+  appendObservedEventToTimeline,
+  appendResumePointToTimeline,
+  appendSavePointToTimeline,
+  buildNavigationGraphFromObservedEvents,
+  buildTimelineFromObservedEvents,
+  cloneBrowserReference,
+  cloneNavigationGraph,
+  cloneTimelineEntry,
+  createInvestigation,
+} from '../domain';
+import { captureGitSnapshot } from '../git';
+import {
+  deleteAllInvestigations as deleteAllStoredInvestigations,
+  deleteInvestigation as deleteStoredInvestigation,
+  listInvestigations as listStoredInvestigations,
+  loadInvestigation,
+  saveInvestigation,
+} from '../storage';
+
+const ACTIVE_INVESTIGATIONS_KEY = 'ariadne.activeInvestigations';
+export const MAX_INVESTIGATION_NAME_LENGTH = 120;
+export const MAX_CHECKPOINT_LENGTH = 1000;
+export const MAX_BROWSER_REFERENCE_URL_LENGTH = 2000;
+export const MAX_BROWSER_REFERENCE_TITLE_LENGTH = 200;
+
+const VISIT_EVENT_TYPES: ReadonlySet<ObservedEvent['type']> = new Set([
+  'editor.active',
+  'navigation.definition',
+  'navigation.reference',
+]);
+
+export interface InvestigationLifecycleCapture {
+  getRecentEvents(workspace?: string): ObservedEvent[];
+  getLastLocation(workspace?: string): FileLocation | null;
+}
+
+export interface InvestigationLifecycleStateStore {
+  get<T>(key: string): T | undefined;
+  update(key: string, value: unknown): PromiseLike<void>;
+}
+
+export interface InvestigationLifecycleOptions {
+  storageDir: string;
+  capture: InvestigationLifecycleCapture;
+  stateStore: InvestigationLifecycleStateStore;
+  captureGitSnapshot?: (targetPath: string) => GitSnapshot | PromiseLike<GitSnapshot>;
+  autoSaveDebounceMs?: number;
+  onAutoSaveStatusChanged?: (status: AutoSaveStatus) => void;
+}
+
+export interface AutoSaveStatus {
+  workspace: string;
+  status: 'error' | 'recovered';
+  error?: unknown;
+}
+
+export interface CreateInvestigationOptions {
+  workspace: string;
+  name: string;
+  checkpointText?: string | null;
+}
+
+export interface AttachBrowserReferenceInput {
+  url: string;
+  title?: string | null;
+}
+
+export interface InvestigationLifecycleDebugApi {
+  getActiveInvestigation(workspace?: string): Investigation | null;
+  listInvestigations(): Investigation[];
+  clearInvestigations(): Promise<void>;
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value).every((entry) => typeof entry === 'string');
+}
+
+function cloneLocation(location: FileLocation | null): FileLocation | null {
+  return location ? { ...location } : null;
+}
+
+function cloneCheckpoint(checkpoint: Checkpoint | null): Checkpoint | null {
+  return checkpoint ? { ...checkpoint } : null;
+}
+
+function cloneBrowserReferences(
+  references: InvestigationBrowserReference[],
+): InvestigationBrowserReference[] {
+  return references.map(cloneBrowserReference);
+}
+
+function cloneObservedEvent(event: ObservedEvent): ObservedEvent {
+  return {
+    ...event,
+    location: event.location ? { ...event.location } : undefined,
+    source: event.source ? { ...event.source } : undefined,
+  };
+}
+
+function cloneGitSnapshot(git: GitSnapshot | null): GitSnapshot | null {
+  if (!git) {
+    return null;
+  }
+
+  return {
+    ...git,
+    modifiedFiles: [...git.modifiedFiles],
+    untrackedFiles: [...git.untrackedFiles],
+    diffStats: { ...git.diffStats },
+  };
+}
+
+function cloneTimeline(entries: InvestigationTimelineEntry[]): InvestigationTimelineEntry[] {
+  return entries.map(cloneTimelineEntry);
+}
+
+function cloneGraph(graph: InvestigationNavigationGraph): InvestigationNavigationGraph {
+  return cloneNavigationGraph(graph);
+}
+
+function cloneSnapshot(snapshot: Snapshot): Snapshot {
+  return {
+    editedFiles: [...snapshot.editedFiles],
+    visitedFileCounts: { ...snapshot.visitedFileCounts },
+    lastLocation: cloneLocation(snapshot.lastLocation),
+    recentEvents: snapshot.recentEvents.map(cloneObservedEvent),
+    git: cloneGitSnapshot(snapshot.git),
+  };
+}
+
+function cloneInvestigation(investigation: Investigation): Investigation {
+  return {
+    ...investigation,
+    checkpoint: cloneCheckpoint(investigation.checkpoint),
+    browserReferences: cloneBrowserReferences(investigation.browserReferences),
+    snapshot: cloneSnapshot(investigation.snapshot),
+    navigationGraph: cloneGraph(investigation.navigationGraph),
+    timeline: cloneTimeline(investigation.timeline),
+  };
+}
+
+function parseBrowserReferenceUrl(value: string): string {
+  const trimmed = requireBoundedText(
+    value,
+    'Browser reference URL',
+    MAX_BROWSER_REFERENCE_URL_LENGTH,
+  );
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error('Browser reference URL must be a valid http:// or https:// URL.');
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Browser reference URL must use http:// or https://.');
+  }
+
+  // Protect local privacy by default: strip query strings and fragments.
+  parsed.search = '';
+  parsed.hash = '';
+
+  return parsed.toString();
+}
+
+function compareTimestampDescending(left: string, right: string): number {
+  return Date.parse(right) - Date.parse(left);
+}
+
+function upsertBrowserReference(
+  references: InvestigationBrowserReference[],
+  input: AttachBrowserReferenceInput,
+): InvestigationBrowserReference[] {
+  const url = parseBrowserReferenceUrl(input.url);
+  const title = optionalBoundedText(
+    input.title,
+    'Browser reference title',
+    MAX_BROWSER_REFERENCE_TITLE_LENGTH,
+  );
+  const existing = references.find((reference) => reference.url === url);
+  const nextReference: InvestigationBrowserReference = {
+    url,
+    title: title ?? existing?.title ?? null,
+    capturedAt: new Date().toISOString(),
+  };
+
+  return [...references.filter((reference) => reference.url !== url), nextReference].sort(
+    (left, right) => {
+      return (
+        compareTimestampDescending(left.capturedAt, right.capturedAt) ||
+        left.url.localeCompare(right.url)
+      );
+    },
+  );
+}
+
+function trimToNull(value: string | null | undefined): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function requireBoundedText(
+  value: string | null | undefined,
+  fieldName: string,
+  maxLength: number,
+): string {
+  const trimmed = trimToNull(value);
+  if (!trimmed) {
+    throw new Error(`${fieldName} is required.`);
+  }
+
+  if (trimmed.length > maxLength) {
+    throw new Error(`${fieldName} must be ${maxLength} characters or fewer.`);
+  }
+
+  return trimmed;
+}
+
+function optionalBoundedText(
+  value: string | null | undefined,
+  fieldName: string,
+  maxLength: number,
+): string | null {
+  const trimmed = trimToNull(value);
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.length > maxLength) {
+    throw new Error(`${fieldName} must be ${maxLength} characters or fewer.`);
+  }
+
+  return trimmed;
+}
+
+function createCheckpoint(text: string): Checkpoint {
+  return {
+    text,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function appendEditedFile(editedFiles: string[], filePath: string | undefined): string[] {
+  if (!filePath || editedFiles.includes(filePath)) {
+    return editedFiles;
+  }
+
+  return [...editedFiles, filePath];
+}
+
+function trimRecentEvents(events: ObservedEvent[]): ObservedEvent[] {
+  if (events.length <= DEFAULT_EVENT_BUFFER_MAX_EVENTS) {
+    return events;
+  }
+
+  return events.slice(-DEFAULT_EVENT_BUFFER_MAX_EVENTS);
+}
+
+function inferRepositoryFromEvents(events: ObservedEvent[]): string | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (events[index].repository) {
+      return events[index].repository;
+    }
+  }
+
+  return null;
+}
+
+function resolveRepository(snapshot: Snapshot, fallback: string | null): string | null {
+  return snapshot.git?.repositoryRoot ?? inferRepositoryFromEvents(snapshot.recentEvents) ?? fallback;
+}
+
+function compareInvestigations(a: Investigation, b: Investigation): number {
+  return Date.parse(b.savedAt) - Date.parse(a.savedAt);
+}
+
+export function buildSnapshotFromObservedEvents(
+  events: ObservedEvent[],
+  git: GitSnapshot,
+  lastLocation: FileLocation | null,
+): Snapshot {
+  const visitedFileCounts: Record<string, number> = {};
+  const editedFiles: string[] = [];
+
+  for (const event of events) {
+    if (event.filePath && VISIT_EVENT_TYPES.has(event.type)) {
+      visitedFileCounts[event.filePath] = (visitedFileCounts[event.filePath] ?? 0) + 1;
+    }
+
+    if (event.type === 'file.edit' && event.filePath && !editedFiles.includes(event.filePath)) {
+      editedFiles.push(event.filePath);
+    }
+  }
+
+  return {
+    editedFiles: Array.from(new Set(editedFiles)),
+    visitedFileCounts,
+    lastLocation: cloneLocation(lastLocation),
+    recentEvents: trimRecentEvents(events.map(cloneObservedEvent)),
+    git: cloneGitSnapshot(git),
+  };
+}
+
+export function applyObservedEventToSnapshot(
+  snapshot: Snapshot,
+  event: ObservedEvent,
+): Snapshot {
+  const nextVisitedFileCounts = { ...snapshot.visitedFileCounts };
+  if (event.filePath && VISIT_EVENT_TYPES.has(event.type)) {
+    nextVisitedFileCounts[event.filePath] = (nextVisitedFileCounts[event.filePath] ?? 0) + 1;
+  }
+
+  const nextEditedFiles =
+    event.type === 'file.edit'
+      ? appendEditedFile(snapshot.editedFiles, event.filePath)
+      : [...snapshot.editedFiles];
+
+  return {
+    ...cloneSnapshot(snapshot),
+    editedFiles: nextEditedFiles,
+    visitedFileCounts: nextVisitedFileCounts,
+    lastLocation: event.location ? { ...event.location } : cloneLocation(snapshot.lastLocation),
+    recentEvents: trimRecentEvents([
+      ...snapshot.recentEvents.map(cloneObservedEvent),
+      cloneObservedEvent(event),
+    ]),
+  };
+}
+
+export class InvestigationLifecycleService implements InvestigationLifecycleDebugApi {
+  private readonly activeInvestigations = new Map<string, Investigation>();
+  private readonly captureGitSnapshotForTarget: (
+    targetPath: string,
+  ) => GitSnapshot | PromiseLike<GitSnapshot>;
+  private readonly autoSaveDebounceMs: number;
+  private readonly autoSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly inFlightAutoSave = new Set<string>();
+  private readonly failedAutoSaveWorkspaces = new Set<string>();
+
+  constructor(private readonly options: InvestigationLifecycleOptions) {
+    this.captureGitSnapshotForTarget = options.captureGitSnapshot ?? captureGitSnapshot;
+    this.autoSaveDebounceMs = Math.max(0, Math.floor(options.autoSaveDebounceMs ?? 15_000));
+    this.restoreActiveInvestigations();
+  }
+
+  dispose(): void {
+    for (const timer of this.autoSaveTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.autoSaveTimers.clear();
+  }
+
+  getActiveInvestigation(workspace?: string): Investigation | null {
+    if (workspace) {
+      const investigation = this.activeInvestigations.get(workspace);
+      return investigation ? cloneInvestigation(investigation) : null;
+    }
+
+    const investigation = this.activeInvestigations.values().next().value;
+    return investigation ? cloneInvestigation(investigation) : null;
+  }
+
+  listInvestigations(): Investigation[] {
+    return listStoredInvestigations(this.options.storageDir)
+      .sort(compareInvestigations)
+      .map(cloneInvestigation);
+  }
+
+  async clearInvestigations(): Promise<void> {
+    await this.deleteAllData();
+  }
+
+  async persistActiveInvestigations(): Promise<void> {
+    this.cancelAllAutoSaves();
+    for (const workspace of Array.from(this.activeInvestigations.keys())) {
+      const investigation = this.activeInvestigations.get(workspace);
+      if (!investigation) {
+        continue;
+      }
+
+      await this.persistActiveInvestigation(investigation);
+    }
+  }
+
+  getStorageDirectory(): string {
+    return this.options.storageDir;
+  }
+
+  async deleteAllData(): Promise<number> {
+    this.cancelAllAutoSaves();
+    const deletedCount = deleteAllStoredInvestigations(this.options.storageDir);
+    this.activeInvestigations.clear();
+    await this.persistActiveInvestigationIds();
+    return deletedCount;
+  }
+
+  recordObservedEvent(event: ObservedEvent): void {
+    const active = this.activeInvestigations.get(event.workspace);
+    if (!active) {
+      return;
+    }
+
+    const snapshot = applyObservedEventToSnapshot(active.snapshot, event);
+    const navigationGraph = appendObservedEventToNavigationGraph(active.navigationGraph, event);
+    const timeline = appendObservedEventToTimeline(active.timeline, event);
+    this.activeInvestigations.set(event.workspace, {
+      ...cloneInvestigation(active),
+      repository: resolveRepository(snapshot, active.repository ?? event.repository),
+      snapshot,
+      navigationGraph,
+      timeline,
+    });
+
+    this.scheduleAutoSave(event.workspace);
+  }
+
+  async startInvestigation(options: CreateInvestigationOptions): Promise<Investigation> {
+    const investigation = await this.createAndActivateInvestigation(options, false);
+    if (!investigation) {
+      throw new Error('Investigation could not be created.');
+    }
+
+    return investigation;
+  }
+
+  async saveRecentActivityAsInvestigation(
+    options: CreateInvestigationOptions,
+  ): Promise<Investigation | null> {
+    return this.createAndActivateInvestigation(options, true);
+  }
+
+  async updateCheckpoint(
+    workspace: string,
+    checkpointText: string | null,
+  ): Promise<Investigation | null> {
+    const active = this.activeInvestigations.get(workspace);
+    if (!active) {
+      return null;
+    }
+
+    const nextCheckpointText = optionalBoundedText(
+      checkpointText,
+      'Checkpoint',
+      MAX_CHECKPOINT_LENGTH,
+    );
+    const checkpointTimestamp = new Date().toISOString();
+    const nextCheckpoint = nextCheckpointText
+      ? {
+          text: nextCheckpointText,
+          createdAt: checkpointTimestamp,
+        }
+      : null;
+    const updated: Investigation = {
+      ...cloneInvestigation(active),
+      checkpoint: nextCheckpoint,
+      timeline: appendCheckpointToTimeline(
+        active.timeline,
+        nextCheckpoint?.text ?? null,
+        checkpointTimestamp,
+      ),
+    };
+
+    return this.persistActiveInvestigation(updated);
+  }
+
+  async attachBrowserReference(
+    workspace: string,
+    reference: AttachBrowserReferenceInput,
+  ): Promise<Investigation | null> {
+    const active = this.activeInvestigations.get(workspace);
+    if (!active) {
+      return null;
+    }
+
+    const updated: Investigation = {
+      ...cloneInvestigation(active),
+      browserReferences: upsertBrowserReference(active.browserReferences, reference),
+    };
+
+    return this.persistActiveInvestigation(updated);
+  }
+
+  async saveAndStopInvestigation(workspace: string): Promise<Investigation | null> {
+    this.cancelAutoSave(workspace);
+    const active = this.activeInvestigations.get(workspace);
+    if (!active) {
+      return null;
+    }
+
+    const saved = await this.persistActiveInvestigation(active, 'save-stop');
+    const persistedActive = this.activeInvestigations.get(workspace);
+    if (!persistedActive) {
+      throw new Error('Active investigation state was lost before stopping.');
+    }
+
+    this.activeInvestigations.delete(workspace);
+    try {
+      await this.persistActiveInvestigationIds();
+    } catch (error) {
+      this.activeInvestigations.set(workspace, cloneInvestigation(persistedActive));
+      throw error;
+    }
+    return saved;
+  }
+
+  async deleteInvestigation(id: string): Promise<boolean> {
+    const deleted = deleteStoredInvestigation(this.options.storageDir, id);
+    if (!deleted) {
+      return false;
+    }
+
+    for (const [workspace, investigation] of this.activeInvestigations.entries()) {
+      if (investigation.id === id) {
+        this.cancelAutoSave(workspace);
+        this.activeInvestigations.delete(workspace);
+      }
+    }
+
+    await this.persistActiveInvestigationIds();
+    return true;
+  }
+
+  async markInvestigationResumed(id: string): Promise<Investigation | null> {
+    let source: Investigation | null = null;
+
+    for (const investigation of this.activeInvestigations.values()) {
+      if (investigation.id === id) {
+        source = cloneInvestigation(investigation);
+        break;
+      }
+    }
+
+    if (!source) {
+      source = loadInvestigation(this.options.storageDir, id);
+    }
+
+    if (!source) {
+      return null;
+    }
+
+    const activeForWorkspace = this.activeInvestigations.get(source.workspace);
+    if (activeForWorkspace && activeForWorkspace.id !== source.id) {
+      throw new Error('Another investigation is already active in this workspace.');
+    }
+
+    const resumedAt = new Date().toISOString();
+    const updated: Investigation = {
+      ...cloneInvestigation(source),
+      lastResumedAt: resumedAt,
+      timeline: appendResumePointToTimeline(source.timeline, resumedAt),
+    };
+    const saved = saveInvestigation(
+      this.options.storageDir,
+      updated,
+      { savedAt: source.savedAt },
+    );
+
+    this.activeInvestigations.set(saved.workspace, cloneInvestigation(saved));
+    await this.persistActiveInvestigationIds();
+
+    return cloneInvestigation(saved);
+  }
+
+  private async createAndActivateInvestigation(
+    options: CreateInvestigationOptions,
+    requireRecentActivity: boolean,
+  ): Promise<Investigation | null> {
+    const workspace = options.workspace;
+    if (this.activeInvestigations.has(workspace)) {
+      throw new Error('An investigation is already active in this workspace.');
+    }
+
+    const name = requireBoundedText(
+      options.name,
+      'Investigation name',
+      MAX_INVESTIGATION_NAME_LENGTH,
+    );
+
+    const snapshot = await this.buildSeedSnapshot(workspace);
+    if (requireRecentActivity && snapshot.recentEvents.length === 0) {
+      return null;
+    }
+
+    const checkpointText = optionalBoundedText(
+      options.checkpointText,
+      'Checkpoint',
+      MAX_CHECKPOINT_LENGTH,
+    );
+    const checkpoint = checkpointText ? createCheckpoint(checkpointText) : null;
+    let timeline = buildTimelineFromObservedEvents(snapshot.recentEvents);
+    if (checkpoint) {
+      timeline = appendCheckpointToTimeline(timeline, checkpoint.text, checkpoint.createdAt);
+    }
+
+    const investigation: Investigation = {
+      ...createInvestigation(name, workspace, resolveRepository(snapshot, null)),
+      checkpoint,
+      repository: resolveRepository(snapshot, null),
+      snapshot,
+      navigationGraph: buildNavigationGraphFromObservedEvents(snapshot.recentEvents),
+      timeline,
+    };
+
+    return this.persistActiveInvestigation(
+      investigation,
+      requireRecentActivity ? 'save-recent' : 'start',
+      snapshot,
+    );
+  }
+
+  private async buildSeedSnapshot(workspace: string): Promise<Snapshot> {
+    const recentEvents = this.options.capture.getRecentEvents(workspace);
+    const lastLocation = this.options.capture.getLastLocation(workspace);
+    const git = await this.captureGitSnapshotForTarget(lastLocation?.filePath ?? workspace);
+    return buildSnapshotFromObservedEvents(recentEvents, git, lastLocation);
+  }
+
+  private async refreshSnapshot(investigation: Investigation): Promise<Snapshot> {
+    const currentLastLocation =
+      this.options.capture.getLastLocation(investigation.workspace) ?? investigation.snapshot.lastLocation;
+    const git = await this.captureGitSnapshotForTarget(
+      currentLastLocation?.filePath ?? investigation.workspace,
+    );
+
+    return {
+      ...cloneSnapshot(investigation.snapshot),
+      lastLocation: cloneLocation(currentLastLocation),
+      git: cloneGitSnapshot(git),
+      recentEvents: trimRecentEvents(investigation.snapshot.recentEvents.map(cloneObservedEvent)),
+    };
+  }
+
+  private restoreActiveInvestigations(): void {
+    const rawActiveInvestigationIds = this.options.stateStore.get<unknown>(ACTIVE_INVESTIGATIONS_KEY);
+    const activeInvestigationIds = isStringRecord(rawActiveInvestigationIds)
+      ? rawActiveInvestigationIds
+      : {};
+
+    for (const [workspace, investigationId] of Object.entries(activeInvestigationIds)) {
+      const investigation = loadInvestigation(this.options.storageDir, investigationId);
+      if (investigation && investigation.workspace === workspace) {
+        this.activeInvestigations.set(workspace, cloneInvestigation(investigation));
+      }
+    }
+  }
+
+  private async persistActiveInvestigation(
+    investigation: Investigation,
+    savePointReason?: InvestigationTimelineSavePointReason,
+    snapshotOverride?: Snapshot,
+  ): Promise<Investigation> {
+    const snapshot = snapshotOverride
+      ? cloneSnapshot(snapshotOverride)
+      : await this.refreshSnapshot(investigation);
+    const savedAt = new Date().toISOString();
+    let timeline = appendGitSnapshotToTimeline(investigation.timeline, snapshot.git);
+    if (savePointReason) {
+      timeline = appendSavePointToTimeline(timeline, savedAt, savePointReason);
+    }
+
+    const saved = saveInvestigation(this.options.storageDir, {
+      ...cloneInvestigation(investigation),
+      repository: resolveRepository(snapshot, investigation.repository),
+      snapshot,
+      timeline,
+    }, {
+      savedAt,
+    });
+
+    this.activeInvestigations.set(investigation.workspace, cloneInvestigation(saved));
+    await this.persistActiveInvestigationIds();
+    return cloneInvestigation(saved);
+  }
+
+  private scheduleAutoSave(workspace: string): void {
+    if (this.autoSaveDebounceMs <= 0) {
+      return;
+    }
+
+    this.cancelAutoSave(workspace);
+    const timer = setTimeout(() => {
+      this.autoSaveTimers.delete(workspace);
+      void this.runAutoSave(workspace);
+    }, this.autoSaveDebounceMs);
+    this.autoSaveTimers.set(workspace, timer);
+  }
+
+  private cancelAutoSave(workspace: string): void {
+    const timer = this.autoSaveTimers.get(workspace);
+    if (!timer) {
+      return;
+    }
+
+    clearTimeout(timer);
+    this.autoSaveTimers.delete(workspace);
+  }
+
+  private cancelAllAutoSaves(): void {
+    for (const workspace of Array.from(this.autoSaveTimers.keys())) {
+      this.cancelAutoSave(workspace);
+    }
+  }
+
+  private async runAutoSave(workspace: string): Promise<void> {
+    if (this.inFlightAutoSave.has(workspace)) {
+      return;
+    }
+
+    const active = this.activeInvestigations.get(workspace);
+    if (!active) {
+      return;
+    }
+
+    this.inFlightAutoSave.add(workspace);
+    try {
+      await this.persistActiveInvestigation(active, 'save');
+      if (this.failedAutoSaveWorkspaces.has(workspace)) {
+        this.failedAutoSaveWorkspaces.delete(workspace);
+        this.options.onAutoSaveStatusChanged?.({
+          workspace,
+          status: 'recovered',
+        });
+      }
+    } catch (error) {
+      if (!this.failedAutoSaveWorkspaces.has(workspace)) {
+        this.failedAutoSaveWorkspaces.add(workspace);
+        this.options.onAutoSaveStatusChanged?.({
+          workspace,
+          status: 'error',
+          error,
+        });
+      }
+    } finally {
+      this.inFlightAutoSave.delete(workspace);
+    }
+  }
+
+  private async persistActiveInvestigationIds(): Promise<void> {
+    const nextValue: Record<string, string> = {};
+    for (const [workspace, investigation] of this.activeInvestigations.entries()) {
+      nextValue[workspace] = investigation.id;
+    }
+
+    await this.options.stateStore.update(ACTIVE_INVESTIGATIONS_KEY, nextValue);
+  }
+}

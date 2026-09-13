@@ -1,0 +1,207 @@
+import * as assert from 'assert';
+import {
+  appendCheckpointToTimeline,
+  appendGitSnapshotToTimeline,
+  appendSavePointToTimeline,
+  buildNavigationGraphFromObservedEvents,
+  buildTimelineFromObservedEvents,
+  createInvestigation,
+  GitSnapshot,
+  Investigation,
+} from '../domain';
+import {
+  buildMissingInvestigationContent,
+  buildResumeSnapshotContent,
+} from '../ui/resumeSnapshot';
+
+function makeGitSnapshot(overrides: Partial<GitSnapshot> = {}): GitSnapshot {
+  return {
+    timestamp: '2026-06-01T12:34:30.000Z',
+    availability: 'available',
+    repositoryRoot: '/workspace',
+    head: 'abc123',
+    branch: 'feature/resume-snapshot',
+    modifiedFiles: ['src/tokenService.ts', 'src/auth.test.ts'],
+    untrackedFiles: ['notes.txt'],
+    diffStats: { filesChanged: 2, insertions: 10, deletions: 3 },
+    ...overrides,
+  };
+}
+
+function makeInvestigation(): Investigation {
+  const investigation = createInvestigation('Investigate token race', '/workspace', '/workspace');
+  investigation.savedAt = '2026-06-01T12:34:56.000Z';
+  investigation.checkpoint = {
+    text: 'Reproduce delayed refresh after session invalidation.',
+    createdAt: '2026-06-01T12:30:00.000Z',
+  };
+  investigation.browserReferences = [
+    {
+      url: 'https://datatracker.ietf.org/doc/html/rfc6749',
+      title: 'OAuth 2.0 Authorization Framework',
+      capturedAt: '2026-06-01T12:10:00.000Z',
+    },
+  ];
+  investigation.snapshot.editedFiles = [
+    '/workspace/src/tokenService.ts',
+    '/workspace/src/auth.test.ts',
+  ];
+  investigation.snapshot.visitedFileCounts = {
+    '/workspace/src/tokenService.ts': 6,
+    '/workspace/src/auth.test.ts': 2,
+    '/workspace/src/once.ts': 1,
+  };
+  investigation.snapshot.lastLocation = {
+    filePath: '/workspace/src/tokenService.ts',
+    line: 183,
+    column: 7,
+  };
+  investigation.snapshot.recentEvents = [
+    {
+      timestamp: '2026-06-01T12:20:00.000Z',
+      type: 'editor.active',
+      workspace: '/workspace',
+      repository: '/workspace',
+      filePath: '/workspace/src/authController.ts',
+    },
+    {
+      timestamp: '2026-06-01T12:21:00.000Z',
+      type: 'editor.active',
+      workspace: '/workspace',
+      repository: '/workspace',
+      filePath: '/workspace/src/tokenService.ts',
+    },
+    {
+      timestamp: '2026-06-01T12:22:00.000Z',
+      type: 'editor.active',
+      workspace: '/workspace',
+      repository: '/workspace',
+      filePath: '/workspace/src/auth.test.ts',
+    },
+    {
+      timestamp: '2026-06-01T12:23:00.000Z',
+      type: 'file.edit',
+      workspace: '/workspace',
+      repository: '/workspace',
+      filePath: '/workspace/src/auth.test.ts',
+    },
+    {
+      timestamp: '2026-06-01T12:24:00.000Z',
+      type: 'editor.active',
+      workspace: '/workspace',
+      repository: '/workspace',
+      filePath: '/workspace/src/tokenService.ts',
+    },
+  ];
+  investigation.snapshot.git = makeGitSnapshot();
+  investigation.navigationGraph = buildNavigationGraphFromObservedEvents(
+    investigation.snapshot.recentEvents,
+  );
+  investigation.timeline = buildTimelineFromObservedEvents(investigation.snapshot.recentEvents);
+  investigation.timeline = appendCheckpointToTimeline(
+    investigation.timeline,
+    investigation.checkpoint!.text,
+    investigation.checkpoint!.createdAt,
+  );
+  investigation.timeline = appendGitSnapshotToTimeline(
+    investigation.timeline,
+    investigation.snapshot.git,
+  );
+  investigation.timeline = appendSavePointToTimeline(
+    investigation.timeline,
+    investigation.savedAt,
+    'save-stop',
+  );
+  return investigation;
+}
+
+suite('Resume Snapshot', () => {
+  test('renders factual resume snapshot content in the intended order', () => {
+    const investigation = makeInvestigation();
+    const currentGit = makeGitSnapshot({
+      timestamp: '2026-06-02T09:00:00.000Z',
+      head: 'def456',
+      modifiedFiles: ['src/tokenService.ts', 'src/package.json'],
+      untrackedFiles: [],
+      diffStats: { filesChanged: 2, insertions: 14, deletions: 5 },
+    });
+
+    const content = buildResumeSnapshotContent(investigation, currentGit, {
+      fileExists: (filePath) => !filePath.endsWith('auth.test.ts'),
+    });
+
+    assert.ok(content.startsWith('# Investigate token race\n\n## Checkpoint'));
+    assert.ok(content.includes('## External references'));
+    assert.ok(
+      content.includes(
+        '- OAuth 2.0 Authorization Framework — https://datatracker.ietf.org/doc/html/rfc6749 — attached 2026-06-01T12:10:00.000Z',
+      ),
+    );
+    assert.ok(content.includes('Saved timestamp: 2026-06-01T12:34:56.000Z'));
+    assert.ok(content.includes('- Workspace: /workspace'));
+    assert.ok(content.includes('- Branch: feature/resume-snapshot'));
+    assert.ok(content.includes('## Current Git state at open time'));
+    assert.ok(content.includes('## Saved vs current differences at open time'));
+    assert.ok(content.includes('- HEAD changed: abc123 → def456'));
+    assert.ok(content.includes('- Now modified: src/package.json'));
+    assert.ok(content.includes('- No longer untracked: notes.txt'));
+    assert.ok(
+      content.includes('- src/auth.test.ts — saved path missing (deleted or moved)'),
+    );
+    assert.ok(content.includes('- src/tokenService.ts — 6 visits'));
+    assert.ok(content.includes('- src/auth.test.ts — saved path missing (deleted or moved) — 2 visits'));
+    assert.ok(content.includes('- src/tokenService.ts:183:7'));
+    assert.ok(content.includes('## Investigation navigation graph'));
+    assert.ok(content.includes('- Observed artifacts: 3 file node(s)'));
+    assert.ok(content.includes('- Collapsed relationships: 3'));
+    assert.ok(content.includes('- Resume anchor: src/tokenService.ts'));
+    assert.ok(
+      content.includes('- Anchor neighbor: src/authController.ts — transition x1'),
+    );
+    assert.ok(
+      content.includes('- Anchor neighbor: src/auth.test.ts — saved path missing (deleted or moved) — transition x2'),
+    );
+    assert.ok(
+      content.includes('- src/tokenService.ts → src/auth.test.ts — saved path missing (deleted or moved) — transition x1'),
+    );
+    assert.ok(
+      content.includes('- src/auth.test.ts — saved path missing (deleted or moved) → src/tokenService.ts — transition x1'),
+    );
+    assert.ok(content.includes('## Investigation timeline'));
+    assert.ok(content.includes('- 2026-06-01T12:20:00.000Z — Focused src/authController.ts'));
+    assert.ok(content.includes('- 2026-06-01T12:21:00.000Z — src/authController.ts → src/tokenService.ts'));
+    assert.ok(
+      content.includes('- 2026-06-01T12:23:00.000Z — Edited src/auth.test.ts — saved path missing (deleted or moved)'),
+    );
+    assert.ok(
+      content.includes('- 2026-06-01T12:34:30.000Z — Git snapshot: feature/resume-snapshot @ abc123; 2 modified; 1 untracked; +10 / -3 across 2 files'),
+    );
+    assert.ok(content.includes('- 2026-06-01T12:34:56.000Z — Saved and stopped investigation'));
+  });
+
+  test('renders empty and unavailable states honestly', () => {
+    const investigation = createInvestigation('Read docs', '/workspace');
+
+    const content = buildResumeSnapshotContent(investigation, null, {
+      fileExists: () => true,
+    });
+
+    assert.ok(content.includes('- No external references were attached.'));
+    assert.ok(content.includes('- Repository: No repository was captured.'));
+    assert.ok(content.includes('- No branch was captured.'));
+    assert.ok(content.includes('- No saved or current Git snapshot is available for comparison.'));
+    assert.ok(content.includes('- No edited files were captured.'));
+    assert.ok(content.includes('- No revisited files were captured.'));
+    assert.ok(content.includes('- No last location was captured.'));
+    assert.ok(content.includes('- No investigation navigation graph was captured.'));
+    assert.ok(content.includes('- No investigation timeline was captured.'));
+  });
+
+  test('renders missing investigation content', () => {
+    const content = buildMissingInvestigationContent('missing-id');
+
+    assert.ok(content.includes('# Resume Snapshot unavailable'));
+    assert.ok(content.includes('- Investigation id: missing-id'));
+    assert.ok(content.includes('missing, deleted, or unreadable'));
+  });
+});

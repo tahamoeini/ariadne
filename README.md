@@ -1,0 +1,147 @@
+# Ariadne
+
+> Pick up a code investigation where you left it.
+
+Ariadne is evolving into a local-first context continuity platform that preserves the factual thread needed to return to interrupted digital work. The current VS Code extension is the first working sensor and domain prototype; the repository now also contains the target Rust Core, SQLite storage, versioned adapter protocol, Windows sensor boundary, and Tauri desktop vertical slice.
+
+The migration is deliberately gradual. The existing extension remains usable while the desktop Core becomes the future canonical state owner. The first platform slice is scaffolded and tested at source level, but it is not yet a finished Windows installer or fully connected adapter system.
+
+## Platform direction
+
+```text
+Windows sensor / VS Code adapter / browser adapter
+                         ↓
+                    Rust Core
+                         ↓
+                 SQLite + Tauri UI
+```
+
+The Rust workspace lives under [`crates/`](crates/) and [`apps/desktop/`](apps/desktop/). Read [`docs/ARCHITECTURE_PLATFORM.md`](docs/ARCHITECTURE_PLATFORM.md), [`docs/MIGRATION.md`](docs/MIGRATION.md), and [`docs/AGENT_HANDOFF_PLATFORM.md`](docs/AGENT_HANDOFF_PLATFORM.md) before extending it.
+
+Ariadne remains intentionally free of AI, cloud accounts, telemetry, screenshots, keystrokes, clipboard capture, page-content capture, productivity scoring, and exact session restoration.
+
+## Ariadne 0.0.1
+
+Ariadne 0.0.1:
+
+- activates on VS Code startup and keeps a per-workspace rolling buffer of the last 20 minutes of observed activity
+- lets you save the current investigation explicitly or retroactively save recent activity as an investigation
+- keeps one active investigation per workspace and refreshes its saved state on checkpoint, stop, and extension shutdown
+- stores only local JSON data needed for re-entry
+- shows a read-only Resume Snapshot with a condensed investigation-scoped timeline and a collapsed navigation graph
+- lets the developer deliberately attach a current external page reference to the active investigation
+- resumes by reopening up to 5 saved files, prioritizing graph-adjacent artifacts before global file noise, and moving to the last saved location when that file still exists
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `Ariadne: Start Investigation` | Saves the current workspace context and keeps the investigation active. |
+| `Ariadne: Save Recent Activity as Investigation` | Saves the recent rolling-buffer activity and keeps the investigation active. |
+| `Ariadne: Add or Update Checkpoint` | Saves or clears the checkpoint on the active investigation. |
+| `Ariadne: Attach Current Page to Ariadne` | Deliberately attaches a minimal external page reference to the active investigation. |
+| `Ariadne: Save and Stop Investigation` | Persists the latest active state and clears the active investigation for that workspace. |
+| `Ariadne: List Saved Investigations` | Lists saved investigations and opens the selected Resume Snapshot. |
+| `Ariadne: Show Resume Snapshot` | Opens the saved Resume Snapshot without reopening files. |
+| `Ariadne: Resume Investigation` | Opens the Resume Snapshot and reopens a conservative set of saved files. |
+| `Ariadne: Delete Investigation` | Deletes one saved investigation. |
+| `Ariadne: Delete All Ariadne Data` | Deletes all saved investigations and clears in-memory activity for the current session. |
+| `Ariadne: Show Local Storage Location` | Reveals the local storage directory and shows its path. |
+
+## What 0.0.1 captures
+
+Ariadne 0.0.1 records only the factual data needed for re-entry:
+
+- active editor/file changes
+- selection changes used for the last saved location
+- edit occurrence, not edit content
+- deliberately attached external references with only URL, optional title, and capture timestamp
+- local Git snapshot state:
+  - availability
+  - repository root
+  - `HEAD`
+  - branch name or detached `HEAD`
+  - modified files
+  - untracked files
+  - diff stats
+- edited files
+- file visit counts
+- last saved location
+- an investigation-scoped navigation graph of observed file artifacts and collapsed factual relationships
+- a condensed investigation-scoped factual timeline of file transitions, collapsed edit events, checkpoint changes, Git snapshots, and save/resume points
+- an optional developer-authored checkpoint
+
+Ariadne 0.0.1 does not currently emit definition/reference navigation events. Those remain deferred until they can be detected reliably through supported VS Code APIs.
+
+## What 0.0.1 does not do
+
+Ariadne 0.0.1 does not include:
+
+- AI
+- graph visualizations, repository-wide dependency graphs, or general activity dashboards
+- automatic browser-history import or page-content capture
+- cloud sync
+- accounts or team features
+- exact workspace/tab/layout restoration
+- terminal, clipboard, screenshot, or keystroke capture
+- full source-code capture
+
+## Local storage
+
+- Saved investigations live under VS Code `globalStorageUri`.
+- Each investigation is stored as a schema-versioned JSON envelope.
+- Ariadne retains a `.bak` copy of the previous save for recovery.
+- Workspace file paths are stored relatively when possible and re-expanded on load.
+- The rolling event buffer remains in memory only and is not persisted as full raw events.
+- Saved investigations persist a condensed investigation timeline and a collapsed Investigation navigation graph for re-entry; they do not persist an exhaustive activity log or a repository architecture model.
+- Attached browser references remain minimal and deliberate; Ariadne does not import browser history or capture page contents.
+
+## Source-of-truth docs
+
+- [`docs/PRODUCT_BASELINE.md`](docs/PRODUCT_BASELINE.md)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/DECISIONS.md`](docs/DECISIONS.md)
+- [`docs/VALIDATION.md`](docs/VALIDATION.md)
+- [`docs/AGENT_HANDOFF.md`](docs/AGENT_HANDOFF.md)
+
+## Development
+
+### Prerequisites
+
+- Node.js (LTS)
+- VS Code
+
+### Setup
+
+```bash
+npm install
+```
+
+### Commands
+
+| Command | Description |
+|---|---|
+| `npm run compile` | Compile TypeScript to `out/` |
+| `npm run watch` | Compile in watch mode |
+| `npm run lint` | Run ESLint on `src/` |
+| `npm run typecheck` | Type-check without emitting |
+| `npm run test:unit` | Run unit tests without launching VS Code |
+| `npm test` | Run extension-host tests with `@vscode/test-cli` |
+| `npm run package` | Build a `.vsix` package with `vsce` |
+
+### Run locally
+
+1. Open this folder in VS Code.
+2. Press **F5** to launch the Extension Development Host.
+3. Use the Ariadne commands from the Command Palette.
+
+### Verification
+
+```bash
+npm run compile
+npm run lint
+npm run typecheck
+npm run test:unit
+npm test
+npm run package
+```

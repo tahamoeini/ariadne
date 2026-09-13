@@ -1,0 +1,17 @@
+[package]
+name = "ariadne-platform-windows"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ariadne-core.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_System_ProcessStatus",
+  "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
+] }
