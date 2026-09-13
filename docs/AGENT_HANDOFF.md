@@ -96,10 +96,10 @@ VS Code adapter is connected to Core.
 | Category | Current state |
 |---|---|
 | Implemented | Rust Thread domain, bounded rolling context, SQLite persistence, tombstones, generation checks, policy persistence, deterministic active-thread reconciliation, Tauri lifecycle commands, desktop state refresh, protocol framing/session validation, Windows foreground observation boundary, single-instance plugin |
-| Verified | Root TypeScript compile/lint/typecheck/unit suite; desktop frontend `npm ci` and production build; portable Rust fmt/check/clippy/tests; deterministic P0 regression tests |
-| Remaining | Full workspace Tauri verification; Windows sensor and Tauri build; actual authenticated named-pipe transport; VS Code-to-Core adapter; tray; start-at-login; browser adapter; migration startup wiring; full deterministic race suite; installer artifact |
+| Verified | Local TypeScript and desktop frontend checks; hosted Rust fmt/clippy/full tests/full build; hosted Windows Tauri package and artifact upload; deterministic P0 regression tests |
+| Remaining | Actual authenticated named-pipe transport; VS Code-to-Core adapter; tray; start-at-login; browser adapter; migration startup wiring; full deterministic race suite; runtime crash/restart validation; performance measurement |
 | Deferred | macOS/Linux sensors, Android companion, cloud/accounts/sync, AI/LLM/embeddings, telemetry, screenshots, clipboard/keystrokes, content capture, productivity scoring |
-| Known failures | Full desktop Rust verification is **NOT VERIFIED** locally because the container lacks `pkg-config` and GTK/WebKit development libraries; Windows runtime and installer evidence remain pending |
+| Known failures | Full desktop Rust verification is **NOT VERIFIED** locally because the container lacks `pkg-config` and GTK/WebKit development libraries; Windows runtime behavior is not externally validated |
 
 Do not describe the Windows MVP as complete until the Remaining items that are
 part of the Windows continuity loop have actual build and runtime evidence.
