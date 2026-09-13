@@ -1,5 +1,7 @@
 # Ariadne 0.0.1 — Architectural Decision Records
 
+> Historical ADRs remain unchanged. Platform migration decisions are additive and documented in [`DECISIONS_PLATFORM.md`](DECISIONS_PLATFORM.md).
+
 ## ADR-001: VS Code Only
 
 **Decision:** Ariadne 0.0.1 targets VS Code desktop exclusively.

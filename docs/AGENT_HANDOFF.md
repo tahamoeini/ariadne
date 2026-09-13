@@ -1,5 +1,7 @@
 # Ariadne — Agent Handoff
 
+> Historical VS Code-extension handoff. The current platform migration handoff is [`AGENT_HANDOFF_PLATFORM.md`](AGENT_HANDOFF_PLATFORM.md).
+
 ## Current Milestone
 
 **Prompt 10 — Deliberate Browser References for Re-entry**
