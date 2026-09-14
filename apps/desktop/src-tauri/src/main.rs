@@ -753,11 +753,14 @@ fn start_foreground_sensor(app: tauri::AppHandle) {
     use ariadne_core::{
         ApplicationContext, ArtifactKind, ArtifactRef, ContextEvent, ContextEventType,
     };
-    use ariadne_platform_windows::observe_foreground;
+    use ariadne_platform_windows::{
+        observe_foreground, observe_idle, DEFAULT_IDLE_THRESHOLD_MS,
+    };
     use std::time::Duration;
 
     std::thread::spawn(move || {
         let mut previous: Option<ariadne_platform_windows::ForegroundObservation> = None;
+        let mut previous_idle: Option<bool> = None;
         loop {
             match observe_foreground() {
                 Err(_) => {
@@ -818,6 +821,52 @@ fn start_foreground_sensor(app: tauri::AppHandle) {
                 }
                 Ok(None) => {}
             }
+
+            match observe_idle(DEFAULT_IDLE_THRESHOLD_MS) {
+                Ok(observation) => {
+                    if previous_idle != Some(observation.is_idle) {
+                        let event_type = if observation.is_idle {
+                            ContextEventType::IdleStarted
+                        } else {
+                            ContextEventType::IdleEnded
+                        };
+                        let event = ContextEvent {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            timestamp: now(),
+                            event_type,
+                            application: None,
+                            artifact: None,
+                            workspace: None,
+                            location: None,
+                            source: "windows".into(),
+                            private_browsing: false,
+                        };
+                        let state = app.state::<AppState>();
+                        if let Ok(mut engine) = state.engine.lock() {
+                            if engine.record(event, &now()) {
+                                if let Some(active) = engine.active_thread().cloned() {
+                                    if let Err(error) = persist_thread(&state, &active) {
+                                        if let Ok(mut error_state) =
+                                            state.persistence_error.lock()
+                                        {
+                                            *error_state = Some(error);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        previous_idle = Some(observation.is_idle);
+                        notify_state(&app);
+                    }
+                }
+                Err(_) => {
+                    if let Ok(mut sensor_state) = app.state::<AppState>().sensor_state.lock() {
+                        *sensor_state = "degraded".into();
+                    }
+                    notify_state(&app);
+                }
+            }
+
             std::thread::sleep(Duration::from_secs(2));
         }
     });
