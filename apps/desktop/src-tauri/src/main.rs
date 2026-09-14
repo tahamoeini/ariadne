@@ -72,7 +72,8 @@ fn load_or_create_ipc_token(data_dir: &Path) -> Result<String, String> {
     }
     match options.open(&path) {
         Ok(mut file) => {
-            file.write_all(token.as_bytes()).map_err(|error| error.to_string())?;
+            file.write_all(token.as_bytes())
+                .map_err(|error| error.to_string())?;
             Ok(token)
         }
         Err(_) => fs::read_to_string(&path)
@@ -106,7 +107,10 @@ fn import_legacy_directory(store: &mut Store, data_dir: &Path) -> Result<(), Str
         .map_err(|error| error.to_string())?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "json"))
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "json")
+        })
         .collect::<Vec<_>>();
     files.sort();
     for path in files {
@@ -516,10 +520,11 @@ fn set_start_at_login_impl(enabled: bool) -> Result<(), String> {
         RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegSetValueExW, HKEY_CURRENT_USER,
         KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ,
     };
-    let key_name: Vec<u16> = std::ffi::OsStr::new("Software\\Microsoft\\Windows\\CurrentVersion\\Run")
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
+    let key_name: Vec<u16> =
+        std::ffi::OsStr::new("Software\\Microsoft\\Windows\\CurrentVersion\\Run")
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
     let value_name: Vec<u16> = std::ffi::OsStr::new("Ariadne")
         .encode_wide()
         .chain(std::iter::once(0))
@@ -604,10 +609,7 @@ fn open_resume_resource(reference: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn execute_resume_actions(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<String>, String> {
+fn execute_resume_actions(id: String, state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let engine = state.engine.lock().map_err(|_| "core lock poisoned")?;
     let plan = engine
         .resume_plan(&id)
@@ -673,7 +675,9 @@ fn handle_adapter_connection(
                     notify_state(app);
                 }
             }
-            AdapterMessage::AttachReference { source, url, title, .. } => {
+            AdapterMessage::AttachReference {
+                source, url, title, ..
+            } => {
                 let state = app.state::<AppState>();
                 let mut engine = state.engine.lock().map_err(|_| "core lock poisoned")?;
                 if engine
@@ -702,7 +706,7 @@ fn handle_adapter_connection(
 
 fn start_ipc_server(app: tauri::AppHandle, endpoint: String, token: String) {
     std::thread::spawn(move || {
-            let listener = match LocalListener::bind(&endpoint) {
+        let listener = match LocalListener::bind(&endpoint) {
             Ok(listener) => listener,
             Err(error) => {
                 append_log(&app, "local adapter listener failed");
@@ -819,10 +823,9 @@ pub fn run() {
             import_legacy_directory(&mut store, &data_dir).map_err(std::io::Error::other)?;
             let policy = store.load_capture_policy()?;
             let generation = store.generation()?;
-            let ipc_token = load_or_create_ipc_token(&data_dir)
-                .map_err(std::io::Error::other)?;
-            let ipc_endpoint = write_ipc_descriptor(&data_dir, &ipc_token)
-                .map_err(std::io::Error::other)?;
+            let ipc_token = load_or_create_ipc_token(&data_dir).map_err(std::io::Error::other)?;
+            let ipc_endpoint =
+                write_ipc_descriptor(&data_dir, &ipc_token).map_err(std::io::Error::other)?;
             let mut revisions = HashMap::new();
             let mut engine = CoreEngine::new(RollingContext::default(), policy);
 
