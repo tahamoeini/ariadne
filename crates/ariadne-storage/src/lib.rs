@@ -293,9 +293,7 @@ mod tests {
         let mut newer = original.clone();
         newer.name = "newer".into();
         newer.saved_at = "2026-01-01T00:01:00Z".into();
-        let second = store
-            .save_thread(&newer, Some(first.revision), 0)
-            .unwrap();
+        let second = store.save_thread(&newer, Some(first.revision), 0).unwrap();
         assert_eq!(second.revision, 2);
 
         let error = store
