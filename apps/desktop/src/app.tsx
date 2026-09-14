@@ -14,6 +14,12 @@ type Thread = {
   artifacts?: Array<{ display_name: string; kind: string; visit_count: number; edit_count: number }>;
   timeline?: Array<{ timestamp: string; event_type: string; count: number }>;
   references?: Array<{ url: string; title?: string | null }>;
+  events?: Array<{
+    timestamp: string;
+    event_type: string;
+    application?: { identity: string; display_name: string } | null;
+  }>;
+  graph?: { nodes: Array<{ artifact_id: string }>; edges: Array<{ from_artifact_id: string; to_artifact_id: string; count: number }> };
 };
 type Status = {
   capture_state: string;
@@ -43,6 +49,7 @@ export function App() {
   const [excludedApplications, setExcludedApplications] = useState('');
   const [excludedDomains, setExcludedDomains] = useState('');
   const [dataLocation, setDataLocation] = useState('');
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
 
   async function refresh() {
     try {
@@ -202,6 +209,7 @@ export function App() {
   }
 
   const active = status?.active_thread;
+  const selectedThread = threads.find((thread) => thread.id === selectedThreadId) ?? null;
 
   return (
     <main className="shell">
@@ -314,6 +322,9 @@ export function App() {
                   </p>
                 </div>
                 <div className="thread-actions">
+                  <button className="quiet" onClick={() => setSelectedThreadId(thread.id)}>
+                    {selectedThreadId === thread.id ? 'Hide details' : 'Details'}
+                  </button>
                   {!thread.active && <button className="quiet" onClick={() => void resumeAndOpen(thread.id)}>Resume</button>}
                   <button className="danger" onClick={() => void deleteThread(thread.id)}>Delete</button>
                 </div>
@@ -322,6 +333,40 @@ export function App() {
           </div>
         )}
       </section>
+
+      {selectedThread && (
+        <section className="card" aria-label="Thread details">
+          <div className="section-title">
+            <h2>{selectedThread.name}</h2>
+            <button className="quiet" onClick={() => setSelectedThreadId(null)}>Close</button>
+          </div>
+          <p className="hint">
+            {selectedThread.active ? 'Active Thread' : 'Saved Thread'} · workspace {selectedThread.workspace || 'not recorded'} · repository {selectedThread.repository || 'not recorded'}
+          </p>
+          <div className="settings-grid">
+            <div>
+              <h3>Applications and artifacts</h3>
+              <p>{selectedThread.artifacts?.map((artifact) => artifact.display_name).join(', ') || 'No artifacts recorded.'}</p>
+            </div>
+            <div>
+              <h3>Graph summary</h3>
+              <p>{selectedThread.graph?.nodes.length ?? 0} nodes · {selectedThread.graph?.edges.length ?? 0} transitions</p>
+            </div>
+          </div>
+          <h3>Timeline</h3>
+          <ul>
+            {(selectedThread.timeline ?? []).slice(-12).map((entry) => (
+              <li key={entry.timestamp + entry.event_type}>{new Date(entry.timestamp).toLocaleString()} · {readableState(entry.event_type)} · {entry.count}</li>
+            ))}
+          </ul>
+          <h3>References</h3>
+          <ul>
+            {(selectedThread.references ?? []).map((reference) => (
+              <li key={reference.url}><a href={reference.url} target="_blank" rel="noreferrer">{reference.title || reference.url}</a></li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <footer>
         <span>Local data only</span>
