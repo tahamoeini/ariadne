@@ -13,6 +13,14 @@ pub enum SensorError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub const DEFAULT_IDLE_THRESHOLD_MS: u32 = 5 * 60 * 1_000;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdleObservation {
+    pub is_idle: bool,
+    pub idle_for_ms: u32,
+}
+
 pub struct ForegroundObservation {
     pub application_identity: String,
     pub display_name: String,
@@ -76,6 +84,31 @@ pub fn observe_foreground() -> Result<Option<ForegroundObservation>, SensorError
         display_name,
         window_title: None,
     }))
+}
+
+#[cfg(windows)]
+pub fn observe_idle(threshold_ms: u32) -> Result<IdleObservation, SensorError> {
+    use std::mem::size_of;
+    use windows_sys::Win32::System::SystemInformation::GetTickCount;
+    use windows_sys::Win32::UI::Input::Keyboard::{GetLastInputInfo, LASTINPUTINFO};
+
+    let mut info = LASTINPUTINFO {
+        cbSize: size_of::<LASTINPUTINFO>() as u32,
+        dwTime: 0,
+    };
+    if unsafe { GetLastInputInfo(&mut info) } == 0 {
+        return Err(SensorError::Api);
+    }
+    let idle_for_ms = unsafe { GetTickCount() }.wrapping_sub(info.dwTime);
+    Ok(IdleObservation {
+        is_idle: idle_for_ms >= threshold_ms,
+        idle_for_ms,
+    })
+}
+
+#[cfg(not(windows))]
+pub fn observe_idle(_threshold_ms: u32) -> Result<IdleObservation, SensorError> {
+    Err(SensorError::Unsupported)
 }
 
 #[cfg(not(windows))]
