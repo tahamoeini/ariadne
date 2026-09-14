@@ -24,6 +24,7 @@ struct AppState {
     cursor: Mutex<PersistenceCursor>,
     persistence_error: Mutex<Option<String>>,
     sensor_state: Mutex<String>,
+    adapter_state: Mutex<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -32,6 +33,7 @@ struct Status {
     active_thread: Option<ariadne_core::Thread>,
     persistence_state: String,
     sensor_state: String,
+    adapter_state: String,
     thread_count: usize,
 }
 
@@ -131,10 +133,17 @@ fn append_log(app: &tauri::AppHandle, message: &str) {
     };
     let _ = fs::create_dir_all(&data_dir);
     let line = format!("{} {}\n", now(), message);
+    let path = data_dir.join("ariadne.log");
+    if fs::metadata(&path)
+        .map(|metadata| metadata.len() > 256 * 1024)
+        .unwrap_or(false)
+    {
+        let _ = fs::rename(&path, data_dir.join("ariadne.log.1"));
+    }
     let _ = fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(data_dir.join("ariadne.log"))
+        .open(path)
         .and_then(|mut file| file.write_all(line.as_bytes()));
 }
 
@@ -184,6 +193,11 @@ fn get_status(state: State<'_, AppState>) -> Result<Status, String> {
         .lock()
         .map_err(|_| "sensor state lock poisoned")?
         .clone();
+    let adapter_state = state
+        .adapter_state
+        .lock()
+        .map_err(|_| "adapter state lock poisoned")?
+        .clone();
 
     let capture_state = match engine.policy.pause_state(&now()) {
         ariadne_core::PauseState::Running => "running",
@@ -196,6 +210,7 @@ fn get_status(state: State<'_, AppState>) -> Result<Status, String> {
         active_thread: engine.active_thread().cloned(),
         persistence_state,
         sensor_state,
+        adapter_state,
         thread_count: store
             .list_threads()
             .map_err(|error| error.to_string())?
@@ -710,8 +725,8 @@ fn start_ipc_server(app: tauri::AppHandle, endpoint: String, token: String) {
             Ok(listener) => listener,
             Err(error) => {
                 append_log(&app, "local adapter listener failed");
-                if let Ok(mut sensor_state) = app.state::<AppState>().sensor_state.lock() {
-                    *sensor_state = format!("ipc degraded: {error}");
+                if let Ok(mut adapter_state) = app.state::<AppState>().adapter_state.lock() {
+                    *adapter_state = format!("degraded: {error}");
                 }
                 notify_state(&app);
                 return;
@@ -719,8 +734,16 @@ fn start_ipc_server(app: tauri::AppHandle, endpoint: String, token: String) {
         };
         while let Ok(stream) = listener.accept() {
             append_log(&app, "local adapter connected");
+            if let Ok(mut adapter_state) = app.state::<AppState>().adapter_state.lock() {
+                *adapter_state = "connected".into();
+            }
+            notify_state(&app);
             let _ = handle_adapter_connection(&app, stream, &token);
             append_log(&app, "local adapter disconnected");
+            if let Ok(mut adapter_state) = app.state::<AppState>().adapter_state.lock() {
+                *adapter_state = "disconnected".into();
+            }
+            notify_state(&app);
         }
     });
 }
@@ -842,6 +865,7 @@ pub fn run() {
                 } else {
                     "unsupported".into()
                 }),
+                adapter_state: Mutex::new("disconnected".into()),
             });
             let menu = MenuBuilder::new(app)
                 .text("open", "Open Ariadne")
