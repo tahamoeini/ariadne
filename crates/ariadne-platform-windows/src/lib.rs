@@ -89,7 +89,7 @@ pub fn observe_foreground() -> Result<Option<ForegroundObservation>, SensorError
 pub fn observe_idle(threshold_ms: u32) -> Result<IdleObservation, SensorError> {
     use std::mem::size_of;
     use windows_sys::Win32::System::SystemInformation::GetTickCount;
-    use windows_sys::Win32::UI::Input::Keyboard::{GetLastInputInfo, LASTINPUTINFO};
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 
     let mut info = LASTINPUTINFO {
         cbSize: size_of::<LASTINPUTINFO>() as u32,
