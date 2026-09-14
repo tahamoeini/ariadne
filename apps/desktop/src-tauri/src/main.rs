@@ -1,13 +1,13 @@
 use ariadne_core::{CapturePolicy, CoreEngine, RollingContext};
 use ariadne_protocol::{
-    AdapterHello, AdapterMessage, AdapterSession, LocalListener, LocalStream, PROTOCOL_VERSION,
+    AdapterMessage, AdapterSession, LocalListener, LocalStream, PROTOCOL_VERSION,
 };
 use ariadne_storage::{import_legacy_investigation_json, Store};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Mutex;
 use tauri::menu::MenuBuilder;
 use tauri::tray::TrayIconBuilder;
