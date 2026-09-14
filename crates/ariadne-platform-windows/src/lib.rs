@@ -25,11 +25,9 @@ pub struct ForegroundObservation {
 pub fn observe_foreground() -> Result<Option<ForegroundObservation>, SensorError> {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
-    use std::ptr::null_mut;
     use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::ProcessStatus::GetModuleFileNameExW;
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         GetForegroundWindow, GetWindowThreadProcessId,
@@ -48,18 +46,20 @@ pub fn observe_foreground() -> Result<Option<ForegroundObservation>, SensorError
     if process_id == 0 {
         return Err(SensorError::Api);
     }
-    let process =
-        unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, process_id) };
+    // QueryFullProcessImageNameW with PROCESS_QUERY_LIMITED_INFORMATION is
+    // sufficient for identity and avoids requesting VM_READ access.
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, process_id) };
     if process.is_null() {
         return Err(SensorError::Api);
     }
     let mut path = [0u16; 1024];
-    let path_len =
-        unsafe { GetModuleFileNameExW(process, null_mut(), path.as_mut_ptr(), path.len() as u32) };
+    let mut path_len = path.len() as u32;
+    let succeeded =
+        unsafe { QueryFullProcessImageNameW(process, 0, path.as_mut_ptr(), &mut path_len) };
     unsafe {
         CloseHandle(process);
     }
-    if path_len == 0 {
+    if succeeded == 0 || path_len == 0 {
         return Err(SensorError::Api);
     }
     let executable = OsString::from_wide(&path[..path_len as usize])
