@@ -129,7 +129,9 @@ mod tests {
     fn exclusions_reject_application_and_browser_domain_events() {
         let mut policy = CapturePolicy::default();
         policy.excluded_applications.push("password-manager".into());
-        policy.excluded_browser_domains.push("private.example".into());
+        policy
+            .excluded_browser_domains
+            .push("private.example".into());
 
         let mut application_event = event(
             "application",
@@ -137,8 +139,7 @@ mod tests {
             ContextEventType::ApplicationFocused,
             Some("password-manager"),
         );
-        application_event.application.as_mut().unwrap().identity =
-            "password-manager".into();
+        application_event.application.as_mut().unwrap().identity = "password-manager".into();
         assert!(!policy.accepts(&application_event, "2026-01-01T00:00:01Z"));
 
         let browser_event = event(
