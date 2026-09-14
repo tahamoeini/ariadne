@@ -22,6 +22,11 @@ type Status = {
   sensor_state: string;
   thread_count: number;
 };
+type CapturePolicy = {
+  excluded_applications: string[];
+  excluded_browser_domains: string[];
+  capture_private_browsing: boolean;
+};
 
 function readableState(value: string): string {
   return value.replaceAll('_', ' ');
@@ -33,11 +38,20 @@ export function App() {
   const [name, setName] = useState('');
   const [checkpoint, setCheckpoint] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [policy, setPolicy] = useState<CapturePolicy | null>(null);
+  const [excludedApplications, setExcludedApplications] = useState('');
+  const [excludedDomains, setExcludedDomains] = useState('');
+  const [dataLocation, setDataLocation] = useState('');
 
   async function refresh() {
     try {
       setStatus(await invoke<Status>('get_status'));
       setThreads(await invoke<Thread[]>('list_threads'));
+      const nextPolicy = await invoke<CapturePolicy>('get_capture_policy');
+      setPolicy(nextPolicy);
+      setExcludedApplications(nextPolicy.excluded_applications.join('\n'));
+      setExcludedDomains(nextPolicy.excluded_browser_domains.join('\n'));
+      setDataLocation(await invoke<string>('get_data_location'));
       setError(null);
     } catch (reason) {
       setError(String(reason));
@@ -133,6 +147,18 @@ export function App() {
   async function pauseFor(minutes: number) {
     try {
       await invoke('set_timed_pause', { minutes });
+      await refresh();
+    } catch (reason) {
+      setError(String(reason));
+    }
+  }
+
+  async function savePrivacySettings() {
+    try {
+      await invoke('set_capture_exclusions', {
+        applications: excludedApplications.split(/[\n,]/),
+        domains: excludedDomains.split(/[\n,]/),
+      });
       await refresh();
     } catch (reason) {
       setError(String(reason));
@@ -239,6 +265,28 @@ export function App() {
           <p className="hint">Checkpoint text is always written by you; Ariadne never invents it.</p>
         </section>
       )}
+
+      <section className="card">
+        <h2>Privacy and settings</h2>
+        <p className="hint">Private browsing capture is {policy?.capture_private_browsing ? 'enabled' : 'off'} by default.</p>
+        <div className="settings-grid">
+          <label>
+            Excluded applications
+            <textarea value={excludedApplications} onChange={(event) => setExcludedApplications(event.target.value)} placeholder="One executable or identity per line" rows={3} />
+          </label>
+          <label>
+            Excluded browser domains
+            <textarea value={excludedDomains} onChange={(event) => setExcludedDomains(event.target.value)} placeholder="example.com" rows={3} />
+          </label>
+        </div>
+        <div className="row">
+          <button onClick={() => void savePrivacySettings()}>Save privacy settings</button>
+          <button className="quiet" onClick={() => void invoke('set_start_at_login', { enabled: true }).catch((reason) => setError(String(reason)))}>Enable Start at Login</button>
+          <button className="quiet" onClick={() => void invoke('set_start_at_login', { enabled: false }).catch((reason) => setError(String(reason)))}>Disable Start at Login</button>
+          <button className="quiet" onClick={() => void invoke('open_logs').catch((reason) => setError(String(reason)))}>Open Logs</button>
+        </div>
+        <p className="hint">Data location: {dataLocation || 'loading'}</p>
+      </section>
 
       <section>
         <div className="section-title"><h2>Recent Threads</h2><span>{threads.length}</span></div>
