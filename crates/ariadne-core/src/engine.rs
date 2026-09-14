@@ -329,6 +329,29 @@ impl CoreEngine {
             }
             key
         });
+
+        let coalescible = matches!(
+            &event.event_type,
+            ContextEventType::FileEdited
+                | ContextEventType::DocumentEdited
+                | ContextEventType::FileFocused
+                | ContextEventType::ApplicationFocused
+        );
+        let duplicate_low_value_event = coalescible
+            && thread.events.last().is_some_and(|previous| {
+                previous.event_type == event.event_type && previous.artifact == event.artifact
+            });
+        if duplicate_low_value_event {
+            if let Some(previous) = thread.events.last_mut() {
+                previous.timestamp = event.timestamp.clone();
+            }
+            if let Some(previous) = thread.timeline.last_mut() {
+                previous.timestamp = event.timestamp;
+                previous.count = previous.count.saturating_add(1);
+            }
+            return;
+        }
+
         thread.events.push(event.clone());
         if let Some(artifact_id) = artifact_id.clone() {
             push_node(
