@@ -40,9 +40,9 @@ jobs:
             librsvg2-dev \
             patchelf
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - run: cargo test --workspace --all-features
-      - run: cargo build --workspace --all-features
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - run: cargo test --workspace --all-features --locked
+      - run: cargo build --workspace --all-features --locked
 
   windows-desktop:
     name: Windows desktop build
