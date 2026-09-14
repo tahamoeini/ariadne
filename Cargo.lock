@@ -75,13 +75,16 @@ version = "0.1.0"
 dependencies = [
  "ariadne-core",
  "ariadne-platform-windows",
+ "ariadne-protocol",
  "ariadne-storage",
  "chrono",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",
  "uuid",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -101,6 +104,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

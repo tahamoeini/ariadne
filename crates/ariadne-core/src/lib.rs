@@ -95,6 +95,37 @@ mod tests {
     }
 
     #[test]
+    fn repeated_low_value_events_coalesce_without_dropping_lifecycle_events() {
+        let mut core = CoreEngine::default();
+        core.start_thread("test", "2026-01-01T00:00:00Z").unwrap();
+        for index in 0..100 {
+            assert!(core.record(
+                event(
+                    &format!("focus-{index}"),
+                    &format!("2026-01-01T00:00:{index:02}Z"),
+                    ContextEventType::FileFocused,
+                    Some("src/main.rs")
+                ),
+                "2026-01-01T00:02:00Z"
+            ));
+        }
+        let thread = core.active_thread().unwrap();
+        assert_eq!(thread.events.len(), 2);
+        assert_eq!(thread.timeline.last().unwrap().count, 100);
+        core.stop_thread("2026-01-01T00:03:00Z").unwrap();
+        assert!(matches!(
+            core.threads()
+                .next()
+                .unwrap()
+                .events
+                .last()
+                .unwrap()
+                .event_type,
+            ContextEventType::ThreadStopped
+        ));
+    }
+
+    #[test]
     fn expired_timed_pause_returns_to_running() {
         let mut policy = CapturePolicy::default();
         policy.set_timed_pause(Some("2026-01-01T00:10:00Z".into()));

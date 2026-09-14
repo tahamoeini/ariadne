@@ -20,7 +20,13 @@ type Status = {
   active_thread: Thread | null;
   persistence_state: string;
   sensor_state: string;
+  adapter_state: string;
   thread_count: number;
+};
+type CapturePolicy = {
+  excluded_applications: string[];
+  excluded_browser_domains: string[];
+  capture_private_browsing: boolean;
 };
 
 function readableState(value: string): string {
@@ -33,11 +39,20 @@ export function App() {
   const [name, setName] = useState('');
   const [checkpoint, setCheckpoint] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [policy, setPolicy] = useState<CapturePolicy | null>(null);
+  const [excludedApplications, setExcludedApplications] = useState('');
+  const [excludedDomains, setExcludedDomains] = useState('');
+  const [dataLocation, setDataLocation] = useState('');
 
   async function refresh() {
     try {
       setStatus(await invoke<Status>('get_status'));
       setThreads(await invoke<Thread[]>('list_threads'));
+      const nextPolicy = await invoke<CapturePolicy>('get_capture_policy');
+      setPolicy(nextPolicy);
+      setExcludedApplications(nextPolicy.excluded_applications.join('\n'));
+      setExcludedDomains(nextPolicy.excluded_browser_domains.join('\n'));
+      setDataLocation(await invoke<string>('get_data_location'));
       setError(null);
     } catch (reason) {
       setError(String(reason));
@@ -55,6 +70,31 @@ export function App() {
     return () => {
       unlisten?.();
     };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<string>('ariadne-tray-command', ({ payload }) => {
+      const commands: Record<string, () => Promise<unknown>> = {
+        start: () => invoke('start_thread', { name: 'Untitled Thread' }),
+        recent: () => invoke('save_recent_context', { name: 'Recent context' }),
+        stop: () => invoke('stop_thread'),
+        pause: () => invoke('set_capture_paused', { paused: true }),
+        resume: () => invoke('set_capture_paused', { paused: false }),
+        settings: async () => {
+          document.getElementById('privacy-settings')?.scrollIntoView({ behavior: 'smooth' });
+        },
+        checkpoint: async () => {
+          document.getElementById('checkpoint-input')?.scrollIntoView({ behavior: 'smooth' });
+          window.setTimeout(() => document.getElementById('checkpoint-input')?.focus(), 0);
+        },
+      };
+      const command = commands[payload];
+      if (command) void command().then(refresh).catch((reason) => setError(String(reason)));
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => unlisten?.();
   }, []);
 
   async function startThread() {
@@ -89,6 +129,16 @@ export function App() {
     }
   }
 
+  async function resumeAndOpen(id: string) {
+    try {
+      await invoke('resume_thread', { id });
+      await invoke('execute_resume_actions', { id });
+      await refresh();
+    } catch (reason) {
+      setError(String(reason));
+    }
+  }
+
   async function pauseManually() {
     try {
       await invoke('set_capture_paused', {
@@ -103,6 +153,18 @@ export function App() {
   async function pauseFor(minutes: number) {
     try {
       await invoke('set_timed_pause', { minutes });
+      await refresh();
+    } catch (reason) {
+      setError(String(reason));
+    }
+  }
+
+  async function savePrivacySettings() {
+    try {
+      await invoke('set_capture_exclusions', {
+        applications: excludedApplications.split(/[\n,]/),
+        domains: excludedDomains.split(/[\n,]/),
+      });
       await refresh();
     } catch (reason) {
       setError(String(reason));
@@ -165,12 +227,13 @@ export function App() {
           <span className="status-dot" />
           {readableState(status?.capture_state ?? 'loading')}
           <span className="muted"> · sensor {readableState(status?.sensor_state ?? 'checking')}</span>
+          <span className="muted"> · adapter {readableState(status?.adapter_state ?? 'checking')}</span>
           <span className="muted"> · storage {readableState(status?.persistence_state ?? 'checking')}</span>
         </div>
         <div className="active">{active ? `Active: ${active.name}` : 'No active Thread'}</div>
       </section>
 
-      <section className="card">
+      <section className="card" id="privacy-settings">
         <h2>Start or save context</h2>
         <div className="row">
           <input
@@ -196,6 +259,7 @@ export function App() {
           <h2>Checkpoint</h2>
           <div className="row">
             <input
+              id="checkpoint-input"
               value={checkpoint}
               onChange={(event) => setCheckpoint(event.target.value)}
               placeholder="What should you remember?"
@@ -209,6 +273,29 @@ export function App() {
           <p className="hint">Checkpoint text is always written by you; Ariadne never invents it.</p>
         </section>
       )}
+
+      <section className="card">
+        <h2>Privacy and settings</h2>
+        <p className="hint">Private browsing capture is {policy?.capture_private_browsing ? 'enabled' : 'off'} by default.</p>
+        <p className="hint">Adapter health: {readableState(status?.adapter_state ?? 'checking')}</p>
+        <div className="settings-grid">
+          <label>
+            Excluded applications
+            <textarea value={excludedApplications} onChange={(event) => setExcludedApplications(event.target.value)} placeholder="One executable or identity per line" rows={3} />
+          </label>
+          <label>
+            Excluded browser domains
+            <textarea value={excludedDomains} onChange={(event) => setExcludedDomains(event.target.value)} placeholder="example.com" rows={3} />
+          </label>
+        </div>
+        <div className="row">
+          <button onClick={() => void savePrivacySettings()}>Save privacy settings</button>
+          <button className="quiet" onClick={() => void invoke('set_start_at_login', { enabled: true }).catch((reason) => setError(String(reason)))}>Enable Start at Login</button>
+          <button className="quiet" onClick={() => void invoke('set_start_at_login', { enabled: false }).catch((reason) => setError(String(reason)))}>Disable Start at Login</button>
+          <button className="quiet" onClick={() => void invoke('open_logs').catch((reason) => setError(String(reason)))}>Open Logs</button>
+        </div>
+        <p className="hint">Data location: {dataLocation || 'loading'}</p>
+      </section>
 
       <section>
         <div className="section-title"><h2>Recent Threads</h2><span>{threads.length}</span></div>
@@ -227,7 +314,7 @@ export function App() {
                   </p>
                 </div>
                 <div className="thread-actions">
-                  {!thread.active && <button className="quiet" onClick={() => void invoke('resume_thread', { id: thread.id }).then(refresh).catch((reason) => setError(String(reason)))}>Resume</button>}
+                  {!thread.active && <button className="quiet" onClick={() => void resumeAndOpen(thread.id)}>Resume</button>}
                   <button className="danger" onClick={() => void deleteThread(thread.id)}>Delete</button>
                 </div>
               </article>

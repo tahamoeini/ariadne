@@ -1,7 +1,7 @@
 use crate::{
     bounded_text, build_resume_plan, CapturePolicy, Checkpoint, ContextArtifact, ContextEvent,
-    ContextEventType, ContextGraph, DomainError, GraphEdge, GraphNode, GraphRelationship,
-    ResumePlan, RollingContext, Thread, MAX_CHECKPOINT_LENGTH,
+    ContextEventType, ContextGraph, DomainError, ExternalReference, GraphEdge, GraphNode,
+    GraphRelationship, ResumePlan, RollingContext, Thread, MAX_CHECKPOINT_LENGTH,
 };
 use std::collections::HashMap;
 
@@ -216,6 +216,49 @@ impl CoreEngine {
         self.threads.get(id).map(build_resume_plan)
     }
 
+    pub fn attach_reference(
+        &mut self,
+        source: impl Into<String>,
+        url: String,
+        title: Option<String>,
+        now: impl Into<String>,
+    ) -> Result<bool, CoreError> {
+        let now = now.into();
+        let source = source.into();
+        let reference = self.policy.sanitize_reference(ExternalReference {
+            url: url.clone(),
+            title: title.clone(),
+            captured_at: now.clone(),
+        });
+        let Some(reference) = reference else {
+            return Ok(false);
+        };
+        let event = ContextEvent {
+            id: uuid::Uuid::new_v4().to_string(),
+            timestamp: now.clone(),
+            event_type: ContextEventType::ExplicitReference,
+            application: None,
+            artifact: Some(crate::ArtifactRef {
+                kind: crate::ArtifactKind::WebPage,
+                display_name: title.unwrap_or_else(|| url.clone()),
+                reference: url,
+            }),
+            workspace: None,
+            location: None,
+            source,
+            private_browsing: false,
+        };
+        if !self.policy.accepts(&event, &now) {
+            return Ok(false);
+        }
+        let thread = self.active_thread_mut()?;
+        thread.references.retain(|item| item.url != reference.url);
+        thread.references.push(reference);
+        Self::apply_to_thread(thread, event);
+        thread.saved_at = now;
+        Ok(true)
+    }
+
     pub fn delete_thread(&mut self, id: &str) -> bool {
         if self.active_thread_id.as_deref() == Some(id) {
             self.active_thread_id = None;
@@ -284,6 +327,29 @@ impl CoreEngine {
             }
             key
         });
+
+        let coalescible = matches!(
+            &event.event_type,
+            ContextEventType::FileEdited
+                | ContextEventType::DocumentEdited
+                | ContextEventType::FileFocused
+                | ContextEventType::ApplicationFocused
+        );
+        let duplicate_low_value_event = coalescible
+            && thread.events.last().is_some_and(|previous| {
+                previous.event_type == event.event_type && previous.artifact == event.artifact
+            });
+        if duplicate_low_value_event {
+            if let Some(previous) = thread.events.last_mut() {
+                previous.timestamp = event.timestamp.clone();
+            }
+            if let Some(previous) = thread.timeline.last_mut() {
+                previous.timestamp = event.timestamp;
+                previous.count = previous.count.saturating_add(1);
+            }
+            return;
+        }
+
         thread.events.push(event.clone());
         if let Some(artifact_id) = artifact_id.clone() {
             push_node(
