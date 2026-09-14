@@ -74,3 +74,29 @@ jobs:
             target/release/bundle/msi/*.msi
             target/release/bundle/nsis/*.exe
           if-no-files-found: error
+
+  browser:
+    name: Browser adapter boundary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install browser adapter dependencies
+        working-directory: adapters/browser
+        run: npm ci
+      - name: Build browser adapter
+        working-directory: adapters/browser
+        run: npm run build
+      - name: Lint browser adapter
+        working-directory: adapters/browser
+        run: npm run lint
+      - name: Typecheck browser adapter
+        working-directory: adapters/browser
+        run: npm run typecheck
+      - name: Test browser adapter
+        working-directory: adapters/browser
+        run: npm run test:unit
