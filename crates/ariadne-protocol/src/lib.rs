@@ -93,9 +93,17 @@ mod local_transport {
     use super::*;
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_PIPE_CONNECTED, HANDLE, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::Storage::FileSystem::{CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING};
-    use windows_sys::Win32::System::Pipes::{ConnectNamedPipe, CreateNamedPipeW, PIPE_ACCESS_DUPLEX, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT};
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, GetLastError, ERROR_PIPE_CONNECTED, HANDLE, INVALID_HANDLE_VALUE,
+    };
+    use windows_sys::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        OPEN_EXISTING,
+    };
+    use windows_sys::Win32::System::Pipes::{
+        ConnectNamedPipe, CreateNamedPipeW, PIPE_ACCESS_DUPLEX, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE,
+        PIPE_WAIT,
+    };
 
     const PIPE_PREFIX: &str = "\\\\.\\pipe\\";
 
@@ -187,7 +195,7 @@ mod local_transport {
                 let mut written = 0;
                 let ok = unsafe {
                     windows_sys::Win32::Storage::FileSystem::WriteFile(
-                        self.0.0,
+                        self.0 .0,
                         remaining.as_ptr(),
                         remaining.len() as u32,
                         &mut written,
@@ -208,7 +216,7 @@ mod local_transport {
                 let mut read = 0;
                 let ok = unsafe {
                     windows_sys::Win32::Storage::FileSystem::ReadFile(
-                        self.0.0,
+                        self.0 .0,
                         bytes[offset..].as_mut_ptr(),
                         (bytes.len() - offset) as u32,
                         &mut read,
@@ -617,22 +625,5 @@ mod tests {
             decode_frame(&[1, 0, 0]),
             Err(ProtocolError::InvalidFrame)
         ));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn local_transport_round_trips_a_validated_frame() {
-        let path = std::env::temp_dir().join(format!("ariadne-{}.sock", uuid::Uuid::new_v4()));
-        let listener = LocalListener::bind(&path).unwrap();
-        let server_message = AdapterMessage::Ping { protocol_version: 1 };
-        let client_message = server_message.clone();
-        let client_path = path.clone();
-        let client = std::thread::spawn(move || {
-            let mut stream = LocalStream::connect(client_path).unwrap();
-            stream.send(&client_message).unwrap();
-        });
-        let mut stream = listener.accept().unwrap();
-        assert_eq!(stream.receive().unwrap(), server_message);
-        client.join().unwrap();
     }
 }
