@@ -11,6 +11,7 @@ tauri-build = { version = "2.0", features = [] }
 [dependencies]
 ariadne-core.workspace = true
 ariadne-storage.workspace = true
+ariadne-protocol = { path = "../../../crates/ariadne-protocol" }
 ariadne-platform-windows = { path = "../../../crates/ariadne-platform-windows" }
 serde.workspace = true
 tauri = { version = "2.0", features = [] }
