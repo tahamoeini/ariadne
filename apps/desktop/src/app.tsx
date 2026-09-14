@@ -57,6 +57,26 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<string>('ariadne-tray-command', ({ payload }) => {
+      const commands: Record<string, () => Promise<unknown>> = {
+        start: () => invoke('start_thread', { name: 'Untitled Thread' }),
+        recent: () => invoke('save_recent_context', { name: 'Recent context' }),
+        stop: () => invoke('stop_thread'),
+        pause: () => invoke('set_capture_paused', { paused: true }),
+        resume: () => invoke('set_capture_paused', { paused: false }),
+        settings: async () => undefined,
+        checkpoint: async () => undefined,
+      };
+      const command = commands[payload];
+      if (command) void command().then(refresh).catch((reason) => setError(String(reason)));
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => unlisten?.();
+  }, []);
+
   async function startThread() {
     const trimmed = name.trim();
     if (!trimmed) return;
