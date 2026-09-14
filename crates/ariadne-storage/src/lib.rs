@@ -262,7 +262,6 @@ fn current_generation(connection: &Connection) -> Result<i64, rusqlite::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ariadne_core::ContextEvent;
 
     #[test]
     fn stale_revision_is_rejected() {
