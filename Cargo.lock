@@ -74,8 +74,8 @@ name = "ariadne-desktop"
 version = "0.1.0"
 dependencies = [
  "ariadne-core",
- "ariadne-protocol",
  "ariadne-platform-windows",
+ "ariadne-protocol",
  "ariadne-storage",
  "chrono",
  "serde",
@@ -83,6 +83,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-single-instance",
  "uuid",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
