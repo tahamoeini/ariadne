@@ -1,6 +1,6 @@
 # Ariadne VS Code Adapter
 
-This directory defines the migration boundary for the existing VS Code extension. The current implementation under `src/` remains the working sensor and legacy JSON-backed domain prototype until this adapter is connected to the local protocol.
+This directory defines the migration boundary for the existing VS Code extension. The implementation under `src/` remains usable migration compatibility, while `src/adapter/localProtocol.ts` forwards normalized observations to the authenticated local Ariadne Core endpoint when Desktop is installed.
 
 ## Intended facts
 
@@ -14,6 +14,6 @@ This directory defines the migration boundary for the existing VS Code extension
 
 The adapter observes supported VS Code events, normalizes them to the versioned local protocol, reconnects when the desktop Core restarts, and reports its capabilities. It does not own Thread lifecycle, storage, privacy policy, graph limits, or Resume ordering.
 
-## Deferred until protocol wiring
+## Compatibility boundary
 
-Do not remove the existing extension storage or commands until import parity, restart recovery, deletion behavior, and extension-host validation prove that the Core path is equivalent or better.
+The extension does not become the platform's canonical Thread owner. Its legacy JSON lifecycle is retained temporarily for migration and backward compatibility. Remove that path only after migration parity, restart recovery, deletion behavior, and extension-host validation are complete.
