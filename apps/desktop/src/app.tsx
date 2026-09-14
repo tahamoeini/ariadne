@@ -20,6 +20,7 @@ type Status = {
   active_thread: Thread | null;
   persistence_state: string;
   sensor_state: string;
+  adapter_state: string;
   thread_count: number;
 };
 type CapturePolicy = {
@@ -226,6 +227,7 @@ export function App() {
           <span className="status-dot" />
           {readableState(status?.capture_state ?? 'loading')}
           <span className="muted"> · sensor {readableState(status?.sensor_state ?? 'checking')}</span>
+          <span className="muted"> · adapter {readableState(status?.adapter_state ?? 'checking')}</span>
           <span className="muted"> · storage {readableState(status?.persistence_state ?? 'checking')}</span>
         </div>
         <div className="active">{active ? `Active: ${active.name}` : 'No active Thread'}</div>
@@ -275,6 +277,7 @@ export function App() {
       <section className="card">
         <h2>Privacy and settings</h2>
         <p className="hint">Private browsing capture is {policy?.capture_private_browsing ? 'enabled' : 'off'} by default.</p>
+        <p className="hint">Adapter health: {readableState(status?.adapter_state ?? 'checking')}</p>
         <div className="settings-grid">
           <label>
             Excluded applications
