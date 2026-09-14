@@ -109,6 +109,16 @@ export function App() {
     }
   }
 
+  async function resumeAndOpen(id: string) {
+    try {
+      await invoke('resume_thread', { id });
+      await invoke('execute_resume_actions', { id });
+      await refresh();
+    } catch (reason) {
+      setError(String(reason));
+    }
+  }
+
   async function pauseManually() {
     try {
       await invoke('set_capture_paused', {
@@ -247,7 +257,7 @@ export function App() {
                   </p>
                 </div>
                 <div className="thread-actions">
-                  {!thread.active && <button className="quiet" onClick={() => void invoke('resume_thread', { id: thread.id }).then(refresh).catch((reason) => setError(String(reason)))}>Resume</button>}
+                  {!thread.active && <button className="quiet" onClick={() => void resumeAndOpen(thread.id)}>Resume</button>}
                   <button className="danger" onClick={() => void deleteThread(thread.id)}>Delete</button>
                 </div>
               </article>
