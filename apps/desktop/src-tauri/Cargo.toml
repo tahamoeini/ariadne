@@ -14,7 +14,14 @@ ariadne-storage.workspace = true
 ariadne-protocol = { path = "../../../crates/ariadne-protocol" }
 ariadne-platform-windows = { path = "../../../crates/ariadne-platform-windows" }
 serde.workspace = true
-tauri = { version = "2.0", features = [] }
+tauri = { version = "2.0", features = ["tray-icon"] }
 tauri-plugin-single-instance = "2.0"
 chrono.workspace = true
 uuid.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_Registry",
+] }
