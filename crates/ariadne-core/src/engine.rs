@@ -225,13 +225,11 @@ impl CoreEngine {
     ) -> Result<bool, CoreError> {
         let now = now.into();
         let source = source.into();
-        let reference = self
-            .policy
-            .sanitize_reference(ExternalReference {
-                url: url.clone(),
-                title: title.clone(),
-                captured_at: now.clone(),
-            });
+        let reference = self.policy.sanitize_reference(ExternalReference {
+            url: url.clone(),
+            title: title.clone(),
+            captured_at: now.clone(),
+        });
         let Some(reference) = reference else {
             return Ok(false);
         };
