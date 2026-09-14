@@ -19,6 +19,7 @@ pub struct IdleObservation {
     pub is_idle: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForegroundObservation {
     pub application_identity: String,
     pub display_name: String,
