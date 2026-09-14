@@ -89,24 +89,24 @@
 
 ## Current platform implementation status
 
-The Rust platform foundation is now the authoritative direction. The existing
-Investigation lifecycle remains available as migration compatibility, while
-VS Code observations can now be forwarded to the authenticated local Core
-endpoint.
+The Rust platform foundation is the authoritative direction. The older
+Investigation lifecycle remains retained as migration compatibility; it is not
+the canonical desktop state owner.
 
 | Category | Current state |
 |---|---|
-| Implemented | Rust Thread domain, bounded rolling context with low-value coalescing, SQLite persistence, tombstones, generation checks, policy persistence, deterministic active-thread reconciliation, Tauri lifecycle commands, authenticated OS-local adapter transport, Core event/reference bridge, reconnecting VS Code adapter, tray, close-to-hide policy, bounded logs, Windows Start at Login command, bounded Resume actions, retained legacy-directory startup import |
-| Verified | Local TypeScript compile/lint/typecheck, 82 unit tests, desktop frontend build; hosted Rust/Windows verification remains required for the current transport and desktop changes |
-| Remaining | Browser adapter; complete settings UI for exclusions and adapter health; crash/restart runtime validation; full deterministic race/privacy/restart suite; Windows manual/runtime validation; performance measurement |
+| Implemented | Rust Thread/Core, SQLite storage, tombstones and generation/revision checks, persisted privacy policy and exclusions, deterministic active-thread reconciliation, authenticated OS-local adapter transport, Tauri lifecycle and Thread detail UI, bounded Resume actions, tray actions, bounded logs/Open Logs, reversible Windows Start at Login command, Windows foreground identity and idle transition observation, reconnecting VS Code adapter, retained legacy-directory startup import, tested browser adapter privacy boundary |
+| Verified | PR #12 hosted Rust/VS Code/Windows workflow #38 passed, including Windows MSI/NSIS artifact upload; local targeted Rust tests/clippy/format and TypeScript/frontend checks passed; PR #13 finalization workflow is the current validation gate |
+| Remaining | Native browser-extension/host registration and end-to-end browser-to-Core delivery; abrupt process termination/restart exercise; Windows runtime/manual UX validation; dynamic tray-state labels; queryable Start at Login setting; measured Windows performance; removal of legacy VS Code JSON compatibility after migration parity validation |
 | Deferred | macOS/Linux sensors, Android companion, cloud/accounts/sync, AI/LLM/embeddings, telemetry, screenshots, clipboard/keystrokes, content capture, productivity scoring |
-| Known failures | Full desktop Rust verification is **NOT VERIFIED** locally because the container lacks `pkg-config` and GTK/WebKit development libraries; Windows runtime behavior is not externally validated |
+| Known failures | Full desktop Rust verification is not locally reproducible in the container because GTK/WebKit development libraries are unavailable; Windows runtime behavior and performance are not externally validated; PR #13 hosted result must be checked before calling this branch green |
 
-Do not describe the Windows MVP as complete until the Remaining items that are
-part of the Windows continuity loop have actual build and runtime evidence.
+The finalization branch must not be described as a complete end-user Windows
+release until hosted PR #13 checks pass and Windows runtime/install/restart
+validation has actual evidence.
 
 ## Do Not Touch / Deferred
 
-- Do not add browser-history import, page-content capture, cloud sync, AI summarization, or broader browser-product features until the current deliberate reference flow is externally validated.
+- Do not add browser-history import, page-content capture, cloud sync, AI summarization, or broader browser-product features.
 - Do not add exact workspace/session restore behavior.
 - Do not redesign the architecture further unless a concrete defect requires it.
