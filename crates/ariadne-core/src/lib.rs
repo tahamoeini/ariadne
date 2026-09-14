@@ -114,7 +114,13 @@ mod tests {
         assert_eq!(thread.timeline.last().unwrap().count, 100);
         core.stop_thread("2026-01-01T00:03:00Z").unwrap();
         assert!(matches!(
-            core.threads().next().unwrap().events.last().unwrap().event_type,
+            core.threads()
+                .next()
+                .unwrap()
+                .events
+                .last()
+                .unwrap()
+                .event_type,
             ContextEventType::ThreadStopped
         ));
     }
