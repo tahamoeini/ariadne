@@ -1,7 +1,13 @@
 use ariadne_core::{CoreEngine, RollingContext};
+use ariadne_protocol::{
+    AdapterHello, AdapterMessage, AdapterSession, LocalListener, LocalStream, PROTOCOL_VERSION,
+};
 use ariadne_storage::Store;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State};
 
@@ -29,6 +35,63 @@ struct Status {
 
 fn now() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+#[derive(Serialize)]
+struct IpcDescriptor {
+    protocol_version: u32,
+    endpoint: String,
+    authorization_token: String,
+}
+
+fn ipc_endpoint(data_dir: &Path) -> String {
+    if cfg!(windows) {
+        "ariadne-v1".into()
+    } else {
+        data_dir.join("ariadne.sock").to_string_lossy().into_owned()
+    }
+}
+
+fn load_or_create_ipc_token(data_dir: &Path) -> Result<String, String> {
+    let path = data_dir.join("ipc-token");
+    if let Ok(value) = fs::read_to_string(&path) {
+        let value = value.trim().to_owned();
+        if !value.is_empty() {
+            return Ok(value);
+        }
+    }
+    let token = uuid::Uuid::new_v4().to_string();
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    match options.open(&path) {
+        Ok(mut file) => {
+            file.write_all(token.as_bytes()).map_err(|error| error.to_string())?;
+            Ok(token)
+        }
+        Err(_) => fs::read_to_string(&path)
+            .map(|value| value.trim().to_owned())
+            .map_err(|error| error.to_string()),
+    }
+}
+
+fn write_ipc_descriptor(data_dir: &Path, token: &str) -> Result<String, String> {
+    let endpoint = ipc_endpoint(data_dir);
+    let descriptor = serde_json::to_vec(&IpcDescriptor {
+        protocol_version: PROTOCOL_VERSION,
+        endpoint: endpoint.clone(),
+        authorization_token: token.to_owned(),
+    })
+    .map_err(|error| error.to_string())?;
+    let path = data_dir.join("ipc.json");
+    let temporary = data_dir.join("ipc.json.tmp");
+    fs::write(&temporary, descriptor).map_err(|error| error.to_string())?;
+    fs::rename(temporary, path).map_err(|error| error.to_string())?;
+    Ok(endpoint)
 }
 
 fn notify_state(app: &tauri::AppHandle) {
@@ -318,6 +381,90 @@ fn delete_all_data(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<
     Ok(count)
 }
 
+fn handle_adapter_connection(
+    app: &tauri::AppHandle,
+    mut stream: LocalStream,
+    expected_token: &str,
+) -> Result<(), String> {
+    let hello = stream.receive().map_err(|error| error.to_string())?;
+    let AdapterMessage::Hello(hello) = hello else {
+        return Err("adapter must begin with hello".into());
+    };
+    let session = AdapterSession::establish_authenticated(hello, expected_token)
+        .map_err(|error| error.to_string())?;
+    stream
+        .send(&AdapterMessage::Welcome {
+            protocol_version: PROTOCOL_VERSION,
+            adapter_id: session.adapter_id().to_owned(),
+        })
+        .map_err(|error| error.to_string())?;
+
+    loop {
+        let message = stream.receive().map_err(|error| error.to_string())?;
+        session
+            .accepts(&message)
+            .map_err(|error| error.to_string())?;
+        match message {
+            AdapterMessage::Event { event, .. } => {
+                let state = app.state::<AppState>();
+                let mut engine = state.engine.lock().map_err(|_| "core lock poisoned")?;
+                if engine.record(*event, &now()) {
+                    if let Some(active) = engine.active_thread().cloned() {
+                        record_persistence(&state, persist_thread(&state, &active))?;
+                    }
+                    notify_state(app);
+                }
+            }
+            AdapterMessage::AttachReference { source, url, title, .. } => {
+                let state = app.state::<AppState>();
+                let mut engine = state.engine.lock().map_err(|_| "core lock poisoned")?;
+                if engine
+                    .attach_reference(source, url, title, now())
+                    .map_err(|error| error.to_string())?
+                {
+                    if let Some(active) = engine.active_thread().cloned() {
+                        record_persistence(&state, persist_thread(&state, &active))?;
+                    }
+                    notify_state(app);
+                }
+            }
+            AdapterMessage::Ping { .. } => {
+                stream
+                    .send(&AdapterMessage::Ping {
+                        protocol_version: PROTOCOL_VERSION,
+                    })
+                    .map_err(|error| error.to_string())?;
+            }
+            AdapterMessage::Hello(_) | AdapterMessage::Welcome { .. } => {
+                return Err("unexpected protocol message".into());
+            }
+        }
+    }
+}
+
+fn start_ipc_server(app: tauri::AppHandle, endpoint: String, token: String) {
+    std::thread::spawn(move || {
+        let listener = match LocalListener::bind(&endpoint) {
+            Ok(listener) => listener,
+            Err(error) => {
+                if let Ok(mut sensor_state) = app.state::<AppState>().sensor_state.lock() {
+                    *sensor_state = format!("ipc degraded: {error}");
+                }
+                notify_state(&app);
+                return;
+            }
+        };
+        loop {
+            match listener.accept() {
+                Ok(stream) => {
+                    let _ = handle_adapter_connection(&app, stream, &token);
+                }
+                Err(_) => break,
+            }
+        }
+    });
+}
+
 #[cfg(windows)]
 fn start_foreground_sensor(app: tauri::AppHandle) {
     use ariadne_core::{
@@ -409,6 +556,10 @@ pub fn run() {
             let store = Store::open(data_dir.join("ariadne.sqlite"))?;
             let policy = store.load_capture_policy()?;
             let generation = store.generation()?;
+            let ipc_token = load_or_create_ipc_token(&data_dir)
+                .map_err(std::io::Error::other)?;
+            let ipc_endpoint = write_ipc_descriptor(&data_dir, &ipc_token)
+                .map_err(std::io::Error::other)?;
             let mut revisions = HashMap::new();
             let mut engine = CoreEngine::new(RollingContext::default(), policy);
 
@@ -431,6 +582,7 @@ pub fn run() {
                     "unsupported".into()
                 }),
             });
+            start_ipc_server(app.handle().clone(), ipc_endpoint, ipc_token);
             start_foreground_sensor(app.handle().clone());
             Ok(())
         })
