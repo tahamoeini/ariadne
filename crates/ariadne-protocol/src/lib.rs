@@ -98,11 +98,10 @@ mod local_transport {
     };
     use windows_sys::Win32::Storage::FileSystem::{
         CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-        OPEN_EXISTING,
+        OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
     };
     use windows_sys::Win32::System::Pipes::{
-        ConnectNamedPipe, CreateNamedPipeW, PIPE_ACCESS_DUPLEX, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE,
-        PIPE_WAIT,
+        ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT,
     };
 
     const PIPE_PREFIX: &str = "\\\\.\\pipe\\";
