@@ -1,4 +1,4 @@
-use ariadne_core::{CoreEngine, RollingContext};
+use ariadne_core::{CapturePolicy, CoreEngine, RollingContext};
 use ariadne_protocol::{
     AdapterHello, AdapterMessage, AdapterSession, LocalListener, LocalStream, PROTOCOL_VERSION,
 };
@@ -200,6 +200,23 @@ fn get_status(state: State<'_, AppState>) -> Result<Status, String> {
 }
 
 #[tauri::command]
+fn get_capture_policy(state: State<'_, AppState>) -> Result<CapturePolicy, String> {
+    state
+        .engine
+        .lock()
+        .map_err(|_| "core lock poisoned".into())
+        .map(|engine| engine.policy.clone())
+}
+
+#[tauri::command]
+fn get_data_location(app: tauri::AppHandle) -> Result<String, String> {
+    app.path()
+        .app_local_data_dir()
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn list_threads(state: State<'_, AppState>) -> Result<Vec<ariadne_core::Thread>, String> {
     state
         .store
@@ -308,12 +325,16 @@ fn set_capture_paused(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let mut engine = state.engine.lock().map_err(|_| "core lock poisoned")?;
+    let previous_policy = engine.policy.clone();
     engine.policy.set_manual_pause(paused);
     let mut store = state.store.lock().map_err(|_| "storage lock poisoned")?;
     let result = store
         .save_capture_policy(&engine.policy)
         .map_err(|error| error.to_string());
     let result = record_persistence(&state, result);
+    if result.is_err() {
+        engine.policy = previous_policy;
+    }
     if result.is_ok() {
         notify_state(&app);
     }
@@ -331,6 +352,7 @@ fn set_timed_pause(
     }
 
     let mut engine = state.engine.lock().map_err(|_| "core lock poisoned")?;
+    let previous_policy = engine.policy.clone();
     let until = chrono::Utc::now() + chrono::Duration::minutes(minutes as i64);
     engine.policy.set_timed_pause(Some(
         until.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
@@ -340,7 +362,44 @@ fn set_timed_pause(
         .save_capture_policy(&engine.policy)
         .map_err(|error| error.to_string());
     let result = record_persistence(&state, result);
+    if result.is_err() {
+        engine.policy = previous_policy;
+    }
     if result.is_ok() {
+        notify_state(&app);
+    }
+    result
+}
+
+#[tauri::command]
+fn set_capture_exclusions(
+    applications: Vec<String>,
+    domains: Vec<String>,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let mut engine = state.engine.lock().map_err(|_| "core lock poisoned")?;
+    let previous_policy = engine.policy.clone();
+    engine.policy.excluded_applications = applications
+        .into_iter()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .take(100)
+        .collect();
+    engine.policy.excluded_browser_domains = domains
+        .into_iter()
+        .map(|value| value.trim().trim_start_matches('.').to_ascii_lowercase())
+        .filter(|value| !value.is_empty() && !value.contains(['/', '?', '#']))
+        .take(100)
+        .collect();
+    let mut store = state.store.lock().map_err(|_| "storage lock poisoned")?;
+    let result = store
+        .save_capture_policy(&engine.policy)
+        .map_err(|error| error.to_string());
+    let result = record_persistence(&state, result);
+    if result.is_err() {
+        engine.policy = previous_policy;
+    } else {
         notify_state(&app);
     }
     result
@@ -826,6 +885,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_status,
+            get_capture_policy,
+            get_data_location,
             list_threads,
             start_thread,
             save_recent_context,
@@ -833,6 +894,7 @@ pub fn run() {
             resume_thread,
             set_capture_paused,
             set_timed_pause,
+            set_capture_exclusions,
             set_checkpoint,
             delete_thread,
             delete_all_data,
