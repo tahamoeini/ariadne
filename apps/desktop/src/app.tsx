@@ -80,8 +80,13 @@ export function App() {
         stop: () => invoke('stop_thread'),
         pause: () => invoke('set_capture_paused', { paused: true }),
         resume: () => invoke('set_capture_paused', { paused: false }),
-        settings: async () => undefined,
-        checkpoint: async () => undefined,
+        settings: async () => {
+          document.getElementById('privacy-settings')?.scrollIntoView({ behavior: 'smooth' });
+        },
+        checkpoint: async () => {
+          document.getElementById('checkpoint-input')?.scrollIntoView({ behavior: 'smooth' });
+          window.setTimeout(() => document.getElementById('checkpoint-input')?.focus(), 0);
+        },
       };
       const command = commands[payload];
       if (command) void command().then(refresh).catch((reason) => setError(String(reason)));
@@ -226,7 +231,7 @@ export function App() {
         <div className="active">{active ? `Active: ${active.name}` : 'No active Thread'}</div>
       </section>
 
-      <section className="card">
+      <section className="card" id="privacy-settings">
         <h2>Start or save context</h2>
         <div className="row">
           <input
@@ -252,6 +257,7 @@ export function App() {
           <h2>Checkpoint</h2>
           <div className="row">
             <input
+              id="checkpoint-input"
               value={checkpoint}
               onChange={(event) => setCheckpoint(event.target.value)}
               placeholder="What should you remember?"
