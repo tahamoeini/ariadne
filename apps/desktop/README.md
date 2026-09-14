@@ -14,4 +14,4 @@ The desktop application stores canonical state in a local SQLite database under 
 
 ## Current scope
 
-The shell currently demonstrates status, Thread creation, stop/resume, pause/resume capture, local persistence, startup hydration, and a Windows foreground-metadata sensor behind a Windows-only compilation boundary. Tray behavior, full settings/privacy surfaces, adapter IPC, and installable artifact validation remain hardening work.
+The shell provides status, Thread creation, recent-context save, checkpoint editing, stop/resume, pause/resume capture, persisted privacy settings, startup hydration, authenticated local adapter IPC, adapter health, tray behavior, close-to-hide, bounded Resume actions, local logs, and a Windows foreground-metadata sensor behind a Windows-only compilation boundary. Windows runtime validation remains an external validation step; browser-native integration is deferred.
