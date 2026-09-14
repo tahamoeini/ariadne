@@ -12,7 +12,6 @@ pub enum SensorError {
     Api,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub const DEFAULT_IDLE_THRESHOLD_MS: u32 = 5 * 60 * 1_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
