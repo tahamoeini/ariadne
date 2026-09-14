@@ -2,7 +2,7 @@ use ariadne_core::{CoreEngine, RollingContext};
 use ariadne_protocol::{
     AdapterHello, AdapterMessage, AdapterSession, LocalListener, LocalStream, PROTOCOL_VERSION,
 };
-use ariadne_storage::Store;
+use ariadne_storage::{import_legacy_investigation_json, Store};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
@@ -94,6 +94,27 @@ fn write_ipc_descriptor(data_dir: &Path, token: &str) -> Result<String, String> 
     fs::write(&temporary, descriptor).map_err(|error| error.to_string())?;
     fs::rename(temporary, path).map_err(|error| error.to_string())?;
     Ok(endpoint)
+}
+
+fn import_legacy_directory(store: &mut Store, data_dir: &Path) -> Result<(), String> {
+    let directory = data_dir.join("legacy");
+    if !directory.exists() {
+        return Ok(());
+    }
+    let generation = store.generation().map_err(|error| error.to_string())?;
+    let mut files = fs::read_dir(&directory)
+        .map_err(|error| error.to_string())?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "json"))
+        .collect::<Vec<_>>();
+    files.sort();
+    for path in files {
+        let contents = fs::read_to_string(&path).map_err(|error| error.to_string())?;
+        import_legacy_investigation_json(store, &contents, generation)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 fn notify_state(app: &tauri::AppHandle) {
@@ -735,7 +756,8 @@ pub fn run() {
             let data_dir = app.path().app_local_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             append_log(app.handle(), "startup");
-            let store = Store::open(data_dir.join("ariadne.sqlite"))?;
+            let mut store = Store::open(data_dir.join("ariadne.sqlite"))?;
+            import_legacy_directory(&mut store, &data_dir).map_err(std::io::Error::other)?;
             let policy = store.load_capture_policy()?;
             let generation = store.generation()?;
             let ipc_token = load_or_create_ipc_token(&data_dir)
