@@ -43,6 +43,11 @@
           "minimum": 0,
           "maximum": 3600,
           "description": "Debounce interval for automatic active-investigation persistence. Set to 0 to disable autosave between explicit save points."
+        },
+        "ariadne.ipc.configPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to Ariadne Desktop's local IPC descriptor. Leave empty until Desktop is installed."
         }
       }
     },
