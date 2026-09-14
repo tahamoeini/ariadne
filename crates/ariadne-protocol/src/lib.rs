@@ -5,11 +5,243 @@
 use ariadne_core::ContextEvent;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::io::{self, Read, Write};
+use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
 
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const MAX_MESSAGE_BYTES: usize = 128 * 1024;
 pub const DEFAULT_QUEUE_CAPACITY: usize = 256;
 pub const FRAME_HEADER_BYTES: usize = 4;
+
+/// A blocking local-only transport. The OS endpoint is deliberately selected
+/// by this crate: Unix uses a filesystem Unix socket and Windows uses a named
+/// pipe. No TCP listener is ever created.
+#[derive(Debug, thiserror::Error)]
+pub enum TransportError {
+    #[error("transport I/O failed: {0}")]
+    Io(#[from] io::Error),
+    #[error(transparent)]
+    Protocol(#[from] ProtocolError),
+    #[error("transport endpoint is invalid")]
+    InvalidEndpoint,
+}
+
+#[cfg(unix)]
+mod local_transport {
+    use super::*;
+    use std::os::unix::net::{UnixListener, UnixStream};
+
+    pub struct LocalListener {
+        path: PathBuf,
+        listener: UnixListener,
+    }
+
+    pub struct LocalStream(UnixStream);
+
+    impl LocalListener {
+        pub fn bind(path: impl AsRef<Path>) -> Result<Self, TransportError> {
+            let path = path.as_ref().to_path_buf();
+            if path.as_os_str().is_empty() {
+                return Err(TransportError::InvalidEndpoint);
+            }
+            let _ = std::fs::remove_file(&path);
+            let listener = UnixListener::bind(&path)?;
+            Ok(Self { path, listener })
+        }
+
+        pub fn accept(&self) -> Result<LocalStream, TransportError> {
+            Ok(LocalStream(self.listener.accept()?.0))
+        }
+    }
+
+    impl Drop for LocalListener {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+
+    impl LocalStream {
+        pub fn connect(path: impl AsRef<Path>) -> Result<Self, TransportError> {
+            Ok(Self(UnixStream::connect(path)?))
+        }
+
+        pub fn send(&mut self, message: &AdapterMessage) -> Result<(), TransportError> {
+            let frame = encode_frame(message)?;
+            self.0.write_all(&frame)?;
+            self.0.flush()?;
+            Ok(())
+        }
+
+        pub fn receive(&mut self) -> Result<AdapterMessage, TransportError> {
+            let mut header = [0u8; FRAME_HEADER_BYTES];
+            self.0.read_exact(&mut header)?;
+            let length = u32::from_le_bytes(header) as usize;
+            if length > MAX_MESSAGE_BYTES {
+                return Err(ProtocolError::TooLarge.into());
+            }
+            let mut payload = vec![0u8; length];
+            self.0.read_exact(&mut payload)?;
+            decode(&payload).map_err(TransportError::from)
+        }
+    }
+}
+
+#[cfg(windows)]
+mod local_transport {
+    use super::*;
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_PIPE_CONNECTED, HANDLE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Storage::FileSystem::{CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING};
+    use windows_sys::Win32::System::Pipes::{ConnectNamedPipe, CreateNamedPipeW, PIPE_ACCESS_DUPLEX, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT};
+
+    const PIPE_PREFIX: &str = "\\\\.\\pipe\\";
+
+    fn wide(value: &OsStr) -> Vec<u16> {
+        value.encode_wide().chain(std::iter::once(0)).collect()
+    }
+
+    fn endpoint(name: &str) -> Result<Vec<u16>, TransportError> {
+        if name.trim().is_empty() || name.contains(['\\', '/']) {
+            return Err(TransportError::InvalidEndpoint);
+        }
+        Ok(wide(OsStr::new(&format!("{PIPE_PREFIX}{name}"))))
+    }
+
+    struct Handle(HANDLE);
+
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            if self.0 != INVALID_HANDLE_VALUE && !self.0.is_null() {
+                unsafe { CloseHandle(self.0) };
+            }
+        }
+    }
+
+    pub struct LocalListener {
+        name: String,
+    }
+
+    pub struct LocalStream(Handle);
+
+    impl LocalListener {
+        pub fn bind(name: impl AsRef<Path>) -> Result<Self, TransportError> {
+            let name = name.as_ref().to_string_lossy().into_owned();
+            if name.trim().is_empty() || name.contains(['\\', '/']) {
+                return Err(TransportError::InvalidEndpoint);
+            }
+            Ok(Self { name })
+        }
+
+        pub fn accept(&self) -> Result<LocalStream, TransportError> {
+            let name = endpoint(&self.name)?;
+            let handle = unsafe {
+                CreateNamedPipeW(
+                    name.as_ptr(),
+                    PIPE_ACCESS_DUPLEX,
+                    PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+                    1,
+                    (MAX_MESSAGE_BYTES + FRAME_HEADER_BYTES) as u32,
+                    (MAX_MESSAGE_BYTES + FRAME_HEADER_BYTES) as u32,
+                    0,
+                    std::ptr::null(),
+                )
+            };
+            if handle == INVALID_HANDLE_VALUE || handle.is_null() {
+                return Err(io::Error::last_os_error().into());
+            }
+            let connected = unsafe { ConnectNamedPipe(handle, std::ptr::null_mut()) };
+            if connected == 0 && unsafe { GetLastError() } != ERROR_PIPE_CONNECTED {
+                return Err(io::Error::last_os_error().into());
+            }
+            Ok(LocalStream(Handle(handle)))
+        }
+    }
+
+    impl LocalStream {
+        pub fn connect(name: impl AsRef<Path>) -> Result<Self, TransportError> {
+            let endpoint = endpoint(&name.as_ref().to_string_lossy())?;
+            let handle = unsafe {
+                CreateFileW(
+                    endpoint.as_ptr(),
+                    FILE_GENERIC_READ | FILE_GENERIC_WRITE,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    std::ptr::null(),
+                    OPEN_EXISTING,
+                    0,
+                    std::ptr::null_mut(),
+                )
+            };
+            if handle == INVALID_HANDLE_VALUE || handle.is_null() {
+                return Err(io::Error::last_os_error().into());
+            }
+            Ok(Self(Handle(handle)))
+        }
+
+        fn write_all(&self, bytes: &[u8]) -> Result<(), TransportError> {
+            let mut offset = 0;
+            while offset < bytes.len() {
+                let remaining = &bytes[offset..];
+                let mut written = 0;
+                let ok = unsafe {
+                    windows_sys::Win32::Storage::FileSystem::WriteFile(
+                        self.0.0,
+                        remaining.as_ptr(),
+                        remaining.len() as u32,
+                        &mut written,
+                        std::ptr::null_mut(),
+                    )
+                };
+                if ok == 0 || written == 0 {
+                    return Err(io::Error::last_os_error().into());
+                }
+                offset += written as usize;
+            }
+            Ok(())
+        }
+
+        fn read_exact(&self, bytes: &mut [u8]) -> Result<(), TransportError> {
+            let mut offset = 0;
+            while offset < bytes.len() {
+                let mut read = 0;
+                let ok = unsafe {
+                    windows_sys::Win32::Storage::FileSystem::ReadFile(
+                        self.0.0,
+                        bytes[offset..].as_mut_ptr(),
+                        (bytes.len() - offset) as u32,
+                        &mut read,
+                        std::ptr::null_mut(),
+                    )
+                };
+                if ok == 0 || read == 0 {
+                    return Err(io::Error::last_os_error().into());
+                }
+                offset += read as usize;
+            }
+            Ok(())
+        }
+
+        pub fn send(&mut self, message: &AdapterMessage) -> Result<(), TransportError> {
+            self.write_all(&encode_frame(message)?)
+        }
+
+        pub fn receive(&mut self) -> Result<AdapterMessage, TransportError> {
+            let mut header = [0u8; FRAME_HEADER_BYTES];
+            self.read_exact(&mut header)?;
+            let length = u32::from_le_bytes(header) as usize;
+            if length > MAX_MESSAGE_BYTES {
+                return Err(ProtocolError::TooLarge.into());
+            }
+            let mut payload = vec![0u8; length];
+            self.read_exact(&mut payload)?;
+            decode(&payload).map_err(TransportError::from)
+        }
+    }
+}
+
+pub use local_transport::{LocalListener, LocalStream};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AdapterHello {
@@ -17,12 +249,19 @@ pub struct AdapterHello {
     pub adapter_id: String,
     pub adapter_version: String,
     pub capabilities: Vec<String>,
+    /// A per-installation capability token read from the local endpoint
+    /// descriptor. The OS-local endpoint and this token are both required.
+    pub authorization_token: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AdapterMessage {
     Hello(AdapterHello),
+    Welcome {
+        protocol_version: u32,
+        adapter_id: String,
+    },
     Event {
         protocol_version: u32,
         source: String,
@@ -131,7 +370,7 @@ impl AdapterMessage {
     fn source(&self) -> Option<&str> {
         match self {
             Self::Event { source, .. } | Self::AttachReference { source, .. } => Some(source),
-            Self::Hello(_) | Self::Ping { .. } => None,
+            Self::Hello(_) | Self::Welcome { .. } | Self::Ping { .. } => None,
         }
     }
 }
@@ -152,6 +391,17 @@ impl AdapterSession {
             return Err(ProtocolError::Invalid("empty capability".into()));
         }
         Ok(Self { hello })
+    }
+
+    pub fn establish_authenticated(
+        hello: AdapterHello,
+        expected_token: &str,
+    ) -> Result<Self, ProtocolError> {
+        let session = Self::establish(hello)?;
+        if expected_token.is_empty() || session.hello.authorization_token != expected_token {
+            return Err(ProtocolError::MissingIdentity);
+        }
+        Ok(session)
     }
 
     pub fn adapter_id(&self) -> &str {
@@ -230,7 +480,19 @@ fn validate_message(message: &AdapterMessage) -> Result<(), ProtocolError> {
             if hello.adapter_id.trim().is_empty() {
                 return Err(ProtocolError::MissingIdentity);
             }
+            if hello.adapter_version.trim().is_empty() || hello.authorization_token.is_empty() {
+                return Err(ProtocolError::MissingIdentity);
+            }
             hello.protocol_version
+        }
+        AdapterMessage::Welcome {
+            protocol_version,
+            adapter_id,
+        } => {
+            if adapter_id.trim().is_empty() {
+                return Err(ProtocolError::MissingIdentity);
+            }
+            *protocol_version
         }
         AdapterMessage::Event {
             protocol_version,
@@ -326,6 +588,7 @@ mod tests {
             adapter_id: "vscode".into(),
             adapter_version: "1.0.0".into(),
             capabilities: vec!["events".into()],
+            authorization_token: "token".into(),
         })
         .unwrap();
         let message = AdapterMessage::Event {
@@ -354,5 +617,22 @@ mod tests {
             decode_frame(&[1, 0, 0]),
             Err(ProtocolError::InvalidFrame)
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_transport_round_trips_a_validated_frame() {
+        let path = std::env::temp_dir().join(format!("ariadne-{}.sock", uuid::Uuid::new_v4()));
+        let listener = LocalListener::bind(&path).unwrap();
+        let server_message = AdapterMessage::Ping { protocol_version: 1 };
+        let client_message = server_message.clone();
+        let client_path = path.clone();
+        let client = std::thread::spawn(move || {
+            let mut stream = LocalStream::connect(client_path).unwrap();
+            stream.send(&client_message).unwrap();
+        });
+        let mut stream = listener.accept().unwrap();
+        assert_eq!(stream.receive().unwrap(), server_message);
+        client.join().unwrap();
     }
 }
