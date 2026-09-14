@@ -753,9 +753,7 @@ fn start_foreground_sensor(app: tauri::AppHandle) {
     use ariadne_core::{
         ApplicationContext, ArtifactKind, ArtifactRef, ContextEvent, ContextEventType,
     };
-    use ariadne_platform_windows::{
-        observe_foreground, observe_idle, DEFAULT_IDLE_THRESHOLD_MS,
-    };
+    use ariadne_platform_windows::{observe_foreground, observe_idle, DEFAULT_IDLE_THRESHOLD_MS};
     use std::time::Duration;
 
     std::thread::spawn(move || {
@@ -846,8 +844,7 @@ fn start_foreground_sensor(app: tauri::AppHandle) {
                             if engine.record(event, &now()) {
                                 if let Some(active) = engine.active_thread().cloned() {
                                     if let Err(error) = persist_thread(&state, &active) {
-                                        if let Ok(mut error_state) =
-                                            state.persistence_error.lock()
+                                        if let Ok(mut error_state) = state.persistence_error.lock()
                                         {
                                             *error_state = Some(error);
                                         }
