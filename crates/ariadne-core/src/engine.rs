@@ -1,7 +1,7 @@
 use crate::{
     bounded_text, build_resume_plan, CapturePolicy, Checkpoint, ContextArtifact, ContextEvent,
-    ContextEventType, ContextGraph, DomainError, GraphEdge, GraphNode, GraphRelationship,
-    ResumePlan, RollingContext, Thread, MAX_CHECKPOINT_LENGTH,
+    ContextEventType, ContextGraph, DomainError, ExternalReference, GraphEdge, GraphNode,
+    GraphRelationship, ResumePlan, RollingContext, Thread, MAX_CHECKPOINT_LENGTH,
 };
 use std::collections::HashMap;
 
@@ -214,6 +214,51 @@ impl CoreEngine {
 
     pub fn resume_plan(&self, id: &str) -> Option<ResumePlan> {
         self.threads.get(id).map(build_resume_plan)
+    }
+
+    pub fn attach_reference(
+        &mut self,
+        source: impl Into<String>,
+        url: String,
+        title: Option<String>,
+        now: impl Into<String>,
+    ) -> Result<bool, CoreError> {
+        let now = now.into();
+        let source = source.into();
+        let reference = self
+            .policy
+            .sanitize_reference(ExternalReference {
+                url: url.clone(),
+                title: title.clone(),
+                captured_at: now.clone(),
+            });
+        let Some(reference) = reference else {
+            return Ok(false);
+        };
+        let event = ContextEvent {
+            id: uuid::Uuid::new_v4().to_string(),
+            timestamp: now.clone(),
+            event_type: ContextEventType::ExplicitReference,
+            application: None,
+            artifact: Some(crate::ArtifactRef {
+                kind: crate::ArtifactKind::WebPage,
+                display_name: title.unwrap_or_else(|| url.clone()),
+                reference: url,
+            }),
+            workspace: None,
+            location: None,
+            source,
+            private_browsing: false,
+        };
+        if !self.policy.accepts(&event, &now) {
+            return Ok(false);
+        }
+        let thread = self.active_thread_mut()?;
+        thread.references.retain(|item| item.url != reference.url);
+        thread.references.push(reference);
+        Self::apply_to_thread(thread, event);
+        thread.saved_at = now;
+        Ok(true)
     }
 
     pub fn delete_thread(&mut self, id: &str) -> bool {
