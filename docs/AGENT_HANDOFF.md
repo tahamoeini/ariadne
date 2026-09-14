@@ -90,14 +90,15 @@
 ## Current platform implementation status
 
 The Rust platform foundation is now the authoritative direction. The existing
-Investigation extension remains a retained compatibility prototype until the
-VS Code adapter is connected to Core.
+Investigation lifecycle remains available as migration compatibility, while
+VS Code observations can now be forwarded to the authenticated local Core
+endpoint.
 
 | Category | Current state |
 |---|---|
-| Implemented | Rust Thread domain, bounded rolling context, SQLite persistence, tombstones, generation checks, policy persistence, deterministic active-thread reconciliation, Tauri lifecycle commands, desktop state refresh, protocol framing/session validation, Windows foreground observation boundary, single-instance plugin |
-| Verified | Local TypeScript and desktop frontend checks; hosted Rust fmt/clippy/full tests/full build; hosted Windows Tauri package and artifact upload; deterministic P0 regression tests |
-| Remaining | Actual authenticated named-pipe transport; VS Code-to-Core adapter; tray; start-at-login; browser adapter; migration startup wiring; full deterministic race suite; runtime crash/restart validation; performance measurement |
+| Implemented | Rust Thread domain, bounded rolling context with low-value coalescing, SQLite persistence, tombstones, generation checks, policy persistence, deterministic active-thread reconciliation, Tauri lifecycle commands, authenticated OS-local adapter transport, Core event/reference bridge, reconnecting VS Code adapter, tray, close-to-hide policy, bounded logs, Windows Start at Login command, bounded Resume actions, retained legacy-directory startup import |
+| Verified | Local TypeScript compile/lint/typecheck, 82 unit tests, desktop frontend build; hosted Rust/Windows verification remains required for the current transport and desktop changes |
+| Remaining | Browser adapter; complete settings UI for exclusions and adapter health; crash/restart runtime validation; full deterministic race/privacy/restart suite; Windows manual/runtime validation; performance measurement |
 | Deferred | macOS/Linux sensors, Android companion, cloud/accounts/sync, AI/LLM/embeddings, telemetry, screenshots, clipboard/keystrokes, content capture, productivity scoring |
 | Known failures | Full desktop Rust verification is **NOT VERIFIED** locally because the container lacks `pkg-config` and GTK/WebKit development libraries; Windows runtime behavior is not externally validated |
 
