@@ -126,6 +126,31 @@ mod tests {
     }
 
     #[test]
+    fn exclusions_reject_application_and_browser_domain_events() {
+        let mut policy = CapturePolicy::default();
+        policy.excluded_applications.push("password-manager".into());
+        policy.excluded_browser_domains.push("private.example".into());
+
+        let mut application_event = event(
+            "application",
+            "2026-01-01T00:00:00Z",
+            ContextEventType::ApplicationFocused,
+            Some("password-manager"),
+        );
+        application_event.application.as_mut().unwrap().identity =
+            "password-manager".into();
+        assert!(!policy.accepts(&application_event, "2026-01-01T00:00:01Z"));
+
+        let browser_event = event(
+            "browser",
+            "2026-01-01T00:00:00Z",
+            ContextEventType::BrowserNavigation,
+            Some("https://private.example/path?secret=1"),
+        );
+        assert!(!policy.accepts(&browser_event, "2026-01-01T00:00:01Z"));
+    }
+
+    #[test]
     fn expired_timed_pause_returns_to_running() {
         let mut policy = CapturePolicy::default();
         policy.set_timed_pause(Some("2026-01-01T00:10:00Z".into()));
