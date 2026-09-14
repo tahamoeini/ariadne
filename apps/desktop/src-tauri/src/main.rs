@@ -717,15 +717,10 @@ fn start_ipc_server(app: tauri::AppHandle, endpoint: String, token: String) {
                 return;
             }
         };
-        loop {
-            match listener.accept() {
-                Ok(stream) => {
-                    append_log(&app, "local adapter connected");
-                    let _ = handle_adapter_connection(&app, stream, &token);
-                    append_log(&app, "local adapter disconnected");
-                }
-                Err(_) => break,
-            }
+        while let Ok(stream) = listener.accept() {
+            append_log(&app, "local adapter connected");
+            let _ = handle_adapter_connection(&app, stream, &token);
+            append_log(&app, "local adapter disconnected");
         }
     });
 }
