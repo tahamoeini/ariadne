@@ -9,6 +9,8 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use tauri::menu::MenuBuilder;
+use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager, State};
 
 struct PersistenceCursor {
@@ -96,6 +98,19 @@ fn write_ipc_descriptor(data_dir: &Path, token: &str) -> Result<String, String> 
 
 fn notify_state(app: &tauri::AppHandle) {
     let _ = app.emit("ariadne-state-changed", ());
+}
+
+fn append_log(app: &tauri::AppHandle, message: &str) {
+    let Ok(data_dir) = app.path().app_local_data_dir() else {
+        return;
+    };
+    let _ = fs::create_dir_all(&data_dir);
+    let line = format!("{} {}\n", now(), message);
+    let _ = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(data_dir.join("ariadne.log"))
+        .and_then(|mut file| file.write_all(line.as_bytes()));
 }
 
 fn persist_thread(state: &AppState, thread: &ariadne_core::Thread) -> Result<(), String> {
@@ -381,6 +396,104 @@ fn delete_all_data(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<
     Ok(count)
 }
 
+#[tauri::command]
+fn open_logs(app: tauri::AppHandle) -> Result<(), String> {
+    let path = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("ariadne.log");
+    if !path.exists() {
+        fs::write(&path, format!("{} startup\n", now())).map_err(|error| error.to_string())?;
+    }
+    #[cfg(windows)]
+    std::process::Command::new("explorer")
+        .arg(path.parent().ok_or("invalid log path")?)
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    #[cfg(target_os = "linux")]
+    std::process::Command::new("xdg-open")
+        .arg(path.parent().ok_or("invalid log path")?)
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .arg(path.parent().ok_or("invalid log path")?)
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_start_at_login(enabled: bool) -> Result<(), String> {
+    set_start_at_login_impl(enabled)
+}
+
+#[cfg(windows)]
+fn set_start_at_login_impl(enabled: bool) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::System::Registry::{
+        RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegSetValueExW, HKEY_CURRENT_USER,
+        KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ,
+    };
+    let key_name: Vec<u16> = std::ffi::OsStr::new("Software\\Microsoft\\Windows\\CurrentVersion\\Run")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let value_name: Vec<u16> = std::ffi::OsStr::new("Ariadne")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut key = std::ptr::null_mut();
+    let result = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            key_name.as_ptr(),
+            0,
+            std::ptr::null_mut(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_SET_VALUE,
+            std::ptr::null(),
+            &mut key,
+            std::ptr::null_mut(),
+        )
+    };
+    if result != 0 {
+        return Err(format!("Windows registry error {result}"));
+    }
+    let result = if enabled {
+        let value = std::env::current_exe().map_err(|error| error.to_string())?;
+        let value: Vec<u16> = value
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        unsafe {
+            RegSetValueExW(
+                key,
+                value_name.as_ptr(),
+                0,
+                REG_SZ,
+                value.as_ptr().cast(),
+                (value.len() * 2) as u32,
+            )
+        }
+    } else {
+        unsafe { RegDeleteValueW(key, value_name.as_ptr()) }
+    };
+    unsafe { RegCloseKey(key) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(format!("Windows registry error {result}"))
+    }
+}
+
+#[cfg(not(windows))]
+fn set_start_at_login_impl(_enabled: bool) -> Result<(), String> {
+    Err("start at login is only implemented for Windows in this MVP".into())
+}
+
 fn handle_adapter_connection(
     app: &tauri::AppHandle,
     mut stream: LocalStream,
@@ -444,9 +557,10 @@ fn handle_adapter_connection(
 
 fn start_ipc_server(app: tauri::AppHandle, endpoint: String, token: String) {
     std::thread::spawn(move || {
-        let listener = match LocalListener::bind(&endpoint) {
+            let listener = match LocalListener::bind(&endpoint) {
             Ok(listener) => listener,
             Err(error) => {
+                append_log(&app, "local adapter listener failed");
                 if let Ok(mut sensor_state) = app.state::<AppState>().sensor_state.lock() {
                     *sensor_state = format!("ipc degraded: {error}");
                 }
@@ -457,7 +571,9 @@ fn start_ipc_server(app: tauri::AppHandle, endpoint: String, token: String) {
         loop {
             match listener.accept() {
                 Ok(stream) => {
+                    append_log(&app, "local adapter connected");
                     let _ = handle_adapter_connection(&app, stream, &token);
+                    append_log(&app, "local adapter disconnected");
                 }
                 Err(_) => break,
             }
@@ -553,6 +669,7 @@ pub fn run() {
         .setup(|app| {
             let data_dir = app.path().app_local_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
+            append_log(app.handle(), "startup");
             let store = Store::open(data_dir.join("ariadne.sqlite"))?;
             let policy = store.load_capture_policy()?;
             let generation = store.generation()?;
@@ -582,9 +699,43 @@ pub fn run() {
                     "unsupported".into()
                 }),
             });
+            let menu = MenuBuilder::new(app)
+                .text("open", "Open Ariadne")
+                .separator()
+                .text("start", "Start Thread")
+                .text("recent", "Save Recent Context")
+                .text("checkpoint", "Checkpoint")
+                .text("stop", "Stop Thread")
+                .text("pause", "Pause Capture")
+                .text("resume", "Resume Capture")
+                .separator()
+                .text("settings", "Settings")
+                .text("exit", "Exit")
+                .build()?;
+            TrayIconBuilder::new()
+                .menu(&menu)
+                .on_menu_event(|app, event| {
+                    if event.id().as_ref() == "open" {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    } else if event.id().as_ref() == "exit" {
+                        app.exit(0);
+                    } else {
+                        let _ = app.emit("ariadne-tray-command", event.id().as_ref());
+                    }
+                })
+                .build(app)?;
             start_ipc_server(app.handle().clone(), ipc_endpoint, ipc_token);
             start_foreground_sensor(app.handle().clone());
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_status,
@@ -597,7 +748,9 @@ pub fn run() {
             set_timed_pause,
             set_checkpoint,
             delete_thread,
-            delete_all_data
+            delete_all_data,
+            open_logs,
+            set_start_at_login
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ariadne");
