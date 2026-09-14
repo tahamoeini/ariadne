@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as os from 'os';
+import * as path from 'path';
 import {
   createVsCodeObservedEventCapture,
   VsCodeObservedEventCapture,
@@ -48,7 +50,12 @@ function readRuntimeConfiguration(): AriadneRuntimeConfiguration {
     0,
     3600,
   );
-  const ipcConfigPath = configuration.get<string>('ipc.configPath', '').trim();
+  const configuredIpcConfigPath = configuration.get<string>('ipc.configPath', '').trim();
+  const ipcConfigPath = configuredIpcConfigPath || path.join(
+    process.env.LOCALAPPDATA ?? path.join(os.homedir(), '.local', 'share'),
+    'one.taha.ariadne',
+    'ipc.json',
+  );
 
   return {
     retentionMs: retentionMinutes * 60 * 1000,
