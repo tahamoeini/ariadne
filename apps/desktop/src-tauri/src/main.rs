@@ -494,6 +494,71 @@ fn set_start_at_login_impl(_enabled: bool) -> Result<(), String> {
     Err("start at login is only implemented for Windows in this MVP".into())
 }
 
+fn open_resume_resource(reference: &str) -> Result<(), String> {
+    let is_url = reference.starts_with("http://") || reference.starts_with("https://");
+    if !is_url && !Path::new(reference).is_absolute() {
+        return Err("resume resource must be an absolute path or sanitized HTTP(S) URL".into());
+    }
+    #[cfg(windows)]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", reference])
+            .spawn()
+            .map_err(|error| error.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(reference)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(reference)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn execute_resume_actions(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let engine = state.engine.lock().map_err(|_| "core lock poisoned")?;
+    let plan = engine
+        .resume_plan(&id)
+        .ok_or_else(|| "Thread not found".to_owned())?;
+    let resources = plan
+        .primary_artifact
+        .into_iter()
+        .chain(plan.supporting_artifacts)
+        .take(1 + ariadne_core::MAX_SUPPORTING_ARTIFACTS)
+        .filter_map(|artifact| {
+            matches!(
+                artifact.kind,
+                ariadne_core::ArtifactKind::File
+                    | ariadne_core::ArtifactKind::Folder
+                    | ariadne_core::ArtifactKind::Workspace
+                    | ariadne_core::ArtifactKind::Repository
+                    | ariadne_core::ArtifactKind::Document
+                    | ariadne_core::ArtifactKind::Pdf
+                    | ariadne_core::ArtifactKind::WebPage
+            )
+            .then_some(artifact.safe_reference)
+        });
+    let mut opened = Vec::new();
+    for resource in resources {
+        if open_resume_resource(&resource).is_ok() {
+            opened.push(resource);
+        }
+    }
+    Ok(opened)
+}
+
 fn handle_adapter_connection(
     app: &tauri::AppHandle,
     mut stream: LocalStream,
@@ -750,7 +815,8 @@ pub fn run() {
             delete_thread,
             delete_all_data,
             open_logs,
-            set_start_at_login
+            set_start_at_login,
+            execute_resume_actions
         ])
         .run(tauri::generate_context!())
         .expect("error while running Ariadne");
