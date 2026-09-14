@@ -1,13 +1,25 @@
 # Ariadne Browser Adapter
 
-The browser adapter is intentionally narrow and explicit.
+The browser adapter is a narrow, privacy-first browser-extension boundary.
 
-Initial scope:
+Implemented in this package:
 
-- active normal tab
-- title
-- sanitized HTTP(S) URL
-- navigation event
-- explicit Attach to Thread
+- normal active-tab normalization
+- navigation event and explicit Attach-to-Thread message shapes
+- HTTP(S)-only URL sanitization
+- query and fragment stripping
+- exact and subdomain exclusions
+- private/incognito rejection by default
+- no page content, DOM, form values, cookies, authentication data, history, screenshots, clipboard, or keystrokes
 
-It must not capture page content, DOM, form values, cookies, authentication data, browsing history, or private/incognito activity by default. Communication is with the installed local Ariadne application through a supported local mechanism; Ariadne must not expose an LAN endpoint.
+The package emits protocol-shaped messages for a supported native-messaging bridge. It does not expose Ariadne on a LAN interface. A browser extension UI/native-host registration is still a packaging integration step: the desktop installer must register a native-messaging host that forwards these validated messages to the existing authenticated Ariadne local endpoint. Until that registration is shipped, this package is a tested adapter boundary, not a claimed end-user browser installation.
+
+Commands:
+
+```bash
+npm ci
+npm run build
+npm run lint
+npm run typecheck
+npm run test:unit
+```

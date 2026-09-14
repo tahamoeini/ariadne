@@ -2,9 +2,9 @@
 
 > Pick up a code investigation where you left it.
 
-Ariadne is evolving into a local-first context continuity platform that preserves the factual thread needed to return to interrupted digital work. The current VS Code extension is the first working sensor and domain prototype; the repository now also contains the target Rust Core, SQLite storage, versioned adapter protocol, Windows sensor boundary, and Tauri desktop vertical slice.
+Ariadne is evolving into a local-first context continuity platform that preserves the factual thread needed to return to interrupted digital work. The current platform slice contains the Rust Core, SQLite storage, versioned authenticated local adapter protocol, Windows sensor boundary, VS Code adapter, and Tauri desktop application.
 
-The migration is deliberately gradual. The existing extension remains usable while the desktop Core becomes the future canonical state owner. The first platform slice is scaffolded and tested at source level, but it is not yet a finished Windows installer or fully connected adapter system.
+The migration is deliberately gradual. The existing extension remains usable as compatibility while the desktop Core owns canonical Thread state. Windows MSI/NSIS packaging is produced by hosted CI; Windows runtime, installer, restart, and performance validation remain explicit release gates.
 
 ## Platform direction
 
@@ -114,7 +114,7 @@ Ariadne 0.0.1 does not include:
 ### Setup
 
 ```bash
-npm install
+npm ci
 ```
 
 ### Commands

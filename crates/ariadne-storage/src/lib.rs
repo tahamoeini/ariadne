@@ -262,7 +262,6 @@ fn current_generation(connection: &Connection) -> Result<i64, rusqlite::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ariadne_core::{ContextEvent, ContextEventType};
 
     #[test]
     fn stale_revision_is_rejected() {
@@ -282,17 +281,30 @@ mod tests {
         store.delete_all("2026-01-01T00:01:00Z").unwrap();
         let error = store.save_thread(&thread, Some(1), 0).unwrap_err();
         assert!(matches!(error, StorageError::StaleWrite { .. }));
-        let _ = ContextEvent {
-            id: "x".into(),
-            timestamp: "x".into(),
-            event_type: ContextEventType::ThreadStarted,
-            application: None,
-            artifact: None,
-            workspace: None,
-            location: None,
-            source: "test".into(),
-            private_browsing: false,
-        };
+    }
+
+    #[test]
+    fn stale_write_after_newer_write_is_rejected() {
+        let mut store = Store::open_in_memory().unwrap();
+        let original = Thread::new("original", "2026-01-01T00:00:00Z").unwrap();
+        let first = store.save_thread(&original, None, 0).unwrap();
+
+        let mut newer = original.clone();
+        newer.name = "newer".into();
+        newer.saved_at = "2026-01-01T00:01:00Z".into();
+        let second = store.save_thread(&newer, Some(first.revision), 0).unwrap();
+        assert_eq!(second.revision, 2);
+
+        let error = store
+            .save_thread(&original, Some(first.revision), 0)
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            StorageError::StaleWrite {
+                expected: 1,
+                actual: 2
+            }
+        ));
     }
 
     #[test]
