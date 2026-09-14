@@ -16,8 +16,11 @@ h2 { font-size: 17px; margin: 0 0 16px; } h3 { margin: 0 0 5px; font-size: 16px;
 .status-dot { display: inline-block; width: 8px; height: 8px; background: #78e2a0; border-radius: 50%; margin-right: 7px; }.active { color: #cfdcff; }
 .card, .thread, .empty { padding: 22px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.055); border-radius: 16px; }
 .row input { flex: 1; background: rgba(0,0,0,.24); color: white; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 11px 14px; outline: none; }.row input:focus { border-color: #9bc5ff; }
+.settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 12px 0; }
+label { display: grid; gap: 6px; color: #9ca6b7; font-size: 12px; }
+textarea { width: 100%; resize: vertical; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 11px 14px; background: rgba(0,0,0,.24); color: white; font: inherit; }
 .hint { font-size: 12px; margin: 13px 0 0; }.section-title { margin: 34px 0 12px; }.section-title span { color: #9ca6b7; }
 .thread .muted { font-size: 11px; margin-top: 10px; }
 .threads { display: grid; gap: 10px; }.thread { padding: 17px 19px; }.thread p { margin: 0; font-size: 12px; }.thread blockquote { margin: 12px 0 0; color: #d8e2f5; border-left: 2px solid #83adf1; padding-left: 10px; font-size: 13px; }
 .empty { color: #9ca6b7; text-align: center; }.error { margin-top: 20px; padding: 12px 16px; border-radius: 10px; background: rgba(255,90,90,.15); color: #ffb9b9; font-size: 13px; } footer { margin-top: 48px; font-size: 11px; }
-@media (max-width: 760px) { .shell { padding: 28px 20px 22px; } header, .hero, .row, .thread, footer { align-items: stretch; flex-direction: column; } .row input, .row button { width: 100%; } .actions { justify-content: flex-start; } .active { align-self: flex-start; } }
+@media (max-width: 760px) { .shell { padding: 28px 20px 22px; } header, .hero, .row, .thread, footer { align-items: stretch; flex-direction: column; } .row input, .row button { width: 100%; } .actions { justify-content: flex-start; } .active { align-self: flex-start; } .settings-grid { grid-template-columns: 1fr; } }
