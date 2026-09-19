@@ -2,6 +2,14 @@
   "name": "ariadne",
   "displayName": "Ariadne",
   "description": "Capture and recover context from code investigations.",
+  "author": {
+    "name": "Taha Moeini",
+    "url": "https://taha.one"
+  },
+  "homepage": "https://taha.one",
+  "bugs": {
+    "url": "https://github.com/tahamoeini/ariadne/issues"
+  },
   "version": "0.0.1",
   "publisher": "ariadne",
   "license": "MIT",
@@ -105,6 +113,11 @@
       {
         "command": "ariadne.showStorageLocation",
         "title": "Show Local Storage Location",
+        "category": "Ariadne"
+      },
+      {
+        "command": "ariadne.about",
+        "title": "About Ariadne",
         "category": "Ariadne"
       }
     ]
