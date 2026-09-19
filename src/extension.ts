@@ -76,7 +76,7 @@ export function activate(context: vscode.ExtensionContext): void {
       'invalid-config': '$(warning) Ariadne Core: configure IPC',
     };
     adapterStatus.text = labels[state];
-    adapterStatus.tooltip = 'Ariadne VS Code adapter';
+    adapterStatus.tooltip = 'Ariadne VS Code adapter · Created by Taha Moeini · https://taha.one';
     adapterStatus.show();
   };
   updateAdapterStatus(runtimeConfiguration.ipcConfigPath ? 'disconnected' : 'invalid-config');
@@ -133,6 +133,16 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   });
 
+  const aboutCommand = vscode.commands.registerCommand('ariadne.about', async () => {
+    const action = await vscode.window.showInformationMessage(
+      'Ariadne · Created by Taha Moeini · taha.one',
+      'Open taha.one',
+    );
+    if (action === 'Open taha.one') {
+      await vscode.env.openExternal(vscode.Uri.parse('https://taha.one'));
+    }
+  });
+
   context.subscriptions.push(
     lifecycleCommands,
     lifecycleEventSubscription,
@@ -140,6 +150,7 @@ export function activate(context: vscode.ExtensionContext): void {
     snapshotProvider,
     adapterStatus,
     localAdapter ?? new vscode.Disposable(() => undefined),
+    aboutCommand,
   );
 }
 
