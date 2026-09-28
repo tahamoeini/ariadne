@@ -35,7 +35,7 @@ Help a developer resume an interrupted code investigation after enough time has 
 
 - Investigation
 - Rolling Buffer
-- Checkpoint
+- Resume Brief
 - Browser Reference
 - Snapshot
 
@@ -43,7 +43,7 @@ Help a developer resume an interrupted code investigation after enough time has 
 
 - Start Investigation
 - Save Recent Activity as Investigation
-- Add or Update Checkpoint
+- Add or Update Resume Brief
 - Attach Current Page to Ariadne
 - Save and Stop Investigation
 - List Saved Investigations
@@ -78,9 +78,9 @@ Ariadne 0.0.1 does not add:
 
 `Ariadne: Save Recent Activity as Investigation` turns the current rolling-buffer evidence into a saved investigation and keeps it active.
 
-### Optional checkpoint
+### Optional Resume Brief
 
-The checkpoint is the developer-authored note. Ariadne may preserve it, update it, or clear it, but Ariadne must not invent it.
+The developer can capture context and findings, decisions, key artifacts, open questions, and the next action through five short prompts. The investigation name remains the concise statement of what they are investigating. Ariadne preserves only the words the developer enters; it does not derive conclusions from observed activity. Key artifacts are shown as reminders in the Resume Snapshot; they do not change automatic reopen ordering. Each field is optional, and the brief can be updated or cleared.
 
 ### Leave and return
 
@@ -100,7 +100,7 @@ Ariadne records factual observations such as:
 - the sequence of file transitions within one Investigation
 - the collapsed navigation relationships around those file transitions within one Investigation
 - the last saved location was `file:line:column`
-- a checkpoint was added or cleared
+- a Resume Brief was added, updated, or cleared
 - a Git snapshot was captured
 - the Investigation was saved or resumed
 - Git state changed between save time and resume time
@@ -112,7 +112,7 @@ Ariadne must not turn those facts into unsupported labels such as:
 - relevant file
 - high-priority file
 
-Human meaning remains human-supplied through the investigation name and optional checkpoint.
+Human meaning remains human-supplied through the investigation name and optional Resume Brief.
 
 ## External reference boundary
 
@@ -158,7 +158,7 @@ Ariadne may retain a small Investigation-scoped navigation graph when it improve
 ## Validation hypotheses
 
 - **H1: Re-entry utility** — Ariadne helps developers resume interrupted investigations faster or with fewer reconstruction mistakes than the baseline workflow.
-- **H2: Capture sufficiency** — factual editor activity, Git state, an optional checkpoint, and a small number of deliberate external references provide enough context for useful re-entry.
+- **H2: Capture sufficiency** — factual editor activity, Git state, an optional Resume Brief, and a small number of deliberate external references provide enough context for useful re-entry.
 - **H3: Natural behavior** — Ariadne fits into normal work without requiring heavy manual curation.
 
 ## Roadmap philosophy

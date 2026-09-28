@@ -43,16 +43,16 @@ Do not build:
 A bounded unit of work with:
 
 - goal name
-- optional developer checkpoint
+- optional developer-authored Resume Brief: context and findings, decisions, key artifacts, open questions, and next step
 - factual observed trail
 - Git snapshots
 - resume artifact
 
-### Checkpoint
+### Resume Brief
 
-Developer-authored intent statement.
+Developer-authored re-entry note, optional at investigation start and guided by five short prompts. The investigation name states the work thread; the brief can capture context and findings, decisions, key artifacts, open questions, and the next concrete action.
 
-Ariadne does not invent this.
+Ariadne stores only what the developer enters. It does not infer intent or conclusions from activity.
 
 ### Snapshot
 
@@ -69,7 +69,7 @@ Ariadne 0.0.1 currently provides:
 
 - explicit investigation start
 - retroactive save from rolling in-memory activity
-- optional checkpoint update/clear
+- optional Resume Brief update/clear
 - factual VS Code event capture (active editor, selection, edit occurrence)
 - local Git snapshot capture
 - persisted investigation-scoped timeline and collapsed navigation graph
@@ -84,7 +84,7 @@ Ariadne 0.0.1 currently provides:
 - VS Code extension only
 - one active investigation per workspace
 - rolling local buffer for retroactive capture
-- start/checkpoint/save-stop/resume lifecycle
+- start/Resume Brief/save-stop/resume lifecycle
 - local JSON persistence
 - resume snapshot focused on fast orientation
 

@@ -59,7 +59,7 @@
       },
       {
         "command": "ariadne.updateCheckpoint",
-        "title": "Add or Update Checkpoint",
+        "title": "Add or Update Resume Brief",
         "category": "Ariadne"
       },
       {

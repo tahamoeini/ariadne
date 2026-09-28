@@ -8,28 +8,28 @@ Developers who resume an interrupted code investigation with Ariadne context rec
 
 ### H2: Capture Sufficiency
 
-The combination of observed activity trail, Git state snapshot, optional developer checkpoint, a condensed investigation timeline, an Investigation-scoped navigation graph, and a small number of deliberate external references captures enough context to support re-entry without requiring exhaustive logging or AI interpretation.
+The combination of observed activity trail, Git state snapshot, optional developer-authored Resume Brief (context/findings, decisions, key artifacts, open questions, and next step), a condensed investigation timeline, an Investigation-scoped navigation graph, and a small number of deliberate external references captures enough context to support re-entry without exhaustive logging or AI interpretation.
 
 ### H3: Natural Behavior
 
-Developers use Ariadne without significant changes to their existing workflow. Capture is passive (observed events), and the only active step (Checkpoint) is optional and lightweight.
+Developers use Ariadne without significant changes to their existing workflow. Activity capture is passive; the Resume Brief is optional and should stay lightweight enough to complete when starting or updating an investigation.
 
 ## Planned Comparison Variants
 
 | Variant | Description |
 |---------|-------------|
-| **A** | Checkpoint only — developer writes a note before stopping. |
-| **B** | Checkpoint + Git — developer note plus Git state snapshot. |
-| **C** | Checkpoint + Git + observed trail — full Ariadne experience. |
-| **D** | Git + observed trail without checkpoint — no developer note. |
+| **A** | Resume Brief only — developer records context before stopping. |
+| **B** | Resume Brief + Git — developer note plus Git state snapshot. |
+| **C** | Resume Brief + Git + observed trail — full Ariadne experience. |
+| **D** | Git + observed trail without Resume Brief — no developer-authored note. |
 | **E** | Normal VS Code + Git baseline — no Ariadne at all. |
 
 ## What Each Variant Tests
 
-- **A vs. E:** Does any structured checkpoint help re-entry?
-- **B vs. A:** Does adding Git context to a checkpoint improve re-entry?
-- **C vs. B:** Does the observed activity trail plus condensed timeline add value beyond checkpoint + Git?
-- **D vs. C:** Is the developer checkpoint necessary, or is passive capture sufficient?
+- **A vs. E:** Does a structured Resume Brief help re-entry?
+- **B vs. A:** Does adding Git context to the Resume Brief improve re-entry?
+- **C vs. B:** Does the observed activity trail plus condensed timeline add value beyond the Resume Brief + Git?
+- **D vs. C:** Is the developer-authored Resume Brief necessary, or is passive capture sufficient?
 - **C vs. E:** Does the full Ariadne experience improve re-entry over baseline?
 
 ## Timeline Validation Result
@@ -62,7 +62,7 @@ Metrics to be defined before validation begins. Candidates include:
 1. Developers actually experience painful context loss when resuming interrupted investigations.
 2. The types of events Ariadne captures are the ones that matter for re-entry.
 3. A rolling buffer window is sufficient — developers don't need activity from days ago.
-4. Optional checkpoints are written often enough to be useful.
+4. Developers complete enough of the optional Resume Brief for it to help without making capture feel burdensome.
 5. The overhead of Ariadne running passively is acceptable (performance, distraction).
 6. A condensed investigation-scoped timeline improves sequence reconstruction without becoming noisy telemetry.
 7. A collapsed Investigation-scoped navigation graph improves resume decisions without being mistaken for repository architecture.
@@ -73,7 +73,7 @@ Metrics to be defined before validation begins. Candidates include:
 Before adding anything beyond explicit attachment, validate whether minimal browser references actually improve re-entry.
 
 - Compare resume performance with and without attached external references while keeping the rest of the Investigation surface constant.
-- Measure whether developers use the attached references during re-entry, or whether checkpoint plus timeline plus graph already cover the same need.
+- Measure whether developers use the attached references during re-entry, or whether the Resume Brief plus timeline and graph already cover the same need.
 - Confirm that explicit attachment feels lightweight enough that developers will actually use it when a web reference matters.
 - Treat browser-history import, content capture, sync, and broader browser-extension behavior as blocked unless this minimal deliberate model proves necessary and useful first.
 

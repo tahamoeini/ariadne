@@ -34,7 +34,7 @@ import {
 
 const ACTIVE_INVESTIGATIONS_KEY = 'ariadne.activeInvestigations';
 export const MAX_INVESTIGATION_NAME_LENGTH = 120;
-export const MAX_CHECKPOINT_LENGTH = 1000;
+export const MAX_CHECKPOINT_LENGTH = 2800;
 export const MAX_BROWSER_REFERENCE_URL_LENGTH = 2000;
 export const MAX_BROWSER_REFERENCE_TITLE_LENGTH = 200;
 
@@ -464,7 +464,7 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
 
     const nextCheckpointText = optionalBoundedText(
       checkpointText,
-      'Checkpoint',
+      'Resume Brief',
       MAX_CHECKPOINT_LENGTH,
     );
     const checkpointTimestamp = new Date().toISOString();
@@ -607,7 +607,7 @@ export class InvestigationLifecycleService implements InvestigationLifecycleDebu
 
     const checkpointText = optionalBoundedText(
       options.checkpointText,
-      'Checkpoint',
+      'Resume Brief',
       MAX_CHECKPOINT_LENGTH,
     );
     const checkpoint = checkpointText ? createCheckpoint(checkpointText) : null;

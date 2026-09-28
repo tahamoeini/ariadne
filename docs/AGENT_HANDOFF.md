@@ -2,21 +2,29 @@
 
 ## Current Milestone
 
-**Prompt 10 — Deliberate Browser References for Re-entry**
+**Resume Brief — Human-authored work-thread context**
 
 ## Status
 
-✅ Minimal deliberate browser-reference code and documentation updates are complete.
+Resume Brief capture has been implemented in the working tree. It has not been verified in this turn.
 
 ## Ready for External Validation
 
-**Code path validated in this sandbox.**
+The earlier browser-reference implementation had compile, lint, and unit-test validation. The current Resume Brief changes have not been verified.
 
 ## Remaining Blockers
 
-1. The browser-reference path has been validated only with compile, lint, and unit tests in this sandbox. Extension-host and external user validation still remain.
+1. Resume Brief behavior needs typecheck, lint, unit, and extension-host validation.
+2. External validation should assess whether the guided note meaningfully improves re-entry without adding too much capture friction.
 
 ## What Was Completed
+
+- Added an optional five-part Resume Brief for context/findings, decisions, key artifacts, open questions, and next step.
+- Kept all brief content human-authored and local, using the existing checkpoint field so saved investigations need no schema migration.
+- Kept older free-form checkpoint notes readable and editable.
+- Updated the Resume Snapshot label and product documentation to reflect the Resume Brief and its explicit, non-inferential role.
+
+## Earlier Browser Reference Work
 
 - Added a persisted `browserReferences` list to each Investigation for deliberate external page attachment.
 - Kept references minimal: URL, optional title, and attach timestamp only.
@@ -27,7 +35,7 @@
 - Updated README, product baseline, architecture, decisions, and validation docs to make the deliberate-capture boundary explicit.
 - Added unit and extension-test coverage for attachment, persistence, and Resume Snapshot rendering.
 
-## Files Changed
+## Earlier Browser Reference Files Changed
 
 - `LICENSE`
 - `README.md`
@@ -50,6 +58,21 @@
 - `src/storage/store.ts`
 - `src/ui/resumeSnapshot.ts`
 
+## Resume Brief Files Touched
+
+- `README.md`
+- `package.json`
+- `docs/AGENT_HANDOFF.md`
+- `docs/ARCHITECTURE.md`
+- `docs/DECISIONS.md`
+- `docs/PRODUCT.md`
+- `docs/PRODUCT_BASELINE.md`
+- `docs/VALIDATION.md`
+- `src/commands/investigationLifecycle.ts`
+- `src/commands/registerInvestigationCommands.ts`
+- `src/test/investigationLifecycle.test.ts`
+- `src/ui/resumeSnapshot.ts`
+
 ## Important Implementation Details
 
 1. Browser references are persisted only inside one Investigation and only to improve re-entry.
@@ -66,7 +89,7 @@
 2. Open-page candidate discovery depends on what VS Code exposes as local HTTP(S) tabs; it is intentionally best-effort, not a history integration.
 3. The feature does not capture page contents, so usefulness depends on URL and title being enough to trigger re-entry.
 
-## Tests / Verification
+## Earlier Tests / Verification
 
 - `npm run compile` — succeeds
 - `npm run lint` — succeeds
@@ -74,16 +97,18 @@
 
 ## Decisions Made This Session
 
+- ADR-033: Guide Resume Notes with Human-Authored Sections
 - ADR-032: Deliberate Minimal Browser References Only
 
 ## What Remains
 
-- Run extension-host validation for the attach command and Resume Snapshot reference rendering with real VS Code browser/page tabs.
-- Run external validation focused on whether explicit minimal browser references materially improve Investigation re-entry before considering any broader browser integration.
+- Verify the Resume Brief capture, edit, persistence, and legacy note behavior.
+- Run extension-host validation for Resume Brief rendering and the existing attached-reference flow.
+- Run external validation focused on whether brief fields and minimal external references materially improve re-entry before considering broader capture.
 
 ## Next Recommended Action
 
-**Run extension-host and user validation specifically against deliberate page attachment and Resume Snapshot reference usefulness before expanding browser integration beyond the current Investigation scope.**
+**Verify the Resume Brief changes, then run focused user validation on re-entry usefulness and capture friction.**
 
 ## Do Not Touch / Deferred
 

@@ -253,3 +253,11 @@
 **Decision:** Ariadne may retain a small list of browser references only when the developer explicitly attaches them to the active Investigation. Ariadne may offer the current open page or a temporary list of open-page candidates from VS Code tabs, but it must not automatically import browser history or page content.
 
 **Reason:** Validation evidence indicated that external web references were a recurring re-entry gap, but broad browser capture would push Ariadne toward a different product. Explicit attachment captures only what the developer decides matters, keeps the saved shape minimal, avoids background history ingestion, preserves the local-only privacy boundary, and keeps the feature tied to Investigation re-entry rather than general browsing analytics.
+
+---
+
+## ADR-033: Guide Resume Notes with Human-Authored Sections
+
+**Decision:** The existing optional checkpoint is presented as a Resume Brief with five optional prompts: context and findings, decisions, key artifacts, open questions, and next step. The brief remains plain text in the existing checkpoint field; older free-form notes remain readable and no schema migration is required. Key artifacts are descriptive reminders and do not alter automatic reopen ordering.
+
+**Reason:** Factual activity and Git state cannot preserve what a developer learned, decided, or planned. Prompting for those details lets Ariadne retain useful work-thread context without inferring intent or expanding passive capture. The investigation name identifies the work, while observed files and deliberately attached references remain separate factual evidence.

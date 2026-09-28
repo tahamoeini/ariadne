@@ -10,7 +10,7 @@ Ariadne 0.0.1:
 
 - activates on VS Code startup and keeps a per-workspace rolling buffer of the last 20 minutes of observed activity
 - lets you save the current investigation explicitly or retroactively save recent activity as an investigation
-- keeps one active investigation per workspace and refreshes its saved state on checkpoint, stop, and extension shutdown
+- keeps one active investigation per workspace and refreshes its saved state on Resume Brief updates, stop, and extension shutdown
 - stores only local JSON data needed for re-entry
 - shows a read-only Resume Snapshot with a condensed investigation-scoped timeline and a collapsed navigation graph
 - lets the developer deliberately attach a current external page reference to the active investigation
@@ -22,7 +22,7 @@ Ariadne 0.0.1:
 |---|---|
 | `Ariadne: Start Investigation` | Saves the current workspace context and keeps the investigation active. |
 | `Ariadne: Save Recent Activity as Investigation` | Saves the recent rolling-buffer activity and keeps the investigation active. |
-| `Ariadne: Add or Update Checkpoint` | Saves or clears the checkpoint on the active investigation. |
+| `Ariadne: Add or Update Resume Brief` | Saves or clears a human-authored context, findings, decisions, key artifacts, open questions, and next step for the active investigation. |
 | `Ariadne: Attach Current Page to Ariadne` | Deliberately attaches a minimal external page reference to the active investigation. |
 | `Ariadne: Save and Stop Investigation` | Persists the latest active state and clears the active investigation for that workspace. |
 | `Ariadne: List Saved Investigations` | Lists saved investigations and opens the selected Resume Snapshot. |
@@ -52,8 +52,8 @@ Ariadne 0.0.1 records only the factual data needed for re-entry:
 - file visit counts
 - last saved location
 - an investigation-scoped navigation graph of observed file artifacts and collapsed factual relationships
-- a condensed investigation-scoped factual timeline of file transitions, collapsed edit events, checkpoint changes, Git snapshots, and save/resume points
-- an optional developer-authored checkpoint
+- a condensed investigation-scoped factual timeline of file transitions, collapsed edit events, Resume Brief changes, Git snapshots, and save/resume points
+- an optional developer-authored Resume Brief with context and findings, decisions, key artifacts, open questions, and the next step
 
 Ariadne 0.0.1 does not currently emit definition/reference navigation events. Those remain deferred until they can be detected reliably through supported VS Code APIs.
 

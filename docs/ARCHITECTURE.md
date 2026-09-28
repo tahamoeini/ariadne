@@ -51,7 +51,7 @@ Modules communicate through domain types. No module directly imports another mod
 | createdAt | string (ISO-8601) | Creation timestamp |
 | savedAt | string (ISO-8601) | Last persisted timestamp |
 | lastResumedAt | string \| null | Last resumed timestamp |
-| checkpoint | Checkpoint \| null | Optional developer note |
+| checkpoint | Checkpoint \| null | Optional developer-authored Resume Brief |
 | browserReferences | InvestigationBrowserReference[] | Deliberately attached external page references retained for re-entry |
 | snapshot | Snapshot | Current state capture |
 | navigationGraph | InvestigationNavigationGraph | Collapsed factual spatial summary used during Resume |
@@ -91,7 +91,7 @@ Modules communicate through domain types. No module directly imports another mod
 ### Checkpoint
 | Field | Type | Description |
 |-------|------|-------------|
-| text | string | Free-form developer note |
+| text | string | Developer-authored Resume Brief sections: context and findings, decisions, key artifacts, open questions, and next step. Older free-form checkpoint text remains readable. |
 | createdAt | string (ISO-8601) | Creation timestamp |
 
 ### Snapshot
@@ -172,7 +172,7 @@ The runtime model is intentionally richer than the persisted schema. Ariadne reh
 | `workspace` | Required to reopen files and report workspace drift |
 | `repository` | Kept only to preserve saved repository context when the workspace is nested |
 | `savedAt` | Required to sort and display recency |
-| `checkpoint.text` | Optional human-authored re-entry note |
+| `checkpoint.text` | Optional human-authored Resume Brief; legacy free-form notes remain readable |
 | `browserReferences.{url,title,capturedAt}` | Minimal deliberate external references used during re-entry |
 | `navigationGraph` | Required to retain Investigation-local spatial movement evidence that improves Resume ordering without inferring repository architecture |
 | `timeline` | Required to reconstruct factual investigation sequence during re-entry without keeping the full raw event log |
@@ -213,7 +213,7 @@ When file paths are inside the saved workspace, Ariadne stores them as workspace
 - The rolling event buffer stays in memory only; saving an Investigation persists only the reduced re-entry subset above.
 - Ariadne does not store keystrokes, clipboard data, screenshots, terminal content, or full source-code contents.
 - Ariadne does not import browser history or capture page contents; deliberate browser references persist only minimal page metadata.
-- Checkpoint text is persisted as plain local text because it is the user-authored re-entry note; it should not contain secrets.
+- Resume Brief text is persisted as plain local text because it is user-authored; Ariadne does not infer its contents, and it should not contain secrets.
 - The persisted timeline is condensed and investigation-scoped; it is not a general telemetry stream or cross-investigation history.
 - The persisted navigation graph is also investigation-scoped and factual; it is not a repository dependency graph or architectural map.
 
@@ -262,7 +262,7 @@ Minimal command surface for 0.0.1:
 
 - Start Investigation.
 - Save Recent Activity as Investigation.
-- Add or update Checkpoint text on the active Investigation.
+- Add or update the Resume Brief on the active Investigation.
 - Attach a browser reference explicitly to the active Investigation.
 - Save and stop the active Investigation.
 - List saved Investigations.
@@ -279,14 +279,14 @@ The current lifecycle uses VS Code-native `showInputBox`, `showQuickPick`, confi
 - At most one Investigation is active per workspace.
 - Creating an Investigation captures the current rolling-buffer evidence, current Git Snapshot, last known location, edited-file evidence, and visited-file counts.
 - While an Investigation is active, newly observed events are merged into its in-memory Snapshot so developers do not need to manually curate visit/edit evidence during longer sessions.
-- Checkpoint updates persist immediately and refresh the saved Git Snapshot without introducing additional workflow states.
+- Resume Brief updates can be skipped or completed through five optional prompts and persist immediately with a refreshed Git Snapshot, without introducing additional workflow states.
 - Extension shutdown persists the latest active Investigation state so normal restarts do not discard the current snapshot progress.
 - Saving/stopping the Investigation persists the latest factual state and clears the active workspace pointer.
 
 ## Resume Snapshot (Implemented)
 
 - Saved Investigations can be opened into a read-only virtual Markdown document backed by a VS Code `TextDocumentContentProvider`.
-- The Snapshot shows factual re-entry context in a fixed order: investigation name, optional checkpoint, attached external references, saved timestamp, workspace/repository, branch when saved, saved Git state, current Git state, factual saved-vs-current Git differences, edited files, revisited files with explicit visit counts, last location, and a condensed investigation timeline.
+- The Snapshot shows the optional human-authored Resume Brief first, followed by attached external references and factual re-entry context: saved timestamp, workspace/repository, branch when saved, saved Git state, current Git state, factual saved-vs-current Git differences, edited files, revisited files with explicit visit counts, last location, and a condensed investigation timeline.
 - Missing or unavailable data is rendered explicitly instead of inferred, including absent checkpoints, missing Git state, deleted/moved saved paths, and missing/corrupted Investigation payloads.
 - Each Investigation reuses a stable virtual-document URI so reopening the Resume Snapshot refreshes the existing tab instead of creating duplicates for each save.
 - Timeline rendering collapses noise by deduplicating repeated file focus transitions and folding consecutive edit events on the same file into one counted entry.

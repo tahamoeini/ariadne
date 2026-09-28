@@ -445,8 +445,8 @@ function buildTimelineLines(
       }
       case 'checkpoint':
         return entry.text
-          ? `- ${entry.timestamp} — Checkpoint: ${entry.text}`
-          : `- ${entry.timestamp} — Checkpoint cleared`;
+          ? `- ${entry.timestamp} — Resume brief updated`
+          : `- ${entry.timestamp} — Resume brief cleared`;
       case 'git.snapshot':
         return `- ${entry.timestamp} — ${describeTimelineGit(entry)}`;
       case 'save.point':
@@ -488,7 +488,22 @@ export function buildResumeSnapshotContent(
   ];
 
   if (investigation.checkpoint) {
-    sections.push('## Checkpoint', '', investigation.checkpoint.text, '');
+    const resumeBriefSections = [
+      '### Context and findings\n',
+      '### Decisions\n',
+      '### Key artifacts\n',
+      '### Open questions\n',
+      '### Next step\n',
+    ];
+    const isResumeBrief = resumeBriefSections.some((section) =>
+      investigation.checkpoint?.text.startsWith(section),
+    );
+    sections.push(
+      isResumeBrief ? '## Resume brief' : '## Checkpoint',
+      '',
+      investigation.checkpoint.text,
+      '',
+    );
   }
 
   sections.push(

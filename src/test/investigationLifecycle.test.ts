@@ -1247,7 +1247,7 @@ suite('Investigation Lifecycle', () => {
           name: 'Checkpoint limit',
           checkpointText: 'x'.repeat(MAX_CHECKPOINT_LENGTH + 1),
         }),
-      /Checkpoint must be 1000 characters or fewer\./,
+      /Resume Brief must be 2800 characters or fewer\./,
     );
     assert.deepStrictEqual(service.listInvestigations(), []);
   });

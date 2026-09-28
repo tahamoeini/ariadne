@@ -7,7 +7,6 @@ import {
   InvestigationLifecycleService,
   MAX_BROWSER_REFERENCE_TITLE_LENGTH,
   MAX_BROWSER_REFERENCE_URL_LENGTH,
-  MAX_CHECKPOINT_LENGTH,
   MAX_INVESTIGATION_NAME_LENGTH,
 } from './investigationLifecycle';
 import {
@@ -28,6 +27,8 @@ export const COMMAND_DELETE_ALL_DATA = 'ariadne.deleteAllData';
 export const COMMAND_OPEN_RESUME_SNAPSHOT = 'ariadne.openResumeSnapshot';
 export const COMMAND_RESUME_INVESTIGATION = 'ariadne.resumeInvestigation';
 export const COMMAND_SHOW_STORAGE_LOCATION = 'ariadne.showStorageLocation';
+const MAX_RESUME_BRIEF_CONTEXT_LENGTH = 1000;
+const MAX_RESUME_BRIEF_SECTION_LENGTH = 400;
 
 interface CreateInvestigationCommandOptions {
   workspacePath?: string;
@@ -359,30 +360,111 @@ async function promptForInvestigationName(title: string): Promise<string | undef
   return trimmed ? trimmed : undefined;
 }
 
-async function promptForCheckpoint(currentValue = ''): Promise<string | null | undefined> {
-  const checkpoint = await vscode.window.showInputBox({
-    title: 'Ariadne: Checkpoint',
-    prompt: `Optional checkpoint saved locally in plain text. Avoid secrets or large source excerpts (${MAX_CHECKPOINT_LENGTH} characters max).`,
-    value: currentValue,
-    placeHolder: 'Current hypothesis, unresolved question, or next step',
-    ignoreFocusOut: true,
-    validateInput(value) {
-      return validateBoundedText(value, 'Checkpoint', MAX_CHECKPOINT_LENGTH);
-    },
-  });
+async function promptForResumeBrief(currentValue = ''): Promise<string | null | undefined> {
+  if (!currentValue.trim()) {
+    const choice = await vscode.window.showQuickPick(
+      ['Add Resume Brief', 'Skip for now'],
+      {
+        title: 'Ariadne: Add a Resume Brief?',
+        placeHolder: 'Ariadne keeps only the context you choose to write',
+        ignoreFocusOut: true,
+      },
+    );
 
-  if (checkpoint === undefined) {
-    return undefined;
+    if (choice === undefined) {
+      return undefined;
+    }
+
+    if (choice === 'Skip for now') {
+      return null;
+    }
   }
 
-  return trimToNull(checkpoint);
+  const existing = parseResumeBrief(currentValue);
+  const fields = [
+    {
+      key: 'context',
+      title: 'Context and findings',
+      prompt: 'What were you investigating? What did you learn?',
+    },
+    { key: 'decisions', title: 'Decisions', prompt: 'What did you decide, and why?' },
+    {
+      key: 'artifacts',
+      title: 'Key artifacts',
+      prompt: 'Which files, documents, or attached references should you return to?',
+    },
+    { key: 'unresolved', title: 'Open questions', prompt: 'What remains unresolved?' },
+    { key: 'next', title: 'Next step', prompt: 'What is the next concrete action?' },
+  ] as const;
+  const values: Record<(typeof fields)[number]['key'], string> = {
+    ...existing,
+    artifacts: '',
+  };
+
+  for (const field of fields) {
+    const maxLength =
+      field.key === 'context'
+        ? MAX_RESUME_BRIEF_CONTEXT_LENGTH
+        : MAX_RESUME_BRIEF_SECTION_LENGTH;
+    const value = await vscode.window.showInputBox({
+      title: `Ariadne: Resume Brief — ${field.title}`,
+      prompt: `${field.prompt} Saved locally in plain text. Avoid secrets and source excerpts (${maxLength} characters max).`,
+      value: values[field.key],
+      placeHolder: 'Optional; leave blank when not relevant',
+      ignoreFocusOut: true,
+      validateInput(input) {
+        return validateBoundedText(input, field.title, maxLength);
+      },
+    });
+
+    if (value === undefined) {
+      return undefined;
+    }
+
+    values[field.key] = value.trim();
+  }
+
+  const content = fields
+    .filter((field) => values[field.key].length > 0)
+    .map((field) => `### ${field.title}\n${values[field.key]}`)
+    .join('\n\n');
+
+  return content || null;
+}
+
+function parseResumeBrief(
+  text: string,
+): Record<'context' | 'decisions' | 'artifacts' | 'unresolved' | 'next', string> {
+  const values = { context: '', decisions: '', artifacts: '', unresolved: '', next: '' };
+  const titles = {
+    'Context and findings': 'context',
+    Decisions: 'decisions',
+    'Key artifacts': 'artifacts',
+    'Open questions': 'unresolved',
+    'Next step': 'next',
+  } as const;
+  const sections = text.matchAll(
+    /^### (Context and findings|Decisions|Key artifacts|Open questions|Next step)\n([\s\S]*?)(?=\n\n### |$)/gm,
+  );
+  let foundSection = false;
+
+  for (const match of sections) {
+    foundSection = true;
+    values[titles[match[1] as keyof typeof titles]] = match[2].trim();
+  }
+
+  if (!foundSection && text.trim()) {
+    values.context = text;
+  }
+
+  return values;
 }
 
 function toQuickPickItem(investigation: Investigation): InvestigationQuickPickItem {
   const details = [
     `Saved ${investigation.savedAt}`,
     investigation.repository ? `Repo ${investigation.repository}` : null,
-    investigation.checkpoint ? 'Checkpoint' : null,
+    investigation.checkpoint ? 'Resume brief' : null,
   ]
     .filter((value): value is string => Boolean(value))
     .join(' • ');
@@ -490,7 +572,7 @@ async function collectCreateOptions(
 
   let checkpointText = options.checkpointText;
   if (checkpointText === undefined) {
-    checkpointText = await promptForCheckpoint();
+    checkpointText = await promptForResumeBrief();
     if (checkpointText === undefined) {
       return null;
     }
@@ -578,7 +660,7 @@ export function registerInvestigationCommands(
 
         let checkpointText = options.checkpointText;
         if (checkpointText === undefined) {
-          checkpointText = await promptForCheckpoint(activeInvestigation.checkpoint?.text ?? '');
+          checkpointText = await promptForResumeBrief(activeInvestigation.checkpoint?.text ?? '');
           if (checkpointText === undefined) {
             return undefined;
           }
@@ -595,12 +677,12 @@ export function registerInvestigationCommands(
 
           vscode.window.showInformationMessage(
             updated.checkpoint
-              ? `Ariadne: Updated checkpoint for "${updated.name}".`
-              : `Ariadne: Cleared checkpoint for "${updated.name}".`,
+              ? `Ariadne: Updated resume brief for "${updated.name}".`
+              : `Ariadne: Cleared resume brief for "${updated.name}".`,
           );
           return updated;
         } catch (error) {
-          showCommandError('update the checkpoint', error);
+          showCommandError('update the resume brief', error);
           return undefined;
         }
       },
