@@ -1,5 +1,7 @@
 # Ariadne — Agent Handoff
 
+> Historical VS Code-extension handoff. The current platform migration handoff is [`AGENT_HANDOFF_PLATFORM.md`](AGENT_HANDOFF_PLATFORM.md).
+
 ## Current Milestone
 
 **Resume Brief — Human-authored work-thread context**
@@ -110,8 +112,26 @@ The earlier browser-reference implementation had compile, lint, and unit-test va
 
 **Verify the Resume Brief changes, then run focused user validation on re-entry usefulness and capture friction.**
 
+## Current platform implementation status
+
+The Rust platform foundation is the authoritative direction. The older
+Investigation lifecycle remains retained as migration compatibility; it is not
+the canonical desktop state owner.
+
+| Category | Current state |
+|---|---|
+| Implemented | Rust Thread/Core, SQLite storage, tombstones and generation/revision checks, persisted privacy policy and exclusions, deterministic active-thread reconciliation, authenticated OS-local adapter transport, Tauri lifecycle and Thread detail UI, bounded Resume actions, tray actions, bounded logs/Open Logs, reversible Windows Start at Login command, Windows foreground identity and idle transition observation, reconnecting VS Code adapter, retained legacy-directory startup import, tested browser adapter privacy boundary |
+| Verified | PR #12 hosted Rust/VS Code/Windows workflow #38 passed, including Windows MSI/NSIS artifact upload; local targeted Rust tests/clippy/format and TypeScript/frontend checks passed; PR #13 finalization workflow is the current validation gate |
+| Remaining | Native browser-extension/host registration and end-to-end browser-to-Core delivery; abrupt process termination/restart exercise; Windows runtime/manual UX validation; dynamic tray-state labels; queryable Start at Login setting; measured Windows performance; removal of legacy VS Code JSON compatibility after migration parity validation |
+| Deferred | macOS/Linux sensors, Android companion, cloud/accounts/sync, AI/LLM/embeddings, telemetry, screenshots, clipboard/keystrokes, content capture, productivity scoring |
+| Known failures | Full desktop Rust verification is not locally reproducible in the container because GTK/WebKit development libraries are unavailable; Windows runtime behavior and performance are not externally validated; PR #13 hosted result must be checked before calling this branch green |
+
+The finalization branch must not be described as a complete end-user Windows
+release until hosted PR #13 checks pass and Windows runtime/install/restart
+validation has actual evidence.
+
 ## Do Not Touch / Deferred
 
-- Do not add browser-history import, page-content capture, cloud sync, AI summarization, or broader browser-product features until the current deliberate reference flow is externally validated.
+- Do not add browser-history import, page-content capture, cloud sync, AI summarization, or broader browser-product features.
 - Do not add exact workspace/session restore behavior.
 - Do not redesign the architecture further unless a concrete defect requires it.

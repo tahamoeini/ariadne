@@ -2,6 +2,14 @@
   "name": "ariadne",
   "displayName": "Ariadne",
   "description": "Capture and recover context from code investigations.",
+  "author": {
+    "name": "Taha Moeini",
+    "url": "https://taha.one"
+  },
+  "homepage": "https://taha.one",
+  "bugs": {
+    "url": "https://github.com/tahamoeini/ariadne/issues"
+  },
   "version": "0.0.1",
   "publisher": "ariadne",
   "license": "MIT",
@@ -43,6 +51,11 @@
           "minimum": 0,
           "maximum": 3600,
           "description": "Debounce interval for automatic active-investigation persistence. Set to 0 to disable autosave between explicit save points."
+        },
+        "ariadne.ipc.configPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to Ariadne Desktop's local IPC descriptor. Leave empty until Desktop is installed."
         }
       }
     },
@@ -100,6 +113,11 @@
       {
         "command": "ariadne.showStorageLocation",
         "title": "Show Local Storage Location",
+        "category": "Ariadne"
+      },
+      {
+        "command": "ariadne.about",
+        "title": "About Ariadne",
         "category": "Ariadne"
       }
     ]

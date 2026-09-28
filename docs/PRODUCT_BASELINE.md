@@ -1,5 +1,7 @@
 # Ariadne 0.0.1 — Product Baseline
 
+> This is the historical VS Code baseline. The platform architecture generalizes Investigation into Thread while preserving this implementation as migration input. See [`ARCHITECTURE_PLATFORM.md`](ARCHITECTURE_PLATFORM.md) and [`MIGRATION.md`](MIGRATION.md).
+
 ## Product thesis
 
 Developers often return to an interrupted investigation with the code and Git state still available but with the mental context gone. Ariadne exists to preserve enough trustworthy context to make re-entry easier.

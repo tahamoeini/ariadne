@@ -1,5 +1,7 @@
 # Ariadne — Product Specification (0.0.1)
 
+> This is the retained VS Code product specification. The product direction now generalizes Investigation into Thread across digital work. Platform scope, boundaries, and current implementation status are in [`ARCHITECTURE_PLATFORM.md`](ARCHITECTURE_PLATFORM.md), [`PRIVACY.md`](PRIVACY.md), and [`AGENT_HANDOFF_PLATFORM.md`](AGENT_HANDOFF_PLATFORM.md).
+
 ## Positioning
 
 Ariadne helps developers pick up an interrupted code investigation where they left it.

@@ -293,18 +293,6 @@ function toStoredPath(filePath: string, workspacePath: string): string {
   return normalizeStoredPathSeparators(relativePath || '.');
 }
 
-function fromStoredPath(filePath: string, workspacePath: string): string {
-  if (path.isAbsolute(filePath)) {
-    return filePath;
-  }
-
-  if (usesPosixPathStyle(workspacePath)) {
-    return path.posix.resolve(workspacePath, normalizeStoredPathSeparators(filePath));
-  }
-
-  return path.resolve(workspacePath, filePath);
-}
-
 function isWindowsAbsolutePath(filePath: string): boolean {
   const normalizedPath = filePath.replace(/\//g, '\\');
   return /^[A-Za-z]:\\/.test(normalizedPath) || normalizedPath.startsWith('\\\\');

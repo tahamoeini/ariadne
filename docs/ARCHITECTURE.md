@@ -1,5 +1,7 @@
 # Ariadne 0.0.1 — Architecture
 
+> This document describes the retained VS Code prototype. The target platform architecture is documented in [`ARCHITECTURE_PLATFORM.md`](ARCHITECTURE_PLATFORM.md). Do not treat the TypeScript extension's JSON store as the long-term canonical platform store.
+
 ## Technical Assumptions
 
 - VS Code desktop is the only supported editor.

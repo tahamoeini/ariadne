@@ -1,5 +1,7 @@
 # Ariadne 0.0.1 — Validation Plan
 
+> Historical VS Code validation notes. Platform-level engineering and product validation are tracked in [`VALIDATION_PLATFORM.md`](VALIDATION_PLATFORM.md).
+
 ## Product Hypotheses
 
 ### H1: Re-Entry Utility

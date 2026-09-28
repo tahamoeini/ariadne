@@ -1,0 +1,12 @@
+{
+  "name": "@ariadne/browser-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Privacy-safe browser adapter boundary for Ariadne local IPC.",
+  "scripts": {
+    "build": "../../node_modules/.bin/tsc -p tsconfig.json",
+    "typecheck": "../../node_modules/.bin/tsc -p tsconfig.json --noEmit",
+    "lint": "../../node_modules/.bin/eslint --config eslint.config.mjs src",
+    "test:unit": "npm run build && node --test out/privacy.test.js"
+  }
+}

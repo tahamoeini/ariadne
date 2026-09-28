@@ -9,3 +9,8 @@ eslint.config.mjs
 .vscode-test.mjs
 docs/**
 PROMPT_CHAIN.md
+crates/**
+apps/**
+adapters/**
+.github/**
+Cargo.toml

@@ -2,7 +2,23 @@
 
 > Pick up a code investigation where you left it.
 
-Ariadne is a local-first VS Code extension that preserves factual investigation context so a developer can reopen interrupted work later without reconstructing it from memory, tabs, and Git state alone.
+Ariadne is evolving into a local-first context continuity platform that preserves the factual thread needed to return to interrupted digital work. The current platform slice contains the Rust Core, SQLite storage, versioned authenticated local adapter protocol, Windows sensor boundary, VS Code adapter, and Tauri desktop application.
+
+The migration is deliberately gradual. The existing extension remains usable as compatibility while the desktop Core owns canonical Thread state. Windows MSI/NSIS packaging is produced by hosted CI; Windows runtime, installer, restart, and performance validation remain explicit release gates.
+
+## Platform direction
+
+```text
+Windows sensor / VS Code adapter / browser adapter
+                         ↓
+                    Rust Core
+                         ↓
+                 SQLite + Tauri UI
+```
+
+The Rust workspace lives under [`crates/`](crates/) and [`apps/desktop/`](apps/desktop/). Read [`docs/ARCHITECTURE_PLATFORM.md`](docs/ARCHITECTURE_PLATFORM.md), [`docs/MIGRATION.md`](docs/MIGRATION.md), and [`docs/AGENT_HANDOFF_PLATFORM.md`](docs/AGENT_HANDOFF_PLATFORM.md) before extending it.
+
+Ariadne remains intentionally free of AI, cloud accounts, telemetry, screenshots, keystrokes, clipboard capture, page-content capture, productivity scoring, and exact session restoration.
 
 ## Ariadne 0.0.1
 
@@ -98,7 +114,7 @@ Ariadne 0.0.1 does not include:
 ### Setup
 
 ```bash
-npm install
+npm ci
 ```
 
 ### Commands

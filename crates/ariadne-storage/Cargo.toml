@@ -1,0 +1,11 @@
+[package]
+name = "ariadne-storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ariadne-core.workspace = true
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde_json.workspace = true
+thiserror.workspace = true
