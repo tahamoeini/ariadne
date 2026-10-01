@@ -106,6 +106,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+ "uuid",
  "windows-sys 0.59.0",
 ]
 
