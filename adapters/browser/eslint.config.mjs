@@ -1,5 +1,5 @@
-import tseslint from '../../node_modules/@typescript-eslint/eslint-plugin/dist/index.js';
-import tsparser from '../../node_modules/@typescript-eslint/parser/dist/index.js';
+import tseslint from '@typescript-eslint/eslint-plugin';
+import tsparser from '@typescript-eslint/parser';
 
 export default [
   {

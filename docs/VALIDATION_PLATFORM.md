@@ -4,7 +4,7 @@ Engineering correctness and product usefulness are separate gates.
 
 ## Engineering gate
 
-Before calling the Windows milestone complete, run Rust formatting, Clippy, unit tests, migration tests, concurrency tests, privacy tests, adapter tests, a Windows package build, abrupt-termination recovery, and generated-artifact inspection.
+Before calling a release complete, run Rust formatting, Clippy, unit tests, concurrency and privacy tests, adapter tests, desktop build/package validation, abrupt-termination recovery, and generated-artifact inspection.
 
 ## Product gate
 

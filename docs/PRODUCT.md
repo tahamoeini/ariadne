@@ -1,121 +1,58 @@
-# Ariadne — Product Specification (0.0.1)
+# Ariadne Product Specification
 
-> This is the retained VS Code product specification. The product direction now generalizes Investigation into Thread across digital work. Platform scope, boundaries, and current implementation status are in [`ARCHITECTURE_PLATFORM.md`](ARCHITECTURE_PLATFORM.md), [`PRIVACY.md`](PRIVACY.md), and [`AGENT_HANDOFF_PLATFORM.md`](AGENT_HANDOFF_PLATFORM.md).
+## Purpose
 
-## Positioning
+Ariadne preserves factual context for interrupted work so a person can leave and later resume with low re-orientation cost.
 
-Ariadne helps developers pick up an interrupted code investigation where they left it.
+## Canonical model
 
-VS Code remembers workspace state.
-Git remembers source changes.
-Ariadne remembers investigation context.
+The canonical unit is a **Thread**.
 
-## Problem
+Each Thread contains bounded, local context:
 
-When developers return after interruption, they often still have code and Git history but lose:
+- identity and name
+- lifecycle state and timestamps
+- observed applications and workspaces/repositories when available
+- artifacts and references
+- factual timeline
+- bounded context graph
+- adapter/sensor capability state
+- optional factual enrichments (for example Git metadata)
+- human-authored Resume Brief
+- deterministic Resume Plan
 
-- why they were investigating
-- what they already tried
-- what evidence they gathered
-- where they should continue
+## Resume Brief
 
-Ariadne exists to reduce re-orientation time with factual, local investigation memory.
+Resume Brief is first-class and human-authored. It is part of the canonical Thread state, not owned by adapters.
 
-## Product Principle
+Structure:
 
-Build a local-first investigation memory layer.
+1. Context / Findings
+2. Decisions
+3. Key Artifacts
+4. Open Questions
+5. Next Step
 
-Do not build:
+Users can create, update, clear, and inspect it directly in Ariadne.
 
-- a Git history viewer
-- repository analytics
-- a productivity tracker
-- an AI coding assistant
+## Product surfaces
 
-## Constraints
+Desktop must provide coherent local workflows for:
 
-- Local-first only: no cloud, no accounts, no telemetry
-- Privacy-safe capture: no source contents, keystrokes, clipboard, screenshots, terminal output
-- Evidence over interpretation: capture facts, never infer human intent
+- Home / current context
+- Active Thread
+- Resume experience
+- Thread library (browse/filter/inspect/resume/rename/edit/delete)
+- Privacy and capture controls
+- Integrations capability state
+- Diagnostics
 
-## Core Entities
+## Non-goals
 
-### Investigation
+- cloud accounts or sync
+- telemetry
+- semantic/embedding search
+- productivity scoring
+- pixel-perfect desktop/session restoration
+- keystroke, clipboard, screenshot, or page-content capture
 
-A bounded unit of work with:
-
-- goal name
-- optional developer-authored Resume Brief: context and findings, decisions, key artifacts, open questions, and next step
-- factual observed trail
-- Git snapshots
-- resume artifact
-
-### Resume Brief
-
-Developer-authored re-entry note, optional at investigation start and guided by five short prompts. The investigation name states the work thread; the brief can capture context and findings, decisions, key artifacts, open questions, and the next concrete action.
-
-Ariadne stores only what the developer enters. It does not infer intent or conclusions from activity.
-
-### Snapshot
-
-The resume package that answers:
-
-1. What was I trying to do?
-2. Where did I stop?
-3. What changed?
-4. What should I open first?
-
-## Current Capability Summary
-
-Ariadne 0.0.1 currently provides:
-
-- explicit investigation start
-- retroactive save from rolling in-memory activity
-- optional Resume Brief update/clear
-- factual VS Code event capture (active editor, selection, edit occurrence)
-- local Git snapshot capture
-- persisted investigation-scoped timeline and collapsed navigation graph
-- saved/current Git comparison in Resume Snapshot
-- conservative reopen plan for resume flow
-- active investigation recovery on restart
-
-## Implementation Scope
-
-### In Scope (0.0.1)
-
-- VS Code extension only
-- one active investigation per workspace
-- rolling local buffer for retroactive capture
-- start/Resume Brief/save-stop/resume lifecycle
-- local JSON persistence
-- resume snapshot focused on fast orientation
-
-### Out of Scope (0.0.1)
-
-- AI summaries
-- semantic search
-- embeddings
-- repository-wide graphs
-- browser history capture
-- sync or team sharing
-- dashboards and productivity scoring
-
-## Lifecycle
-
-NO INVESTIGATION -> ACTIVE -> CHECKPOINT (optional) -> SAVED -> RESUME -> ACTIVE
-
-Requirements met:
-
-- active investigations survive restart
-- persisted state uses incremental safe writes
-- context can be resumed without exact workspace reconstruction
-
-## What Success Means
-
-Ariadne is successful when developers continue interrupted investigations in minutes instead of reconstructing from scratch.
-
-Primary metric direction:
-
-- lower time to orientation
-- lower time to first meaningful continuation
-- fewer repeated investigation steps

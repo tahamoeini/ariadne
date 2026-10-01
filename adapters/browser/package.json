@@ -4,9 +4,16 @@
   "private": true,
   "description": "Privacy-safe browser adapter boundary for Ariadne local IPC.",
   "scripts": {
-    "build": "../../node_modules/.bin/tsc -p tsconfig.json",
-    "typecheck": "../../node_modules/.bin/tsc -p tsconfig.json --noEmit",
-    "lint": "../../node_modules/.bin/eslint --config eslint.config.mjs src",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint --config eslint.config.mjs src",
     "test:unit": "npm run build && node --test out/privacy.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.7.0"
   }
 }

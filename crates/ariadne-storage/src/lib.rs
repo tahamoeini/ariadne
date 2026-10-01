@@ -8,9 +8,6 @@ use ariadne_core::{CapturePolicy, Thread};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 
-mod legacy;
-pub use legacy::{import_legacy_investigation_json, LegacyImportResult};
-
 pub const DATABASE_SCHEMA_VERSION: i32 = 1;
 
 #[derive(Debug, thiserror::Error)]
@@ -23,8 +20,6 @@ pub enum StorageError {
     StaleWrite { expected: i64, actual: i64 },
     #[error("Thread {0} was deleted")]
     Deleted(String),
-    #[error("invalid legacy Investigation: {0}")]
-    InvalidLegacy(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -410,30 +405,5 @@ mod tests {
                 .0
                 .active
         );
-    }
-
-    #[test]
-    fn legacy_import_is_non_destructive_and_idempotent() {
-        let mut store = Store::open_in_memory().unwrap();
-        let legacy = r#"{
-          "schemaVersion": 6,
-          "investigation": {
-            "id": "legacy-1",
-            "name": "Old investigation",
-            "workspace": "/work/project",
-            "createdAt": "2026-01-01T00:00:00Z",
-            "savedAt": "2026-01-01T00:05:00Z",
-            "snapshot": { "editedFiles": ["/work/project/src/main.ts"], "visitedFileCounts": {"/work/project/src/main.ts": 3} },
-            "browserReferences": [{"url":"https://example.com/docs?token=secret","title":"Docs","capturedAt":"2026-01-01T00:01:00Z"}]
-          }
-        }"#;
-        let first = import_legacy_investigation_json(&mut store, legacy, 0).unwrap();
-        assert!(first.imported);
-        let second = import_legacy_investigation_json(&mut store, legacy, 0).unwrap();
-        assert!(second.already_present);
-        let (thread, _) = store.load_thread("legacy-1").unwrap().unwrap();
-        assert_eq!(thread.artifacts.len(), 1);
-        assert_eq!(thread.artifacts[0].visit_count, 3);
-        assert_eq!(thread.references[0].url, "https://example.com/docs");
     }
 }

@@ -1,23 +1,26 @@
-# Platform Migration Decisions
+# Platform Decisions
 
-These decisions supplement the historical ADRs; they do not rewrite them.
+## ADR-P001 — Ariadne Desktop is the primary product surface
 
-## ADR-P001 — Rust Core, gradual migration
+Ariadne ships as a standalone desktop application. Editor and browser integrations are adapters, not product owners.
 
-The existing TypeScript extension is retained as the first sensor and domain prototype. Portable lifecycle and state logic move gradually into Rust. The migration is staged so a new desktop shell does not erase working behavior or privacy tests.
+## ADR-P002 — Canonical Thread ownership lives in Core
 
-## ADR-P002 — SQLite for canonical desktop storage
+Only Core owns lifecycle, Resume Brief, context graph, timeline, and Resume Plan semantics.
 
-The desktop Core uses SQLite because transactions, indexes, migrations, and crash recovery matter for an always-running local application. The current JSON files remain importable legacy data until migration verification is complete.
+## ADR-P003 — SQLite is mandatory canonical persistence
 
-## ADR-P003 — One active Thread globally
+Durability, transactional integrity, revisions, and delete tombstones are required for reliable local continuity.
 
-Multiple simultaneous Threads create ambiguous association when several sensors report events. The first platform release supports one active Thread globally and records a future need rather than guessing.
+## ADR-P004 — One globally active Thread for v1
 
-## ADR-P004 — Tauri desktop shell
+The first product version enforces one active Thread to avoid ambiguous cross-sensor association.
 
-Tauri is selected for a lightweight Rust-backed desktop application with a TypeScript UI and a clean path to Windows packaging. Native platform capture remains outside the UI shell.
+## ADR-P005 — Adapter protocol is authenticated and local-only
 
-## ADR-P005 — No premature sync
+Adapters communicate with Core through an authenticated local protocol with bounded payloads and explicit capability states.
 
-Stable IDs, schema versions, and generation markers leave room for future local peer synchronization. No cloud backend, account system, or distributed conflict model is implemented in this migration slice.
+## ADR-P006 — Privacy defaults are strict
+
+No cloud, no telemetry, no inferred intent, and no sensitive capture classes (keystrokes, clipboard, screenshots, page content).
+
