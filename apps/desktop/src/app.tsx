@@ -3,6 +3,13 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 
 type Checkpoint = { text: string; created_at: string };
+type ResumeBrief = {
+  context_and_findings?: string | null;
+  decisions?: string | null;
+  key_artifacts?: string | null;
+  open_questions?: string | null;
+  next_step?: string | null;
+};
 type Thread = {
   id: string;
   name: string;
@@ -11,6 +18,7 @@ type Thread = {
   workspace?: string | null;
   repository?: string | null;
   checkpoint?: Checkpoint | null;
+  resume_brief?: ResumeBrief | null;
   artifacts?: Array<{ display_name: string; kind: string; visit_count: number; edit_count: number }>;
   timeline?: Array<{ timestamp: string; event_type: string; count: number }>;
   references?: Array<{ url: string; title?: string | null }>;
@@ -21,6 +29,51 @@ type Thread = {
   }>;
   graph?: { nodes: Array<{ artifact_id: string }>; edges: Array<{ from_artifact_id: string; to_artifact_id: string; count: number }> };
 };
+
+const EMPTY_RESUME_BRIEF: ResumeBrief = {
+  context_and_findings: '',
+  decisions: '',
+  key_artifacts: '',
+  open_questions: '',
+  next_step: '',
+};
+const RESUME_BRIEF_TOTAL_LIMIT = 4000;
+
+function getResumeBrief(thread: Thread | null): ResumeBrief {
+  if (thread?.resume_brief) return { ...thread.resume_brief };
+  if (thread?.checkpoint?.text) {
+    const legacySections = thread.checkpoint.text.matchAll(
+      /^### (Context and findings|Decisions|Key artifacts|Open questions|Next step)\n([\s\S]*?)(?=\n\n### |$)/gm,
+    );
+    const brief = { ...EMPTY_RESUME_BRIEF };
+    let hasSections = false;
+    for (const match of legacySections) {
+      hasSections = true;
+      const value = match[2].trim();
+      switch (match[1]) {
+        case 'Context and findings': brief.context_and_findings = value; break;
+        case 'Decisions': brief.decisions = value; break;
+        case 'Key artifacts': brief.key_artifacts = value; break;
+        case 'Open questions': brief.open_questions = value; break;
+        case 'Next step': brief.next_step = value; break;
+      }
+    }
+    if (hasSections) return brief;
+    return { ...EMPTY_RESUME_BRIEF, context_and_findings: thread.checkpoint.text };
+  }
+  return { ...EMPTY_RESUME_BRIEF };
+}
+
+function resumeBriefEntries(brief: ResumeBrief) {
+  const entries: Array<[string, string | null | undefined]> = [
+    ['Context and findings', brief.context_and_findings],
+    ['Decisions', brief.decisions],
+    ['Key artifacts', brief.key_artifacts],
+    ['Open questions', brief.open_questions],
+    ['Next step', brief.next_step],
+  ];
+  return entries.filter((entry): entry is [string, string] => Boolean(entry[1]?.trim()));
+}
 type Status = {
   capture_state: string;
   active_thread: Thread | null;
@@ -43,7 +96,7 @@ export function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [name, setName] = useState('');
-  const [checkpoint, setCheckpoint] = useState('');
+  const [resumeBrief, setResumeBrief] = useState<ResumeBrief>({ ...EMPTY_RESUME_BRIEF });
   const [error, setError] = useState<string | null>(null);
   const [policy, setPolicy] = useState<CapturePolicy | null>(null);
   const [excludedApplications, setExcludedApplications] = useState('');
@@ -92,8 +145,8 @@ export function App() {
           document.getElementById('privacy-settings')?.scrollIntoView({ behavior: 'smooth' });
         },
         checkpoint: async () => {
-          document.getElementById('checkpoint-input')?.scrollIntoView({ behavior: 'smooth' });
-          window.setTimeout(() => document.getElementById('checkpoint-input')?.focus(), 0);
+          document.getElementById('resume-brief-context')?.scrollIntoView({ behavior: 'smooth' });
+          window.setTimeout(() => document.getElementById('resume-brief-context')?.focus(), 0);
         },
       };
       const command = commands[payload];
@@ -138,6 +191,7 @@ export function App() {
 
   async function resumeAndOpen(id: string) {
     try {
+      setSelectedThreadId(id);
       await invoke('resume_thread', { id });
       await invoke('execute_resume_actions', { id });
       await refresh();
@@ -178,10 +232,36 @@ export function App() {
     }
   }
 
-  async function saveCheckpoint() {
+  async function saveResumeBrief() {
     try {
-      await invoke('set_checkpoint', { text: checkpoint.trim() || null });
-      setCheckpoint('');
+      const brief = {
+        context_and_findings: resumeBrief.context_and_findings?.trim() || null,
+        decisions: resumeBrief.decisions?.trim() || null,
+        key_artifacts: resumeBrief.key_artifacts?.trim() || null,
+        open_questions: resumeBrief.open_questions?.trim() || null,
+        next_step: resumeBrief.next_step?.trim() || null,
+      };
+      const totalLength = Object.values(brief).reduce(
+        (total, value) => total + (value?.length ?? 0),
+        0,
+      );
+      if (totalLength > RESUME_BRIEF_TOTAL_LIMIT) {
+        setError(`Resume Brief fields must total ${RESUME_BRIEF_TOTAL_LIMIT} characters or fewer.`);
+        return;
+      }
+      const hasContent = Object.values(brief).some(Boolean);
+      await invoke('set_resume_brief', { brief: hasContent ? brief : null });
+      setResumeBrief(hasContent ? brief : { ...EMPTY_RESUME_BRIEF });
+      await refresh();
+    } catch (reason) {
+      setError(String(reason));
+    }
+  }
+
+  async function clearResumeBrief() {
+    try {
+      await invoke('set_resume_brief', { brief: null });
+      setResumeBrief({ ...EMPTY_RESUME_BRIEF });
       await refresh();
     } catch (reason) {
       setError(String(reason));
@@ -210,6 +290,18 @@ export function App() {
 
   const active = status?.active_thread;
   const selectedThread = threads.find((thread) => thread.id === selectedThreadId) ?? null;
+
+  useEffect(() => {
+    setResumeBrief(getResumeBrief(active ?? null));
+  }, [
+    active?.id,
+    active?.resume_brief?.context_and_findings,
+    active?.resume_brief?.decisions,
+    active?.resume_brief?.key_artifacts,
+    active?.resume_brief?.open_questions,
+    active?.resume_brief?.next_step,
+    active?.checkpoint?.text,
+  ]);
 
   return (
     <main className="shell">
@@ -264,21 +356,65 @@ export function App() {
 
       {active && (
         <section className="card">
-          <h2>Checkpoint</h2>
-          <div className="row">
-            <input
-              id="checkpoint-input"
-              value={checkpoint}
-              onChange={(event) => setCheckpoint(event.target.value)}
-              placeholder="What should you remember?"
-              maxLength={2000}
-            />
-            <button onClick={() => void saveCheckpoint()}>Save checkpoint</button>
-            <button className="quiet" onClick={() => void invoke('set_checkpoint', { text: null }).then(refresh).catch((reason) => setError(String(reason)))}>
-              Clear
-            </button>
+          <h2>Resume Brief</h2>
+          <div className="settings-grid resume-brief-grid">
+            <label>
+              Context and findings
+              <textarea
+                id="resume-brief-context"
+                value={resumeBrief.context_and_findings ?? ''}
+                onChange={(event) => setResumeBrief((brief) => ({ ...brief, context_and_findings: event.target.value }))}
+                placeholder="What were you investigating? What did you learn?"
+                maxLength={1000}
+                rows={2}
+              />
+            </label>
+            <label>
+              Decisions
+              <textarea
+                value={resumeBrief.decisions ?? ''}
+                onChange={(event) => setResumeBrief((brief) => ({ ...brief, decisions: event.target.value }))}
+                placeholder="What did you decide, and why?"
+                maxLength={1000}
+                rows={2}
+              />
+            </label>
+            <label>
+              Key artifacts
+              <textarea
+                value={resumeBrief.key_artifacts ?? ''}
+                onChange={(event) => setResumeBrief((brief) => ({ ...brief, key_artifacts: event.target.value }))}
+                placeholder="Which files, documents, or references should you return to?"
+                maxLength={1000}
+                rows={2}
+              />
+            </label>
+            <label>
+              Open questions
+              <textarea
+                value={resumeBrief.open_questions ?? ''}
+                onChange={(event) => setResumeBrief((brief) => ({ ...brief, open_questions: event.target.value }))}
+                placeholder="What remains unresolved?"
+                maxLength={1000}
+                rows={2}
+              />
+            </label>
+            <label>
+              Next step
+              <textarea
+                value={resumeBrief.next_step ?? ''}
+                onChange={(event) => setResumeBrief((brief) => ({ ...brief, next_step: event.target.value }))}
+                placeholder="What is the next concrete action?"
+                maxLength={1000}
+                rows={2}
+              />
+            </label>
           </div>
-          <p className="hint">Checkpoint text is always written by you; Ariadne never invents it.</p>
+          <div className="row">
+            <button onClick={() => void saveResumeBrief()}>Save Resume Brief</button>
+            <button className="quiet" onClick={() => void clearResumeBrief()}>Clear</button>
+          </div>
+          <p className="hint">Optional and written by you. Saved locally; Ariadne does not infer missing details. Key artifacts are reminders, not reopen instructions. {Object.values(resumeBrief).reduce((total, value) => total + (value?.length ?? 0), 0)}/{RESUME_BRIEF_TOTAL_LIMIT} characters.</p>
         </section>
       )}
 
@@ -316,7 +452,8 @@ export function App() {
                 <div>
                   <h3>{thread.name}</h3>
                   <p>{thread.active ? 'Active now' : `Saved ${new Date(thread.saved_at).toLocaleString()}`}</p>
-                  {thread.checkpoint && <blockquote>{thread.checkpoint.text}</blockquote>}
+                  {thread.resume_brief?.context_and_findings && <blockquote>{thread.resume_brief.context_and_findings}</blockquote>}
+                  {!thread.resume_brief && thread.checkpoint && <blockquote>{thread.checkpoint.text}</blockquote>}
                   <p className="muted">
                     {thread.artifacts?.length ?? 0} artifacts · {thread.timeline?.length ?? 0} timeline entries
                   </p>
@@ -343,6 +480,14 @@ export function App() {
           <p className="hint">
             {selectedThread.active ? 'Active Thread' : 'Saved Thread'} · workspace {selectedThread.workspace || 'not recorded'} · repository {selectedThread.repository || 'not recorded'}
           </p>
+          <h3>Resume Brief</h3>
+          {selectedThread.resume_brief && resumeBriefEntries(selectedThread.resume_brief).length > 0 ? (
+            resumeBriefEntries(selectedThread.resume_brief).map(([label, value]) => (
+              <p key={label}><strong>{label}:</strong> {value}</p>
+            ))
+          ) : (
+            <p>{selectedThread.checkpoint?.text || 'No Resume Brief was saved.'}</p>
+          )}
           <div className="settings-grid">
             <div>
               <h3>Applications and artifacts</h3>

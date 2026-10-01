@@ -378,13 +378,20 @@ suite('Ariadne Extension', () => {
     const uri = await createTempFile('snapshot-fixture.ts', 'export const value = 1;\n');
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
     await pause();
+    const resumeBrief = [
+      '### Context and findings\nThe refresh request races after token rotation.',
+      '### Decisions\nKeep retries bounded at the client.',
+      '### Key artifacts\nsrc/authController.ts and the attached OAuth reference.',
+      '### Open questions\nDoes the proxy retry the same request?',
+      '### Next step\nReproduce with the proxy enabled.',
+    ].join('\n\n');
 
     const created = await vscode.commands.executeCommand<Investigation>(
       'ariadne.startInvestigation',
       {
         workspacePath: workspaceRoot,
         name: 'Snapshot investigation',
-        checkpointText: 'Verify the saved snapshot surface.',
+        checkpointText: resumeBrief,
       },
     );
 
@@ -418,10 +425,74 @@ suite('Ariadne Extension', () => {
     assert.strictEqual(vscode.window.activeTextEditor?.document.uri.scheme, 'ariadne-snapshot');
     const text = vscode.window.activeTextEditor?.document.getText() ?? '';
     assert.ok(text.includes('# Snapshot investigation'));
-    assert.ok(text.includes('## Checkpoint'));
+    assert.ok(text.includes('## Resume brief'));
+    assert.ok(text.includes('### Context and findings\nThe refresh request races after token rotation.'));
+    assert.ok(text.includes('### Decisions\nKeep retries bounded at the client.'));
+    assert.ok(text.includes('### Key artifacts\nsrc/authController.ts and the attached OAuth reference.'));
+    assert.ok(text.includes('### Open questions\nDoes the proxy retry the same request?'));
+    assert.ok(text.includes('### Next step\nReproduce with the proxy enabled.'));
     assert.ok(text.includes('## External references'));
     assert.ok(text.includes('https://developer.mozilla.org/docs/Web/API/URL'));
     assert.ok(text.includes('## Current Git state at open time'));
+  });
+
+  test('keeps Key artifacts when editing an existing Resume Brief', async () => {
+    const uri = await createTempFile('resume-brief-edit-fixture.ts', 'export const value = 1;\n');
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+    await pause();
+
+    const resumeBrief = [
+      '### Context and findings\nThe refresh request races after token rotation.',
+      '### Decisions\nKeep retries bounded at the client.',
+      '### Key artifacts\nsrc/authController.ts and the attached OAuth reference.',
+      '### Open questions\nDoes the proxy retry the same request?',
+      '### Next step\nReproduce with the proxy enabled.',
+    ].join('\n\n');
+    const created = await vscode.commands.executeCommand<Investigation>(
+      'ariadne.startInvestigation',
+      {
+        workspacePath: workspaceRoot,
+        name: 'Resume Brief edit investigation',
+        checkpointText: resumeBrief,
+      },
+    );
+    assert.ok(created);
+
+    const originalDescriptor = Object.getOwnPropertyDescriptor(vscode.window, 'showInputBox');
+    const promptedValues: string[] = [];
+    Object.defineProperty(vscode.window, 'showInputBox', {
+      configurable: true,
+      writable: true,
+      value: async (options?: vscode.InputBoxOptions) => {
+        const value = options?.value ?? '';
+        promptedValues.push(value);
+        return value;
+      },
+    });
+
+    let updated: Investigation | undefined;
+    try {
+      updated = await vscode.commands.executeCommand<Investigation>(
+        'ariadne.updateCheckpoint',
+        { workspacePath: workspaceRoot },
+      );
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(vscode.window, 'showInputBox', originalDescriptor);
+      } else {
+        Reflect.deleteProperty(vscode.window, 'showInputBox');
+      }
+    }
+
+    assert.ok(updated);
+    assert.deepStrictEqual(promptedValues, [
+      'The refresh request races after token rotation.',
+      'Keep retries bounded at the client.',
+      'src/authController.ts and the attached OAuth reference.',
+      'Does the proxy retry the same request?',
+      'Reproduce with the proxy enabled.',
+    ]);
+    assert.strictEqual(updated!.checkpoint?.text, resumeBrief);
   });
 
   test('reuses the same resume snapshot document after saved data changes', async () => {

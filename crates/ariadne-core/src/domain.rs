@@ -4,6 +4,8 @@ use uuid::Uuid;
 pub const DOMAIN_VERSION: u32 = 1;
 pub const MAX_NAME_LENGTH: usize = 120;
 pub const MAX_CHECKPOINT_LENGTH: usize = 2_000;
+pub const MAX_RESUME_BRIEF_FIELD_LENGTH: usize = 1_000;
+pub const MAX_RESUME_BRIEF_TOTAL_LENGTH: usize = 4_000;
 pub const MAX_TITLE_LENGTH: usize = 400;
 pub const MAX_REFERENCE_URL_LENGTH: usize = 2_000;
 
@@ -76,6 +78,8 @@ pub enum ContextEventType {
     CheckpointCreated,
     CheckpointUpdated,
     CheckpointCleared,
+    ResumeBriefUpdated,
+    ResumeBriefCleared,
     ExplicitReference,
 }
 
@@ -106,6 +110,88 @@ pub struct ExternalReference {
 pub struct Checkpoint {
     pub text: String,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ResumeBrief {
+    #[serde(default)]
+    pub context_and_findings: Option<String>,
+    #[serde(default)]
+    pub decisions: Option<String>,
+    #[serde(default)]
+    pub key_artifacts: Option<String>,
+    #[serde(default)]
+    pub open_questions: Option<String>,
+    #[serde(default)]
+    pub next_step: Option<String>,
+}
+
+impl ResumeBrief {
+    pub fn normalize(self) -> Result<Option<Self>, DomainError> {
+        let context_and_findings = normalize_brief_field(
+            self.context_and_findings,
+            "Resume Brief context and findings",
+        )?;
+        let decisions = normalize_brief_field(self.decisions, "Resume Brief decisions")?;
+        let key_artifacts =
+            normalize_brief_field(self.key_artifacts, "Resume Brief key artifacts")?;
+        let open_questions =
+            normalize_brief_field(self.open_questions, "Resume Brief open questions")?;
+        let next_step = normalize_brief_field(self.next_step, "Resume Brief next step")?;
+        let total_length = [
+            &context_and_findings,
+            &decisions,
+            &key_artifacts,
+            &open_questions,
+            &next_step,
+        ]
+        .into_iter()
+        .filter_map(|value| value.as_ref())
+        .map(|value| value.chars().count())
+        .sum::<usize>();
+
+        if total_length > MAX_RESUME_BRIEF_TOTAL_LENGTH {
+            return Err(DomainError::TooLong("Resume Brief"));
+        }
+
+        let brief = Self {
+            context_and_findings,
+            decisions,
+            key_artifacts,
+            open_questions,
+            next_step,
+        };
+        if brief.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(brief))
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.context_and_findings.is_none()
+            && self.decisions.is_none()
+            && self.key_artifacts.is_none()
+            && self.open_questions.is_none()
+            && self.next_step.is_none()
+    }
+}
+
+fn normalize_brief_field(
+    value: Option<String>,
+    field: &'static str,
+) -> Result<Option<String>, DomainError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let value = value.trim().to_owned();
+    if value.is_empty() {
+        return Ok(None);
+    }
+    if value.chars().count() > MAX_RESUME_BRIEF_FIELD_LENGTH {
+        return Err(DomainError::TooLong(field));
+    }
+    Ok(Some(value))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -157,6 +243,8 @@ pub struct Thread {
     pub last_resumed_at: Option<String>,
     pub active: bool,
     pub checkpoint: Option<Checkpoint>,
+    #[serde(default)]
+    pub resume_brief: Option<ResumeBrief>,
     pub artifacts: Vec<ContextArtifact>,
     pub events: Vec<ContextEvent>,
     pub timeline: Vec<TimelineEntry>,
@@ -178,6 +266,7 @@ impl Thread {
             last_resumed_at: None,
             active: false,
             checkpoint: None,
+            resume_brief: None,
             artifacts: Vec::new(),
             events: Vec::new(),
             timeline: Vec::new(),

@@ -447,6 +447,35 @@ fn set_checkpoint(
 }
 
 #[tauri::command]
+fn set_resume_brief(
+    brief: Option<ariadne_core::ResumeBrief>,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let mut engine = state.engine.lock().map_err(|_| "core lock poisoned")?;
+    let previous = engine.active_thread().cloned();
+    let previous_active_id = engine.active_thread_id().map(str::to_owned);
+    engine
+        .set_resume_brief(brief, now())
+        .map_err(|error| error.to_string())?;
+    let thread = engine
+        .active_thread()
+        .cloned()
+        .ok_or_else(|| "no active Thread".to_owned())?;
+
+    let result = record_persistence(&state, persist_thread(&state, &thread));
+    if result.is_err() {
+        if let Some(previous) = previous {
+            engine.restore_thread_state(previous, previous_active_id);
+        }
+        return result;
+    }
+
+    notify_state(&app);
+    Ok(())
+}
+
+#[tauri::command]
 fn delete_thread(
     id: String,
     app: tauri::AppHandle,
@@ -918,7 +947,7 @@ pub fn run() {
                 .separator()
                 .text("start", "Start Thread")
                 .text("recent", "Save Recent Context")
-                .text("checkpoint", "Checkpoint")
+                .text("checkpoint", "Resume Brief")
                 .text("stop", "Stop Thread")
                 .text("pause", "Pause Capture")
                 .text("resume", "Resume Capture")
@@ -964,6 +993,7 @@ pub fn run() {
             set_timed_pause,
             set_capture_exclusions,
             set_checkpoint,
+            set_resume_brief,
             delete_thread,
             delete_all_data,
             open_logs,

@@ -11,6 +11,8 @@ The VS Code adapter may contribute workspace, repository, active file, file tran
 
 The browser adapter may contribute an active normal tab, title, sanitized HTTP(S) URL, navigation, and an explicit reference attachment. It never captures page content, DOM, forms, cookies, authentication data, browser history, or private/incognito activity by default.
 
+Resume Brief fields are entered by the developer and stored only in the local Thread payload. They are not generated from captured activity or sent to adapters as observed events. Key-artifact notes are descriptive and do not change automatic Resume ordering.
+
 ## Privacy controls
 
 - Pause Capture prevents new events from entering the rolling buffer or an active Thread.

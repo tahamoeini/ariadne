@@ -215,4 +215,68 @@ mod tests {
         assert!(thread.graph.nodes.len() <= MAX_GRAPH_NODES);
         assert!(build_resume_plan(thread).supporting_artifacts.len() <= MAX_SUPPORTING_ARTIFACTS);
     }
+
+    #[test]
+    fn resume_brief_is_trimmed_persisted_and_included_in_the_resume_plan() {
+        let mut core = CoreEngine::default();
+        core.start_thread("resume me", "2026-01-01T00:00:00Z")
+            .unwrap();
+        let brief = ResumeBrief {
+            context_and_findings: Some("  The refresh race starts after retry  ".into()),
+            decisions: Some("Keep the retry guard in the coordinator".into()),
+            key_artifacts: Some("src/coordinator.rs; issue 42".into()),
+            open_questions: Some("Can the race be reproduced under load?".into()),
+            next_step: Some("Add a regression test for delayed retries".into()),
+        };
+
+        core.set_resume_brief(Some(brief), "2026-01-01T00:01:00Z")
+            .unwrap();
+
+        let thread = core.active_thread().unwrap();
+        assert!(thread.checkpoint.is_none());
+        assert_eq!(
+            thread
+                .resume_brief
+                .as_ref()
+                .unwrap()
+                .context_and_findings
+                .as_deref(),
+            Some("The refresh race starts after retry")
+        );
+        assert_eq!(
+            core.resume_plan(&thread.id).unwrap().resume_brief,
+            thread.resume_brief
+        );
+
+        core.set_resume_brief(Some(ResumeBrief::default()), "2026-01-01T00:02:00Z")
+            .unwrap();
+        assert!(core.active_thread().unwrap().resume_brief.is_none());
+    }
+
+    #[test]
+    fn old_thread_payloads_load_without_a_resume_brief() {
+        let thread = Thread::new("legacy", "2026-01-01T00:00:00Z").unwrap();
+        let mut value = serde_json::to_value(thread).unwrap();
+        value.as_object_mut().unwrap().remove("resume_brief");
+
+        let loaded: Thread = serde_json::from_value(value).unwrap();
+        assert!(loaded.resume_brief.is_none());
+    }
+
+    #[test]
+    fn oversized_resume_brief_is_rejected_without_changing_the_thread() {
+        let mut core = CoreEngine::default();
+        core.start_thread("bounded brief", "2026-01-01T00:00:00Z")
+            .unwrap();
+        let before = core.active_thread().unwrap().clone();
+        let oversized = ResumeBrief {
+            context_and_findings: Some("x".repeat(MAX_RESUME_BRIEF_FIELD_LENGTH + 1)),
+            ..ResumeBrief::default()
+        };
+
+        assert!(core
+            .set_resume_brief(Some(oversized), "2026-01-01T00:01:00Z")
+            .is_err());
+        assert_eq!(core.active_thread().unwrap(), &before);
+    }
 }

@@ -1,5 +1,7 @@
 # Ariadne
 
+The platform target stores work as local Threads with a human-authored Resume Brief. The shared Thread model and desktop implementation are documented in [`docs/ARCHITECTURE_PLATFORM.md`](docs/ARCHITECTURE_PLATFORM.md); the older VS Code Investigation implementation remains migration input.
+
 > Pick up a code investigation where you left it.
 
 Ariadne is evolving into a local-first context continuity platform that preserves the factual thread needed to return to interrupted digital work. The current platform slice contains the Rust Core, SQLite storage, versioned authenticated local adapter protocol, Windows sensor boundary, VS Code adapter, and Tauri desktop application.

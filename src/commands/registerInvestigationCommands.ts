@@ -396,10 +396,7 @@ async function promptForResumeBrief(currentValue = ''): Promise<string | null | 
     { key: 'unresolved', title: 'Open questions', prompt: 'What remains unresolved?' },
     { key: 'next', title: 'Next step', prompt: 'What is the next concrete action?' },
   ] as const;
-  const values: Record<(typeof fields)[number]['key'], string> = {
-    ...existing,
-    artifacts: '',
-  };
+  const values: Record<(typeof fields)[number]['key'], string> = { ...existing };
 
   for (const field of fields) {
     const maxLength =

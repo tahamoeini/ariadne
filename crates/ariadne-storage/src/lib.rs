@@ -334,6 +334,24 @@ mod tests {
     }
 
     #[test]
+    fn resume_brief_round_trips_with_thread_storage() {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut thread = Thread::new("resume", "2026-01-01T00:00:00Z").unwrap();
+        thread.resume_brief = Some(ariadne_core::ResumeBrief {
+            context_and_findings: Some("Found the failing request path.".into()),
+            decisions: Some("Keep retries bounded.".into()),
+            key_artifacts: Some("src/client.ts".into()),
+            open_questions: Some("Does the proxy retry too?".into()),
+            next_step: Some("Reproduce with the proxy enabled.".into()),
+        });
+
+        store.save_thread(&thread, None, 0).unwrap();
+
+        let restored = store.load_thread(&thread.id).unwrap().unwrap();
+        assert_eq!(restored.0.resume_brief, thread.resume_brief);
+    }
+
+    #[test]
     fn startup_reconciles_corrupt_multiple_active_threads_deterministically() {
         let connection = Connection::open_in_memory().unwrap();
         connection

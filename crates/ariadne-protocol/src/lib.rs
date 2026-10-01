@@ -367,6 +367,8 @@ impl AdapterMessage {
                     | ariadne_core::ContextEventType::CheckpointCreated
                     | ariadne_core::ContextEventType::CheckpointUpdated
                     | ariadne_core::ContextEventType::CheckpointCleared
+                    | ariadne_core::ContextEventType::ResumeBriefUpdated
+                    | ariadne_core::ContextEventType::ResumeBriefCleared
                     | ariadne_core::ContextEventType::ExplicitReference
             ),
             Self::AttachReference { .. } => true,

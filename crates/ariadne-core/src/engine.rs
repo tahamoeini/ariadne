@@ -1,7 +1,7 @@
 use crate::{
     bounded_text, build_resume_plan, CapturePolicy, Checkpoint, ContextArtifact, ContextEvent,
     ContextEventType, ContextGraph, DomainError, ExternalReference, GraphEdge, GraphNode,
-    GraphRelationship, ResumePlan, RollingContext, Thread, MAX_CHECKPOINT_LENGTH,
+    GraphRelationship, ResumeBrief, ResumePlan, RollingContext, Thread, MAX_CHECKPOINT_LENGTH,
 };
 use std::collections::HashMap;
 
@@ -164,6 +164,26 @@ impl CoreEngine {
             ContextEventType::CheckpointUpdated
         } else {
             ContextEventType::CheckpointCleared
+        };
+        Self::apply_to_thread(thread, lifecycle_event(event_type, now.clone()));
+        thread.saved_at = now;
+        Ok(())
+    }
+
+    pub fn set_resume_brief(
+        &mut self,
+        brief: Option<ResumeBrief>,
+        now: impl Into<String>,
+    ) -> Result<(), CoreError> {
+        let brief = brief.map(ResumeBrief::normalize).transpose()?.flatten();
+        let now = now.into();
+        let thread = self.active_thread_mut()?;
+        thread.resume_brief = brief;
+        thread.checkpoint = None;
+        let event_type = if thread.resume_brief.is_some() {
+            ContextEventType::ResumeBriefUpdated
+        } else {
+            ContextEventType::ResumeBriefCleared
         };
         Self::apply_to_thread(thread, lifecycle_event(event_type, now.clone()));
         thread.saved_at = now;

@@ -179,6 +179,29 @@ suite('Resume Snapshot', () => {
     assert.ok(content.includes('- 2026-06-01T12:34:56.000Z — Saved and stopped investigation'));
   });
 
+  test('renders each human-authored Resume Brief section before activity context', () => {
+    const investigation = makeInvestigation();
+    investigation.checkpoint!.text = [
+      '### Context and findings\nThe refresh request races after token rotation.',
+      '### Decisions\nKeep retries bounded at the client.',
+      '### Key artifacts\nsrc/authController.ts and the attached OAuth reference.',
+      '### Open questions\nDoes the proxy retry the same request?',
+      '### Next step\nReproduce with the proxy enabled.',
+    ].join('\n\n');
+
+    const content = buildResumeSnapshotContent(investigation, null, {
+      fileExists: () => true,
+    });
+
+    assert.ok(content.startsWith('# Investigate token race\n\n## Resume brief\n'));
+    assert.ok(content.includes('### Context and findings\nThe refresh request races after token rotation.'));
+    assert.ok(content.includes('### Decisions\nKeep retries bounded at the client.'));
+    assert.ok(content.includes('### Key artifacts\nsrc/authController.ts and the attached OAuth reference.'));
+    assert.ok(content.includes('### Open questions\nDoes the proxy retry the same request?'));
+    assert.ok(content.includes('### Next step\nReproduce with the proxy enabled.'));
+    assert.ok(content.indexOf('### Next step') < content.indexOf('## External references'));
+  });
+
   test('renders empty and unavailable states honestly', () => {
     const investigation = createInvestigation('Read docs', '/workspace');
 

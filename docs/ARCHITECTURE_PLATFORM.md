@@ -1,5 +1,9 @@
 # Ariadne Platform Architecture
 
+## Resume Brief
+
+Each Thread may contain an optional human-authored Resume Brief with context/findings, decisions, key artifacts, open questions, and next step. It is stored in the local Thread payload, shown with the resume context, and excluded from automatic reopen ordering. Existing free-form checkpoints remain readable as legacy context until the developer saves a structured brief.
+
 ## Current migration state
 
 The existing TypeScript VS Code extension remains an operational legacy implementation and migration source. The new Rust workspace is the target architecture. Until the VS Code adapter is switched to the local protocol, the two implementations must not be presented as a finished integrated product.
@@ -18,7 +22,7 @@ OS sensor / VS Code / browser
 
 ## Boundaries
 
-- `crates/ariadne-core`: Thread lifecycle, bounded events, graph, timeline, privacy admission, and Resume planning. No OS or database dependencies.
+- `crates/ariadne-core`: Thread lifecycle, human-authored Resume Brief, bounded events, graph, timeline, privacy admission, and Resume planning. No OS or database dependencies.
 - `crates/ariadne-storage`: SQLite schema, migrations, revisions, generation checks, and deletion tombstones.
 - `crates/ariadne-protocol`: Versioned adapter messages, capability declarations, validation, and payload limits.
 - `crates/ariadne-platform-windows`: Windows foreground metadata sensor. Other platform crates are intentionally not claimed as implemented yet.

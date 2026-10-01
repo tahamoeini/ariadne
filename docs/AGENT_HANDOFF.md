@@ -1,5 +1,7 @@
 # Ariadne — Agent Handoff
 
+> This handoff covers the legacy VS Code implementation. For the current Thread/Core/Desktop target, use [`AGENT_HANDOFF_PLATFORM.md`](AGENT_HANDOFF_PLATFORM.md).
+
 > Historical VS Code-extension handoff. The current platform migration handoff is [`AGENT_HANDOFF_PLATFORM.md`](AGENT_HANDOFF_PLATFORM.md).
 
 ## Current Milestone

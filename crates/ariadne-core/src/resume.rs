@@ -1,4 +1,4 @@
-use crate::{ContextArtifact, Thread};
+use crate::{ContextArtifact, ResumeBrief, Thread};
 use serde::{Deserialize, Serialize};
 
 pub const MAX_SUPPORTING_ARTIFACTS: usize = 4;
@@ -10,6 +10,7 @@ pub struct ResumePlan {
     pub supporting_artifacts: Vec<ContextArtifact>,
     pub involved_applications: Vec<String>,
     pub checkpoint: Option<String>,
+    pub resume_brief: Option<ResumeBrief>,
     pub references: Vec<String>,
     pub saved_at: String,
 }
@@ -52,6 +53,7 @@ pub fn build_resume_plan(thread: &Thread) -> ResumePlan {
             .checkpoint
             .as_ref()
             .map(|checkpoint| checkpoint.text.clone()),
+        resume_brief: thread.resume_brief.clone(),
         references: thread
             .references
             .iter()
