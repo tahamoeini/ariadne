@@ -102,7 +102,7 @@ mod tests {
             assert!(core.record(
                 event(
                     &format!("focus-{index}"),
-                    &format!("2026-01-01T00:00:{index:02}Z"),
+                    &format!("2026-01-01T00:{:02}:{:02}Z", index / 60, index % 60),
                     ContextEventType::FileFocused,
                     Some("src/main.rs")
                 ),

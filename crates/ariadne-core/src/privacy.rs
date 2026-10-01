@@ -136,6 +136,11 @@ impl CapturePolicy {
             }
             if artifact.kind == crate::ArtifactKind::WebPage {
                 artifact.reference = sanitize_http_url(&artifact.reference)?;
+                if let Ok(display_url) = Url::parse(&artifact.display_name) {
+                    if matches!(display_url.scheme(), "http" | "https") {
+                        artifact.display_name = sanitize_http_url(&artifact.display_name)?;
+                    }
+                }
             }
         }
 
