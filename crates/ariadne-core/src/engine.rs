@@ -9,6 +9,7 @@ pub const MAX_THREAD_EVENTS: usize = 300;
 pub const MAX_TIMELINE_ENTRIES: usize = 200;
 pub const MAX_GRAPH_NODES: usize = 500;
 pub const MAX_GRAPH_EDGES: usize = 1_000;
+pub const MAX_THREAD_REFERENCES: usize = 100;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
@@ -92,6 +93,7 @@ impl CoreEngine {
             return Err(CoreError::AnotherThreadActive);
         }
         let now = now.into();
+        self.rolling.prune(&now);
         let mut thread = Thread::new(name, now.clone())?;
         thread.active = true;
         Self::apply_to_thread(
@@ -113,6 +115,7 @@ impl CoreEngine {
             return Err(CoreError::AnotherThreadActive);
         }
         let now = now.into();
+        self.rolling.prune(&now);
         let mut thread = Thread::new(name, now.clone())?;
         thread.active = true;
         for event in self.rolling.events.clone() {
@@ -132,6 +135,9 @@ impl CoreEngine {
     }
 
     pub fn record(&mut self, event: ContextEvent, now: &str) -> bool {
+        let Some(event) = self.policy.sanitize_event(event) else {
+            return false;
+        };
         let accepted = self.rolling.push(event.clone(), &self.policy, now);
         if !accepted {
             return false;
@@ -245,6 +251,9 @@ impl CoreEngine {
     ) -> Result<bool, CoreError> {
         let now = now.into();
         let source = source.into();
+        if source.chars().count() > crate::MAX_EVENT_SOURCE_LENGTH {
+            return Ok(false);
+        }
         let reference = self.policy.sanitize_reference(ExternalReference {
             url: url.clone(),
             title: title.clone(),
@@ -253,6 +262,8 @@ impl CoreEngine {
         let Some(reference) = reference else {
             return Ok(false);
         };
+        let safe_url = reference.url.clone();
+        let safe_title = reference.title.clone();
         let event = ContextEvent {
             id: uuid::Uuid::new_v4().to_string(),
             timestamp: now.clone(),
@@ -260,19 +271,25 @@ impl CoreEngine {
             application: None,
             artifact: Some(crate::ArtifactRef {
                 kind: crate::ArtifactKind::WebPage,
-                display_name: title.unwrap_or_else(|| url.clone()),
-                reference: url,
+                display_name: safe_title.unwrap_or_else(|| safe_url.clone()),
+                reference: safe_url,
             }),
             workspace: None,
             location: None,
             source,
             private_browsing: false,
         };
+        let Some(event) = self.policy.sanitize_event(event) else {
+            return Ok(false);
+        };
         if !self.policy.accepts(&event, &now) {
             return Ok(false);
         }
         let thread = self.active_thread_mut()?;
         thread.references.retain(|item| item.url != reference.url);
+        if thread.references.len() >= MAX_THREAD_REFERENCES {
+            thread.references.remove(0);
+        }
         thread.references.push(reference);
         Self::apply_to_thread(thread, event);
         thread.saved_at = now;
@@ -293,6 +310,7 @@ impl CoreEngine {
     pub fn clear_threads(&mut self) {
         self.threads.clear();
         self.active_thread_id = None;
+        self.rolling.clear();
     }
 
     fn reconcile_active_flags(&mut self) {

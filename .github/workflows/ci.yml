@@ -47,6 +47,8 @@ jobs:
       - name: Build desktop frontend
         working-directory: apps/desktop
         run: npm run build
+      - name: Test Rust workspace on Windows
+        run: cargo test --workspace --all-features --locked
       - name: Build Windows desktop package
         working-directory: apps/desktop
         run: npm exec -- tauri build

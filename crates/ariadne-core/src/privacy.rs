@@ -1,5 +1,7 @@
 use crate::{ContextEvent, ExternalReference};
+use chrono::DateTime;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -68,51 +70,117 @@ impl CapturePolicy {
         if !self.capture_private_browsing && event.private_browsing {
             return false;
         }
-        if event.event_type == crate::ContextEventType::BrowserNavigation
-            || event.event_type == crate::ContextEventType::BrowserTabFocused
-        {
-            if let Some(reference) = event
+        let browser_event = matches!(
+            &event.event_type,
+            crate::ContextEventType::BrowserNavigation
+                | crate::ContextEventType::BrowserTabFocused
+                | crate::ContextEventType::ExplicitReference
+        );
+        let web_page_artifact = event
+            .artifact
+            .as_ref()
+            .is_some_and(|artifact| artifact.kind == crate::ArtifactKind::WebPage);
+        if browser_event || web_page_artifact {
+            let Some(reference) = event
                 .artifact
                 .as_ref()
+                .filter(|artifact| artifact.kind == crate::ArtifactKind::WebPage)
                 .map(|artifact| artifact.reference.as_str())
-            {
-                if let Some(domain) = domain_from_url(reference) {
-                    if self.excluded_browser_domains.iter().any(|excluded| {
-                        let excluded = excluded.trim().to_ascii_lowercase();
-                        domain == excluded || domain.ends_with(&format!(".{excluded}"))
-                    }) {
-                        return false;
-                    }
-                }
+            else {
+                return false;
+            };
+            let Some(domain) = domain_from_url(reference) else {
+                return false;
+            };
+            if self.excluded_browser_domains.iter().any(|excluded| {
+                let excluded = excluded
+                    .trim()
+                    .trim_start_matches('.')
+                    .trim_end_matches('.')
+                    .to_ascii_lowercase();
+                !excluded.is_empty()
+                    && (domain == excluded || domain.ends_with(&format!(".{excluded}")))
+            }) {
+                return false;
             }
         }
         true
     }
 
-    pub fn sanitize_reference(&self, reference: ExternalReference) -> Option<ExternalReference> {
-        let mut url = reference.url.trim().to_owned();
-        if url.chars().count() > crate::MAX_REFERENCE_URL_LENGTH {
+    pub fn sanitize_event(&self, mut event: ContextEvent) -> Option<ContextEvent> {
+        if event.id.chars().count() > crate::MAX_EVENT_ID_LENGTH
+            || event.timestamp.chars().count() > crate::MAX_EVENT_TIMESTAMP_LENGTH
+            || DateTime::parse_from_rfc3339(&event.timestamp).is_err()
+            || event.source.chars().count() > crate::MAX_EVENT_SOURCE_LENGTH
+        {
             return None;
         }
-        let lower = url.to_ascii_lowercase();
-        if !lower.starts_with("http://") && !lower.starts_with("https://") {
+
+        if let Some(application) = event.application.as_mut() {
+            if application.identity.chars().count() > crate::MAX_APPLICATION_IDENTITY_LENGTH
+                || application.display_name.chars().count() > crate::MAX_TITLE_LENGTH
+                || application
+                    .executable
+                    .as_ref()
+                    .is_some_and(|value| value.chars().count() > crate::MAX_REFERENCE_URL_LENGTH)
+            {
+                return None;
+            }
+        }
+
+        for artifact in event.artifact.iter_mut().chain(event.workspace.iter_mut()) {
+            if artifact.display_name.chars().count() > crate::MAX_TITLE_LENGTH
+                || artifact.reference.chars().count() > crate::MAX_REFERENCE_URL_LENGTH
+            {
+                return None;
+            }
+            if artifact.kind == crate::ArtifactKind::WebPage {
+                artifact.reference = sanitize_http_url(&artifact.reference)?;
+            }
+        }
+
+        if event.location.as_ref().is_some_and(|location| {
+            location.reference.chars().count() > crate::MAX_REFERENCE_URL_LENGTH
+        }) {
             return None;
         }
-        if let Some(index) = url.find('?') {
-            url.truncate(index);
+
+        Some(event)
+    }
+
+    pub fn sanitize_reference(
+        &self,
+        mut reference: ExternalReference,
+    ) -> Option<ExternalReference> {
+        reference.url = sanitize_http_url(&reference.url)?;
+        if let Some(title) = reference.title.as_mut() {
+            *title = title.chars().take(crate::MAX_TITLE_LENGTH).collect();
         }
-        if let Some(index) = url.find('#') {
-            url.truncate(index);
-        }
-        Some(ExternalReference { url, ..reference })
+        Some(reference)
     }
 }
 
 fn domain_from_url(value: &str) -> Option<String> {
-    let without_scheme = value.split_once("://")?.1;
-    let host = without_scheme
-        .split(['/', '?', '#'])
-        .next()?
-        .to_ascii_lowercase();
-    (!host.is_empty()).then_some(host)
+    Url::parse(value)
+        .ok()?
+        .host_str()
+        .map(str::to_ascii_lowercase)
+}
+
+fn sanitize_http_url(value: &str) -> Option<String> {
+    if value.chars().count() > crate::MAX_REFERENCE_URL_LENGTH {
+        return None;
+    }
+    let mut url = Url::parse(value.trim()).ok()?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return None;
+    }
+    url.set_query(None);
+    url.set_fragment(None);
+    let sanitized = url.to_string();
+    (sanitized.chars().count() <= crate::MAX_REFERENCE_URL_LENGTH).then_some(sanitized)
 }

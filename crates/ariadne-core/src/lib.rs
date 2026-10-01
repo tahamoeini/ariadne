@@ -152,6 +152,234 @@ mod tests {
     }
 
     #[test]
+    fn browser_events_are_sanitized_before_they_enter_thread_state() {
+        let mut core = CoreEngine::default();
+        core.start_thread("browser", "2026-01-01T00:00:00Z")
+            .unwrap();
+        let mut browser_event = event(
+            "browser-1",
+            "2026-01-01T00:00:01Z",
+            ContextEventType::BrowserNavigation,
+            Some("https://docs.example.test/guide?token=secret#section"),
+        );
+        browser_event.artifact.as_mut().unwrap().kind = ArtifactKind::WebPage;
+
+        assert!(core.record(browser_event, "2026-01-01T00:00:01Z"));
+
+        let thread = core.active_thread().unwrap();
+        assert_eq!(
+            thread.artifacts[0].safe_reference,
+            "https://docs.example.test/guide"
+        );
+        assert!(!serde_json::to_string(thread).unwrap().contains("secret"));
+    }
+
+    #[test]
+    fn explicit_references_obey_domain_exclusions_and_strip_sensitive_url_parts() {
+        let mut core = CoreEngine::default();
+        core.start_thread("references", "2026-01-01T00:00:00Z")
+            .unwrap();
+        core.policy
+            .excluded_browser_domains
+            .push("example.test".into());
+
+        assert!(!core
+            .attach_reference(
+                "browser",
+                "https://docs.example.test:8443/guide?token=secret".into(),
+                None,
+                "2026-01-01T00:00:01Z",
+            )
+            .unwrap());
+        assert!(core.active_thread().unwrap().references.is_empty());
+
+        core.policy.excluded_browser_domains.clear();
+        assert!(core
+            .attach_reference(
+                "browser",
+                "https://docs.example.test/guide?token=secret#section".into(),
+                Some("Guide".into()),
+                "2026-01-01T00:00:02Z",
+            )
+            .unwrap());
+        assert_eq!(
+            core.active_thread().unwrap().references[0].url,
+            "https://docs.example.test/guide"
+        );
+        assert!(!serde_json::to_string(core.active_thread().unwrap())
+            .unwrap()
+            .contains("secret"));
+    }
+
+    #[test]
+    fn invalid_or_credential_bearing_browser_urls_are_rejected() {
+        let mut core = CoreEngine::default();
+        core.start_thread("browser", "2026-01-01T00:00:00Z")
+            .unwrap();
+        let mut browser_event = event(
+            "browser-1",
+            "2026-01-01T00:00:01Z",
+            ContextEventType::BrowserNavigation,
+            Some("https://user:password@example.test/private"),
+        );
+        browser_event.artifact.as_mut().unwrap().kind = ArtifactKind::WebPage;
+
+        assert!(!core.record(browser_event, "2026-01-01T00:00:01Z"));
+        assert!(core.active_thread().unwrap().artifacts.is_empty());
+    }
+
+    #[test]
+    fn explicit_references_reject_oversized_source_and_timestamp_fields() {
+        let mut core = CoreEngine::default();
+        core.start_thread("bounded input", "2026-01-01T00:00:00Z")
+            .unwrap();
+
+        assert!(!core
+            .attach_reference(
+                "x".repeat(MAX_EVENT_SOURCE_LENGTH + 1),
+                "https://example.test".into(),
+                None,
+                "2026-01-01T00:00:01Z",
+            )
+            .unwrap());
+        assert!(!core
+            .attach_reference(
+                "browser",
+                "https://example.test".into(),
+                None,
+                "x".repeat(MAX_EVENT_TIMESTAMP_LENGTH + 1),
+            )
+            .unwrap());
+        assert!(core.active_thread().unwrap().references.is_empty());
+    }
+
+    #[test]
+    fn malformed_timestamps_are_rejected_before_admission_and_retention() {
+        let mut core = CoreEngine::default();
+        core.start_thread("timestamp validation", "2026-01-01T00:00:00Z")
+            .unwrap();
+        let malformed_event = event(
+            "malformed-time",
+            "not-a-timestamp",
+            ContextEventType::FileFocused,
+            Some("src/main.rs"),
+        );
+
+        assert!(!core.record(malformed_event.clone(), "2026-01-01T00:00:01Z"));
+        assert!(!core
+            .attach_reference(
+                "browser",
+                "https://example.test/guide".into(),
+                None,
+                "not-a-timestamp",
+            )
+            .unwrap());
+        assert!(core.rolling.events.is_empty());
+        assert!(core.active_thread().unwrap().artifacts.is_empty());
+
+        let mut rolling = RollingContext::new(1_200, 10);
+        rolling.events.push(malformed_event);
+        rolling.prune("2026-01-01T00:00:01Z");
+        assert!(rolling.events.is_empty());
+    }
+
+    #[test]
+    fn thread_reference_history_is_bounded() {
+        let mut core = CoreEngine::default();
+        core.start_thread("bounded references", "2026-01-01T00:00:00Z")
+            .unwrap();
+
+        for index in 0..(MAX_THREAD_REFERENCES + 10) {
+            assert!(core
+                .attach_reference(
+                    "browser",
+                    format!("https://docs.example.test/{index}"),
+                    None,
+                    "2026-01-01T00:00:01Z",
+                )
+                .unwrap());
+        }
+
+        assert_eq!(
+            core.active_thread().unwrap().references.len(),
+            MAX_THREAD_REFERENCES
+        );
+    }
+
+    #[test]
+    fn clearing_all_threads_also_erases_the_rolling_buffer() {
+        let mut core = CoreEngine::default();
+        assert!(core.record(
+            event(
+                "recent-1",
+                "2026-01-01T00:00:00Z",
+                ContextEventType::FileFocused,
+                Some("src/main.rs"),
+            ),
+            "2026-01-01T00:00:01Z",
+        ));
+        assert_eq!(core.rolling.events.len(), 1);
+
+        core.clear_threads();
+
+        assert!(core.rolling.events.is_empty());
+        assert_eq!(core.threads().count(), 0);
+        assert_eq!(core.active_thread_id(), None);
+    }
+
+    #[test]
+    fn rolling_retention_uses_real_time_across_month_boundaries() {
+        let mut rolling = RollingContext::new(20 * 60, 10);
+        let policy = CapturePolicy::default();
+        assert!(rolling.push(
+            event(
+                "before-midnight",
+                "2026-05-01T01:50:00+02:00",
+                ContextEventType::FileFocused,
+                Some("src/before.rs"),
+            ),
+            &policy,
+            "2026-04-30T23:50:00Z",
+        ));
+        assert!(rolling.push(
+            event(
+                "after-midnight",
+                "2026-05-01T00:05:00Z",
+                ContextEventType::FileFocused,
+                Some("src/after.rs"),
+            ),
+            &policy,
+            "2026-05-01T00:05:00Z",
+        ));
+        assert_eq!(rolling.events.len(), 2);
+
+        rolling.prune("2026-05-01T00:11:00Z");
+
+        assert_eq!(rolling.events.len(), 1);
+        assert_eq!(rolling.events[0].id, "after-midnight");
+    }
+
+    #[test]
+    fn saving_recent_context_prunes_expired_events_even_without_new_activity() {
+        let mut core = CoreEngine::default();
+        assert!(core.record(
+            event(
+                "old-event",
+                "2026-01-01T00:00:00Z",
+                ContextEventType::FileFocused,
+                Some("src/old.rs"),
+            ),
+            "2026-01-01T00:00:00Z",
+        ));
+
+        assert!(matches!(
+            core.save_recent_as_thread("too old", "2026-01-01T00:20:01Z"),
+            Err(CoreError::NoActiveThread)
+        ));
+        assert!(core.rolling.events.is_empty());
+    }
+
+    #[test]
     fn expired_timed_pause_returns_to_running() {
         let mut policy = CapturePolicy::default();
         policy.set_timed_pause(Some("2026-01-01T00:10:00Z".into()));
