@@ -10,6 +10,9 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+uuid.workspace = true
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
   "Win32_Foundation",

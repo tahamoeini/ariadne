@@ -8,6 +8,10 @@ pub const MAX_RESUME_BRIEF_FIELD_LENGTH: usize = 1_000;
 pub const MAX_RESUME_BRIEF_TOTAL_LENGTH: usize = 4_000;
 pub const MAX_TITLE_LENGTH: usize = 400;
 pub const MAX_REFERENCE_URL_LENGTH: usize = 2_000;
+pub const MAX_EVENT_ID_LENGTH: usize = 100;
+pub const MAX_EVENT_SOURCE_LENGTH: usize = 100;
+pub const MAX_EVENT_TIMESTAMP_LENGTH: usize = 64;
+pub const MAX_APPLICATION_IDENTITY_LENGTH: usize = 1_024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

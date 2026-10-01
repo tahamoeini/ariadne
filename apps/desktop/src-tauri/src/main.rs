@@ -34,8 +34,10 @@ struct Status {
     persistence_state: String,
     sensor_state: String,
     adapter_state: String,
-    thread_count: usize,
+    thread_count: i64,
 }
+
+const MAX_TIMED_PAUSE_MINUTES: u64 = 7 * 24 * 60;
 
 fn now() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
@@ -58,11 +60,21 @@ fn ipc_endpoint(data_dir: &Path) -> String {
 
 fn load_or_create_ipc_token(data_dir: &Path) -> Result<String, String> {
     let path = data_dir.join("ipc-token");
-    if let Ok(value) = fs::read_to_string(&path) {
-        let value = value.trim().to_owned();
-        if !value.is_empty() {
-            return Ok(value);
+    match fs::read_to_string(&path) {
+        Ok(value) if !value.trim().is_empty() => {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+                    .map_err(|error| error.to_string())?;
+            }
+            return Ok(value.trim().to_owned());
         }
+        Ok(_) => {
+            fs::remove_file(&path).map_err(|error| error.to_string())?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.to_string()),
     }
     let token = uuid::Uuid::new_v4().to_string();
     let mut options = OpenOptions::new();
@@ -76,11 +88,24 @@ fn load_or_create_ipc_token(data_dir: &Path) -> Result<String, String> {
         Ok(mut file) => {
             file.write_all(token.as_bytes())
                 .map_err(|error| error.to_string())?;
+            file.sync_all().map_err(|error| error.to_string())?;
             Ok(token)
         }
-        Err(_) => fs::read_to_string(&path)
-            .map(|value| value.trim().to_owned())
-            .map_err(|error| error.to_string()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let value = fs::read_to_string(&path).map_err(|error| error.to_string())?;
+            let value = value.trim().to_owned();
+            if value.is_empty() {
+                return Err("IPC token file is empty".into());
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+                    .map_err(|error| error.to_string())?;
+            }
+            Ok(value)
+        }
+        Err(error) => Err(error.to_string()),
     }
 }
 
@@ -93,8 +118,21 @@ fn write_ipc_descriptor(data_dir: &Path, token: &str) -> Result<String, String> 
     })
     .map_err(|error| error.to_string())?;
     let path = data_dir.join("ipc.json");
-    let temporary = data_dir.join("ipc.json.tmp");
-    fs::write(&temporary, descriptor).map_err(|error| error.to_string())?;
+    let temporary = data_dir.join(format!("ipc.json.{}.tmp", uuid::Uuid::new_v4()));
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(&temporary)
+        .map_err(|error| error.to_string())?;
+    file.write_all(&descriptor)
+        .and_then(|()| file.sync_all())
+        .map_err(|error| error.to_string())?;
+    drop(file);
     fs::rename(temporary, path).map_err(|error| error.to_string())?;
     Ok(endpoint)
 }
@@ -187,10 +225,7 @@ fn get_status(state: State<'_, AppState>) -> Result<Status, String> {
         persistence_state,
         sensor_state,
         adapter_state,
-        thread_count: store
-            .list_threads()
-            .map_err(|error| error.to_string())?
-            .len(),
+        thread_count: store.thread_count().map_err(|error| error.to_string())?,
     })
 }
 
@@ -342,8 +377,10 @@ fn set_timed_pause(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    if minutes == 0 {
-        return Err("pause duration must be greater than zero".into());
+    if minutes == 0 || minutes > MAX_TIMED_PAUSE_MINUTES {
+        return Err(format!(
+            "pause duration must be between 1 and {MAX_TIMED_PAUSE_MINUTES} minutes"
+        ));
     }
 
     let mut engine = state.engine.lock().map_err(|_| "core lock poisoned")?;
@@ -407,6 +444,8 @@ fn set_checkpoint(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let mut engine = state.engine.lock().map_err(|_| "core lock poisoned")?;
+    let previous = engine.active_thread().cloned();
+    let previous_active_id = engine.active_thread_id().map(str::to_owned);
     engine
         .set_checkpoint(text, now())
         .map_err(|error| error.to_string())?;
@@ -416,10 +455,14 @@ fn set_checkpoint(
         .ok_or_else(|| "no active Thread".to_owned())?;
 
     let result = record_persistence(&state, persist_thread(&state, &thread));
-    if result.is_ok() {
-        notify_state(&app);
+    if let Err(error) = result {
+        if let Some(previous) = previous {
+            engine.restore_thread_state(previous, previous_active_id);
+        }
+        return Err(error);
     }
-    result
+    notify_state(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -567,12 +610,10 @@ fn set_start_at_login_impl(enabled: bool) -> Result<(), String> {
         return Err(format!("Windows registry error {result}"));
     }
     let result = if enabled {
-        let value = std::env::current_exe().map_err(|error| error.to_string())?;
-        let value: Vec<u16> = value
-            .as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
+        let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+        let mut value = vec![b'"' as u16];
+        value.extend(executable.as_os_str().encode_wide());
+        value.extend([b'"' as u16, 0]);
         unsafe {
             RegSetValueExW(
                 key,
@@ -606,8 +647,8 @@ fn open_resume_resource(reference: &str) -> Result<(), String> {
     }
     #[cfg(windows)]
     {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", reference])
+        std::process::Command::new("explorer.exe")
+            .arg(reference)
             .spawn()
             .map_err(|error| error.to_string())?;
     }
@@ -981,4 +1022,60 @@ pub fn run() {
 
 fn main() {
     run();
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::{load_or_create_ipc_token, write_ipc_descriptor};
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn ipc_token_and_descriptor_are_private_files() {
+        let directory =
+            std::env::temp_dir().join(format!("ariadne-ipc-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+
+        let token = load_or_create_ipc_token(&directory).unwrap();
+        assert!(!token.is_empty());
+        assert_eq!(
+            std::fs::metadata(directory.join("ipc-token"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        std::fs::set_permissions(
+            directory.join("ipc-token"),
+            std::fs::Permissions::from_mode(0o644),
+        )
+        .unwrap();
+        assert_eq!(load_or_create_ipc_token(&directory).unwrap(), token);
+        assert_eq!(
+            std::fs::metadata(directory.join("ipc-token"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+
+        std::fs::write(directory.join("ipc.json"), "old descriptor").unwrap();
+        std::fs::set_permissions(
+            directory.join("ipc.json"),
+            std::fs::Permissions::from_mode(0o644),
+        )
+        .unwrap();
+        write_ipc_descriptor(&directory, &token).unwrap();
+        assert_eq!(
+            std::fs::metadata(directory.join("ipc.json"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 }

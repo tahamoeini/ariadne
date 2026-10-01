@@ -19,9 +19,10 @@ Resume Brief fields are entered by the developer and stored only in the local Th
 - Application exclusions are checked before event admission.
 - Browser domain exclusions are checked before browser event admission.
 - Private/incognito events are rejected unless the user explicitly enables them.
+- Timed capture pauses are limited to a maximum of seven days.
 - The UI must expose Running, Paused, Thread active, and Persistence degraded states.
 - Delete Thread uses a durable tombstone so delayed writes cannot recreate the Thread.
-- Delete All advances the local storage generation so writes from the previous generation are rejected.
+- Delete All clears the in-memory rolling buffer and advances the local storage generation so writes from the previous generation are rejected.
 
 ## URL policy
 

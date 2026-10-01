@@ -31,6 +31,7 @@ pub enum TransportError {
 #[cfg(unix)]
 mod local_transport {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
     use std::os::unix::net::{UnixListener, UnixStream};
 
     pub struct LocalListener {
@@ -48,6 +49,13 @@ mod local_transport {
             }
             let _ = std::fs::remove_file(&path);
             let listener = UnixListener::bind(&path)?;
+            if let Err(error) =
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            {
+                drop(listener);
+                let _ = std::fs::remove_file(&path);
+                return Err(error.into());
+            }
             Ok(Self { path, listener })
         }
 
@@ -539,6 +547,19 @@ fn validate_message(message: &AdapterMessage) -> Result<(), ProtocolError> {
 mod tests {
     use super::*;
     use ariadne_core::{ContextEvent, ContextEventType};
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_socket_is_restricted_to_the_current_user() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = std::env::temp_dir().join(format!("ariadne-{}.sock", uuid::Uuid::new_v4()));
+        let listener = LocalListener::bind(&path).unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        drop(listener);
+        assert!(!path.exists());
+    }
 
     fn event(source: &str, event_type: ContextEventType) -> ContextEvent {
         ContextEvent {

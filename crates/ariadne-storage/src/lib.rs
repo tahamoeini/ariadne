@@ -163,6 +163,12 @@ impl Store {
         .collect()
     }
 
+    pub fn thread_count(&self) -> Result<i64, StorageError> {
+        self.connection
+            .query_row("SELECT COUNT(*) FROM threads", [], |row| row.get(0))
+            .map_err(StorageError::from)
+    }
+
     pub fn delete_thread(&mut self, id: &str, now: &str) -> Result<bool, StorageError> {
         let tx = self.connection.transaction()?;
         let changed = tx.execute("DELETE FROM threads WHERE id = ?1", [id])?;
@@ -326,6 +332,21 @@ mod tests {
         let restored = store.load_capture_policy().unwrap();
         assert_eq!(restored, policy);
         assert!(!restored.capture_private_browsing);
+    }
+
+    #[test]
+    fn thread_count_does_not_load_thread_payloads() {
+        let mut store = Store::open_in_memory().unwrap();
+        let first = Thread::new("first", "2026-01-01T00:00:00Z").unwrap();
+        let second = Thread::new("second", "2026-01-01T00:01:00Z").unwrap();
+        assert_eq!(store.thread_count().unwrap(), 0);
+        store.save_thread(&first, None, 0).unwrap();
+        store.save_thread(&second, None, 0).unwrap();
+        assert_eq!(store.thread_count().unwrap(), 2);
+        store
+            .delete_thread(&first.id, "2026-01-01T00:02:00Z")
+            .unwrap();
+        assert_eq!(store.thread_count().unwrap(), 1);
     }
 
     #[test]

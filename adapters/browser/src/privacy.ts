@@ -53,15 +53,19 @@ function normalizedDomain(hostname: string): string {
 function isExcludedDomain(domain: string, excludedDomains: readonly string[]): boolean {
   return excludedDomains.some((excluded) => {
     const candidate = normalizedDomain(excluded.replace(/^\.+/, ''));
-    return candidate.length > 0 && (domain === candidate || domain.endsWith('.' + candidate));
+    return candidate.length > 0 && (domain === candidate || domain.endsWith(`.${candidate}`));
   });
 }
 
 export function sanitizeUrl(rawUrl: string): string | null {
   try {
     const parsed = new URL(rawUrl.trim());
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
-    if (parsed.username || parsed.password) return null;
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    if (parsed.username || parsed.password) {
+      return null;
+    }
     parsed.search = '';
     parsed.hash = '';
     return parsed.toString();
@@ -75,12 +79,18 @@ export function normalizeTab(
   excludedDomains: readonly string[] = [],
   capturePrivateBrowsing = false,
 ): NormalizedBrowserTab | null {
-  if (tab.incognito === true && !capturePrivateBrowsing) return null;
+  if (tab.incognito === true && !capturePrivateBrowsing) {
+    return null;
+  }
   const url = tab.url ? sanitizeUrl(tab.url) : null;
-  if (!url) return null;
+  if (!url) {
+    return null;
+  }
   const parsed = new URL(url);
   const domain = normalizedDomain(parsed.hostname);
-  if (!domain || isExcludedDomain(domain, excludedDomains)) return null;
+  if (!domain || isExcludedDomain(domain, excludedDomains)) {
+    return null;
+  }
   return {
     title: (tab.title ?? '').trim().slice(0, MAX_TITLE_LENGTH),
     url,
@@ -96,7 +106,9 @@ export function toNavigationMessage(
   excludedDomains: readonly string[] = [],
 ): BrowserNavigationMessage | null {
   const normalized = normalizeTab(tab, excludedDomains);
-  if (!normalized) return null;
+  if (!normalized) {
+    return null;
+  }
   return {
     kind: 'event',
     protocol_version: 1,
@@ -128,7 +140,9 @@ export function toAttachReferenceMessage(
   excludedDomains: readonly string[] = [],
 ): BrowserAttachMessage | null {
   const normalized = normalizeTab(tab, excludedDomains);
-  if (!normalized) return null;
+  if (!normalized) {
+    return null;
+  }
   return {
     kind: 'attach_reference',
     protocol_version: 1,

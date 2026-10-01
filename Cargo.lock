@@ -63,9 +63,11 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 name = "ariadne-core"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+ "url",
  "uuid",
 ]
 
@@ -104,6 +106,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+ "uuid",
  "windows-sys 0.59.0",
 ]
 

@@ -6,7 +6,9 @@ The Rust Core is the only canonical state owner. Sensors and adapters submit val
 
 ## Local IPC
 
-The adapter protocol is versioned, local-machine-only, identity-bearing, capability-declared, size-limited, and validated before admission. Transport implementations must use an OS-local mechanism such as a Windows named pipe or Unix domain socket; Ariadne must not expose an LAN HTTP endpoint.
+The adapter protocol is versioned, local-machine-only, identity-bearing, capability-declared, size-limited, and validated before admission. Transport implementations must use an OS-local mechanism such as a Windows named pipe or Unix domain socket; Ariadne must not expose a LAN HTTP endpoint.
+
+The IPC token and descriptor stay in per-user application data. Unix token, descriptor, and socket permissions are restricted to the owning user.
 
 No protocol message may execute an arbitrary command. Resume actions are typed, bounded actions created by the Core.
 
