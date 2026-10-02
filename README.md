@@ -1,8 +1,12 @@
-# Ariadne
+<p align="center">
+  <img src="apps/desktop/src-tauri/icons/icon-256.png" alt="Ariadne logo" width="72" height="72">
+</p>
 
-Ariadne is a standalone, local-first context continuity platform for interrupted digital work.
+<h1 align="center">Ariadne</h1>
 
-Its purpose is to preserve enough factual context about a bounded unit of work (a **Thread**) so a person can return later and continue without rebuilding the entire mental model.
+<p align="center"><strong>A standalone, local-first context continuity platform for interrupted digital work.</strong></p>
+
+<p align="center">Ariadne preserves enough factual context about a bounded unit of work (a <strong>Thread</strong>) so a person can return later and continue without rebuilding the entire mental model.</p>
 
 ## Product definition
 
